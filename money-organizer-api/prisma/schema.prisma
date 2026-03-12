@@ -1,0 +1,60 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id           String        @id @default(uuid())
+  name         String
+  email        String        @unique
+  password     String
+  createdAt    DateTime      @default(now())
+  categories   Category[]
+  transactions Transaction[]
+}
+
+model Category {
+  id           String        @id @default(uuid())
+  name         String
+  icon         String?  
+  userId       String
+  user         User         @relation(fields: [userId], references: [id])
+  transactions Transaction[]
+  createdAt    DateTime      @default(now())
+}
+
+enum TransactionType {
+  CREDIT_CASH
+  CREDIT_INSTALLMENT
+  DEBIT
+  CASH
+  PIX
+  INCOME
+}
+
+model Transaction {
+  id                  String          @id @default(uuid())
+  type                TransactionType
+  amount              Decimal         @db.Decimal(10, 2)
+  date                DateTime
+  isPending           Boolean         @default(false)
+  description         String?
+  totalInstallments   Int?
+  currentInstallment  Int?
+  installmentGroupId  String?
+  categoryId          String
+  category            Category        @relation(fields: [categoryId], references: [id])
+  userId              String
+  user                User            @relation(fields: [userId], references: [id])
+  createdAt           DateTime        @default(now())
+}
