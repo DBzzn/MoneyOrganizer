@@ -6,6 +6,7 @@ import {
     Patch,
     Param,
     Delete,
+    Query,
     UseGuards,
     Request,
 } from '@nestjs/common';
@@ -13,7 +14,9 @@ import { AuthGuard } from '@nestjs/passport';
 import { TransactionsService } from './transactions.service';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
 import { UpdateTransactionDto } from './dto/update-transaction.dto';
+import { QueryTransactionsDto } from './dto/query-transactions.dto';
 import { Request as ExpressRequest } from 'express';
+import { PrismaService } from '../prisma/prisma.service';
 
 interface AuthenticatedRequest extends ExpressRequest {
     user: {
@@ -25,7 +28,7 @@ interface AuthenticatedRequest extends ExpressRequest {
 @UseGuards(AuthGuard('jwt'))
 @Controller('transactions')
 export class TransactionsController {
-    constructor(private readonly transactionsService: TransactionsService) { }
+    constructor(private readonly transactionsService: TransactionsService) { }   
 
     @Post()
     create(
@@ -36,12 +39,26 @@ export class TransactionsController {
     }
 
     @Get()
-    findAll(@Request() req: AuthenticatedRequest) {
-        return this.transactionsService.findAll(req.user.id);
+    findAll(
+        @Request() req: AuthenticatedRequest,
+        @Query() filters: QueryTransactionsDto
+    ) {
+        return this.transactionsService.findAll(req.user.id, filters);
     }
 
-    @Get(':id')
-    findOne(@Request() req: AuthenticatedRequest, @Param('id') id: string) {
+    @Get('totals/by-category') // tem que vir antes pra não ser interpretado como ID
+    getTotalsByCategory(
+        @Request() req: AuthenticatedRequest,
+        @Query() filters: QueryTransactionsDto
+    ) {
+            return this.transactionsService.getTotalsByCategory(req.user.id, filters);
+    }
+
+    @Get(':id') // transactions/x -> QUALQUER COISA AQUI! É ENTENDIDO COMO ID
+    findOne(
+        @Request() req: AuthenticatedRequest,
+        @Param('id') id: string,
+    ) {
         return this.transactionsService.findOne(req.user.id, id);
     }
 

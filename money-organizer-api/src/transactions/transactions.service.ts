@@ -8,6 +8,7 @@ import { CreateTransactionDto } from './dto/create-transaction.dto';
 import { UpdateTransactionDto } from './dto/update-transaction.dto';
 import { TransactionType, Prisma } from '../../generated/prisma/client';
 import { randomUUID } from 'crypto';
+import { QueryTransactionsDto } from './dto/query-transactions.dto';
 
 @Injectable()
 export class TransactionsService {
@@ -82,11 +83,47 @@ export class TransactionsService {
 
     }
 
-    async findAll(userId: string) {
+    async findAll(userId: string, filters: QueryTransactionsDto)
+
+    {
+        const where: any = { userId }
+
+        if (filters.startDate) {
+            where.date = { ...where.date, gte: new Date(filters.startDate) };
+        }
+
+        if (filters.endDate) {
+            where.date = { ...where.date, lte: new Date(filters.endDate) };
+        }
+
+        if (filters.categoryId) {
+            where.categoryId = filters.categoryId;
+        }
+
+        if (filters.type) {
+            where.type = filters.type;
+        }
+
+        if (filters.isPending !== undefined) {
+            where.isPending = filters.isPending;
+        }
+
+        if (filters.search) {
+            where.description = { contains: filters.search, mode: 'insensitive' };
+        }
+
+        if (filters.minAmount !== undefined || filters.maxAmount != undefined) {
+            where.amount = {};
+            if (filters.minAmount !== undefined) {
+                where.amount.gte = filters.minAmount
+            }
+            if (filters.maxAmount !== undefined) {
+                where.amount.lte = filters.maxAmount
+            }
+        }
+
         const transactions = await this.prisma.transaction.findMany({
-            where: {
-                userId: userId,
-            },
+            where,
             select: {
                 id: true,
                 type: true,
@@ -111,11 +148,68 @@ export class TransactionsService {
                 date: 'desc',
             }
         });
-        if (!transactions) {
-            throw new NotFoundException('Nenhuma transação encontrada!');
-        }
+        
 
         return transactions;
+    }
+
+    async getTotalsByCategory(userId: string, filters?: QueryTransactionsDto) {
+        const where: any = { userId };
+
+        if (filters?.startDate) {
+            where.date = { ...where.date, gte: new Date(filters.startDate) };
+        }
+
+        if (filters?.endDate) {
+            where.date = { ...where.date, lte: new Date(filters.endDate) };
+        }
+
+        if (filters?.type) {
+            where.type = filters.type;
+        }
+
+        if (filters?.isPending !== undefined) {
+            where.isPending = filters.isPending;
+        }
+
+
+        const aggregations = await this.prisma.transaction.groupBy({
+            by: ['categoryId'],
+            where,
+            _sum: {
+                amount: true,
+            },
+            _count: {
+                id: true,
+            },
+        });
+
+        const totals = await Promise.all( //espera executar tudo os findUnique em paralelo
+            aggregations.map(async (agg) => {
+                const category = await this.prisma.category.findUnique({
+                    where: { id: agg.categoryId },
+                    select: {
+                        id: true,
+                        name: true,
+                        icon: true,
+                    }
+                });
+
+                return {
+                    categoryId: agg.categoryId,
+                    categoryName: category?.name || 'Categoria não encontrada',
+                    categoryIcon: category?.icon || null,
+                    totalAmount: agg._sum.amount?.toString() || '0',
+                    transactionCount: agg._count.id,
+                };
+            })
+        );
+
+        return totals.sort((a, b) =>
+            parseFloat(b.totalAmount) - parseFloat(a.totalAmount)
+        );
+
+
     }
 
     async findOne(userId: string, transactionId: string) {
