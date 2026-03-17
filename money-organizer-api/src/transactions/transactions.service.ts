@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
+import { CreateInstallmentsDto } from './dto/create-installments.dto';
 import { UpdateTransactionDto } from './dto/update-transaction.dto';
 import { TransactionType, Prisma } from '../../generated/prisma/client';
 import { randomUUID } from 'crypto';
@@ -327,4 +328,100 @@ export class TransactionsService {
 
     }
 
+    async createInstallment(userId: string, dto: CreateInstallmentsDto) {
+        if (dto.totalAmount && dto.installmentAmount) {
+            throw new BadRequestException('Forneça apenas o valor total ou o valor da parcela, não ambos!');
+        }
+
+        if (!dto.totalAmount && !dto.installmentAmount) {
+            throw new BadRequestException('Forneça pelo menos o valor total ou o valor da parcela!');
+        }
+
+        const category = await this.prisma.category.findFirst({
+            where: {
+                id: dto.categoryId,
+                userId,
+            }
+        });
+
+        if (!category) {
+            throw new BadRequestException('Categoria não encontrada!');
+        }
+
+        let baseAmountPerInstallment: number;
+        let totalToDistribute: number;
+
+        if (dto.totalAmount) {
+            totalToDistribute = dto.totalAmount;
+            baseAmountPerInstallment = Math.floor((dto.totalAmount / dto.totalInstallments) * 100) / 100;
+        } else {
+            baseAmountPerInstallment = dto.installmentAmount!;
+            totalToDistribute = dto.installmentAmount! * dto.totalInstallments;
+        }
+
+        const installmentGroupId = randomUUID();
+        const firstDate = new Date(dto.firstInstallmentDate);
+
+        const installmentsData: Array<{
+            type: TransactionType;
+            amount: number;
+            date: Date;
+            isPending: boolean;
+            description: string | null;
+            totalInstallments: number;
+            currentInstallment: number;
+            installmentGroupId: string;
+            categoryId: string;
+            userId: string;
+        }> = [];
+
+        let accumulatedAmount = 0;
+
+        for (let i = 1; i <= dto.totalInstallments; i++) {
+            const installmentDate = new Date(firstDate);
+            installmentDate.setMonth(firstDate.getMonth() + (i - 1));
+
+            let currentAmount: number;
+
+            if (i === dto.totalInstallments) {
+                currentAmount = totalToDistribute - accumulatedAmount;
+                currentAmount = Math.round(currentAmount * 100) / 100;
+            } else {
+                currentAmount = baseAmountPerInstallment;
+                accumulatedAmount += currentAmount;
+            }
+
+            installmentsData.push({
+                type: TransactionType.CREDIT_INSTALLMENT,
+                amount: currentAmount,
+                date: installmentDate,
+                isPending: dto.isPending || false,
+                description: dto.description || null,
+                totalInstallments: dto.totalInstallments,
+                currentInstallment: i,
+                installmentGroupId: installmentGroupId,
+                categoryId: dto.categoryId,
+                userId: userId,
+            });
+        }
+
+        const createdInstallments = await this.prisma.$transaction(
+            installmentsData.map((data) => this.prisma.transaction.create({ data }))
+        );
+
+        return {
+            message: `${dto.totalInstallments} parcelas criadas com sucesso!`,
+            installmentGroupId: installmentGroupId,
+            totalInstallments: dto.totalInstallments,
+            installmentValue: baseAmountPerInstallment.toFixed(2),
+            installments: createdInstallments.map((installment) => ({
+                id: installment.id,
+                currentInstallment: installment.currentInstallment,
+                date: installment.date,
+                amount: installment.amount.toString(),
+            }))
+
+        }
+
+    }
 }

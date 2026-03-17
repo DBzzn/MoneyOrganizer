@@ -13,10 +13,10 @@ import {
 import { AuthGuard } from '@nestjs/passport';
 import { TransactionsService } from './transactions.service';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
+import { CreateInstallmentsDto } from './dto/create-installments.dto';
 import { UpdateTransactionDto } from './dto/update-transaction.dto';
 import { QueryTransactionsDto } from './dto/query-transactions.dto';
 import { Request as ExpressRequest } from 'express';
-import { PrismaService } from '../prisma/prisma.service';
 
 interface AuthenticatedRequest extends ExpressRequest {
     user: {
@@ -36,6 +36,14 @@ export class TransactionsController {
         @Body() createTransactionDto: CreateTransactionDto
     ) {
         return this.transactionsService.create(req.user.id, createTransactionDto);
+    }
+
+    @Post('installments')
+    createInstallment(
+        @Request() req: AuthenticatedRequest,
+        @Body() dto: CreateInstallmentsDto
+    ) {
+        return this.transactionsService.createInstallment(req.user.id, dto);
     }
 
     @Get()
