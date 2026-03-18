@@ -16,6 +16,7 @@ import { CreateTransactionDto } from './dto/create-transaction.dto';
 import { CreateInstallmentsDto } from './dto/create-installments.dto';
 import { UpdateTransactionDto } from './dto/update-transaction.dto';
 import { QueryTransactionsDto } from './dto/query-transactions.dto';
+import { ReportFiltersDto } from './dto/report-filters.dto';
 import { Request as ExpressRequest } from 'express';
 
 interface AuthenticatedRequest extends ExpressRequest {
@@ -54,7 +55,7 @@ export class TransactionsController {
         return this.transactionsService.findAll(req.user.id, filters);
     }
 
-    @Get('totals/by-category') // tem que vir antes pra não ser interpretado como ID
+    @Get('totals/by-category') 
     getTotalsByCategory(
         @Request() req: AuthenticatedRequest,
         @Query() filters: QueryTransactionsDto
@@ -62,7 +63,32 @@ export class TransactionsController {
             return this.transactionsService.getTotalsByCategory(req.user.id, filters);
     }
 
-    @Get(':id') // transactions/x -> QUALQUER COISA AQUI! É ENTENDIDO COMO ID
+    @Get('totals/monthly-balance')
+    getMonthlyBalance(
+        @Request() req: AuthenticatedRequest,
+        @Query() filters: ReportFiltersDto,
+    ) {
+        return this.transactionsService.getMonthlyBalance(req.user.id, filters);
+    }
+
+    @Get('reports/evolution')
+    getEvolution(
+        @Request() req: AuthenticatedRequest,
+        @Query() filters: ReportFiltersDto,
+    ) {
+        return this.transactionsService.getEvolution(req.user.id, filters);
+    }
+
+    @Get('reports/projection')
+    getProjection(
+        @Request() req: AuthenticatedRequest,
+        @Query() filters: ReportFiltersDto,
+    ) {
+        return this.transactionsService.getProjection(req.user.id, filters);
+    }
+
+    //Tudo que não for pra ser ID tem que vir antes daqui!
+    @Get(':id')
     findOne(
         @Request() req: AuthenticatedRequest,
         @Param('id') id: string,

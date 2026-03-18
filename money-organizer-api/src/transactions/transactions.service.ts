@@ -10,6 +10,7 @@ import { UpdateTransactionDto } from './dto/update-transaction.dto';
 import { TransactionType, Prisma } from '../../generated/prisma/client';
 import { randomUUID } from 'crypto';
 import { QueryTransactionsDto } from './dto/query-transactions.dto';
+import { ReportFiltersDto } from './dto/report-filters.dto';
 
 @Injectable()
 export class TransactionsService {
@@ -423,5 +424,249 @@ export class TransactionsService {
 
         }
 
+    }
+
+    async getMonthlyBalance(userId: string, filters: ReportFiltersDto) {
+        const month = filters.month || new Date().toISOString().slice(0, 7); // formato YYYY-MM
+        const [year, monthNum] = month.split('-');
+        const startDate = new Date(parseInt(year), parseInt(monthNum) - 1, 1);
+        const endDate = new Date(parseInt(year), parseInt(monthNum), 0, 23, 59, 59);
+
+        const transactions = await this.prisma.transaction.findMany({
+            where: {
+                userId,
+                date: {
+                    gte: startDate,
+                    lte: endDate,
+                },
+            },
+            select: {
+                type: true,
+                amount: true,
+            },
+        });
+
+        let income = 0;
+        let expenses = 0;
+        let incomeCount = 0;
+        let expensesCount = 0;
+
+        transactions.forEach((tx) => {
+            const amount = parseFloat(tx.amount.toString());
+
+            if (tx.type === TransactionType.INCOME) {
+                income += amount;
+                incomeCount++;
+            } else {
+                expenses += amount;
+                expensesCount++;
+            }
+        });
+
+        const balance = income - expenses;
+
+        return {
+            month,
+            income: income.toFixed(2),
+            expenses: expenses.toFixed(2),
+            balance: balance.toFixed(2),
+            transactionCount: {
+                income: incomeCount,
+                expenses: expensesCount,
+                total: transactions.length,
+            },
+        };
+    }
+
+    async getEvolution(userId: string, filters: ReportFiltersDto) {
+        const endMonth = filters.endMonth || new Date().toISOString().slice(0, 7)
+
+        let startMonth: string;
+        if (filters.startMonth) {
+            startMonth = filters.startMonth;
+        } else {
+            const date = new Date();
+            date.setMonth(date.getMonth() - 5);
+            startMonth = date.toISOString().slice(0,7)
+        }
+
+        const [startYear, startMonthNum] = startMonth.split('-').map(Number);
+        const [endYear, endMonthNum] = endMonth.split('-').map(Number);
+
+        const startDate = new Date(startYear, startMonthNum - 1, 1);
+        const endDate = new Date(endYear, endMonthNum, 0, 23, 59, 59)
+
+        const transactions = await this.prisma.transaction.findMany({
+            where: {
+                userId,
+                date: {
+                    gte: startDate,
+                    lte: endDate,
+                },
+            },
+            select: {
+                type: true,
+                amount: true,
+                date: true,
+            },
+            orderBy: {
+                date: 'asc',
+            },
+        });
+
+        const monthsMap = new Map<string, { income: number; expenses: number; incomeCount: number; expensesCount: number }>();
+
+        const currentDate = new Date(startYear, startMonthNum - 1, 1);
+        const finalDate = new Date(endYear, endMonthNum - 1, 1);
+
+        while (currentDate <= finalDate) {
+            const monthKey = currentDate.toISOString().slice(0, 7);
+            monthsMap.set(monthKey, { income: 0, expenses: 0, incomeCount: 0, expensesCount: 0 });
+            currentDate.setMonth(currentDate.getMonth() + 1);
+        }
+
+        transactions.forEach((tx) => {
+            const monthKey = tx.date.toISOString().slice(0, 7)
+            const monthData = monthsMap.get(monthKey);
+
+            if (monthData) {
+                const amount = parseFloat(tx.amount.toString());
+
+                if (tx.type === TransactionType.INCOME) {
+                    monthData.income += amount;
+                    monthData.incomeCount++;
+                } else {
+                    monthData.expenses += amount;
+                    monthData.expensesCount++;
+                }
+
+            }
+        });
+
+        const evolution = Array.from(monthsMap.entries()).map(([month, data]) => ({
+            month,
+            income: data.income.toFixed(2),
+            expenses: data.expenses.toFixed(2),
+            balance: (data.income - data.expenses).toFixed(2),
+            transactionCount: {
+                income: data.incomeCount,
+                expenses: data.expensesCount,
+                total: data.incomeCount + data.expensesCount,
+
+            },
+        }));
+
+        return evolution;
+    }
+
+    async getProjection(userId: string, filters: ReportFiltersDto) {
+        const startMonth = filters.startMonth || new Date().toISOString().slice(0, 7);
+
+        let endMonth: string;
+        if (filters.endMonth) {
+            endMonth = filters.endMonth;
+        } else {
+            const date = new Date();
+            date.setMonth(date.getMonth() + 5);
+            endMonth = date.toISOString().slice(0, 7);
+        }
+
+        const [startYear, startMonthNum] = startMonth.split('-').map(Number);
+        const [endYear, endMonthNum] = endMonth.split('-').map(Number);
+
+        const startDate = new Date(startYear, startMonthNum - 1, 1)
+        const endDate = new Date(endYear, endMonthNum, 0, 23, 59, 59)
+
+
+        const transactions = await this.prisma.transaction.findMany({
+            where: {
+                userId,
+                date: {
+                    gte: startDate,
+                    lte: endDate,
+                },
+            },
+            select: {
+                type: true,
+                amount: true,
+                date: true,
+                isPending: true,
+            },
+            orderBy: {
+                date: 'asc'
+            }
+
+        });
+
+        const monthsMap = new Map<string, {
+            confirmedIncome: number;
+            confirmedExpenses: number;
+            pendingIncome: number;
+            pendingExpenses: number;
+            pendingCount: number;
+        }>();
+
+        const currentDate = new Date(startYear, startMonthNum - 1, 1);
+        const finalDate = new Date(endYear, endMonthNum - 1, 1);
+
+        while (currentDate <= finalDate) {
+            const monthKey = currentDate.toISOString().slice(0, 7);
+            monthsMap.set(monthKey, {
+                confirmedIncome: 0,
+                confirmedExpenses: 0,
+                pendingIncome: 0,
+                pendingExpenses: 0,
+                pendingCount: 0,
+            });
+            currentDate.setMonth(currentDate.getMonth() + 1);
+        }
+
+        transactions.forEach((tx) => {
+            const monthKey = tx.date.toISOString().slice(0, 7);
+            const monthData = monthsMap.get(monthKey);
+
+            if (monthData) {
+                const amount = parseFloat(tx.amount.toString());
+                const isIncome = tx.type === TransactionType.INCOME;
+                const isPending = tx.isPending;
+
+                if (isIncome) {
+                    if (isPending) {
+                        monthData.pendingIncome += amount;
+                        monthData.pendingCount++;
+                    } else {
+                        monthData.confirmedIncome += amount;
+                    }
+                } else {
+                    if (isPending) {
+                        monthData.pendingExpenses += amount;
+                        monthData.pendingCount++;
+                    } else {
+                        monthData.confirmedExpenses += amount;
+                    }
+                }
+            }
+        });
+
+        const projection = Array.from(monthsMap.entries()).map(([month, data]) => {
+            const projectedIncome = data.confirmedIncome + data.pendingIncome;
+            const projectedExpenses = data.confirmedExpenses + data.pendingExpenses;
+            const projectedBalance = projectedIncome - projectedExpenses;
+
+            return {
+                month,
+                projectedIncome: projectedIncome.toFixed(2),
+                projectedExpenses: projectedExpenses.toFixed(2),
+                projectedBalance: projectedBalance.toFixed(2),
+                pendingTransactions: data.pendingCount,
+                details: {
+                    confirmedIncome: data.confirmedIncome.toFixed(2),
+                    confirmedExpenses: data.confirmedExpenses.toFixed(2),
+                    pendingIncome: data.pendingIncome.toFixed(2),
+                    pendingExpenses: data.pendingExpenses.toFixed(2),
+                },
+            };
+        });
+        return projection;
     }
 }
