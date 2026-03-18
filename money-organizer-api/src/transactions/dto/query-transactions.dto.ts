@@ -1,4 +1,4 @@
-import {
+﻿import {
     IsOptional,
     IsEnum,
     IsDateString,
@@ -8,40 +8,82 @@ import {
 } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
 import { TransactionType } from '../../../generated/prisma/client';
+import { ApiProperty } from '@nestjs/swagger';
 
 export class QueryTransactionsDto {
-    @IsOptional()
-    @IsDateString()
-    startDate?: string;
+    @ApiProperty({
+    description: 'Data inicial do período (formato ISO)',
+    example: '2024-03-01',
+    required: false,
+  })
+  @IsOptional()
+  @IsDateString()
+  startDate?: string;
 
-    @IsOptional()
-    @IsDateString()
-    endDate?: string;
+  @ApiProperty({
+    description: 'Data final do período (formato ISO)',
+    example: '2024-03-31',
+    required: false,
+  })
+  @IsOptional()
+  @IsDateString()
+  endDate?: string;
 
-    @IsOptional()
-    @IsString()
-    categoryId?: string;
+  @ApiProperty({
+    description: 'Filtrar por ID de categoria específica',
+    example: 'uuid-da-categoria',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  categoryId?: string;
 
-    @IsOptional()
-    @IsEnum(TransactionType)
-    type?: TransactionType;
+  @ApiProperty({
+    description: 'Filtrar por tipo de transação',
+    enum: TransactionType,
+    example: TransactionType.PIX,
+    required: false,
+  })
+  @IsOptional()
+  @IsEnum(TransactionType)
+  type?: TransactionType;
 
-    @IsOptional()
-    @Transform(({ value }) => value === 'true')
-    @IsBoolean()
-    isPending?: boolean;
+  @ApiProperty({
+    description: 'Filtrar por status pendente',
+    example: false,
+    required: false,
+  })
+  @IsOptional()
+  @Transform(({ value }) => value === 'true')
+  @IsBoolean()
+  isPending?: boolean;
 
-    @IsOptional()
-    @IsString()
-    search?: string;    // Para buscar por descri��o
+  @ApiProperty({
+    description: 'Buscar texto na descrição (case-insensitive)',
+    example: 'mercado',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  search?: string;
 
-    @IsOptional()
-    @Type(() => Number)
-    @IsNumber()
-    minAmount?: number;
+  @ApiProperty({
+    description: 'Valor mínimo da transação',
+    example: 50,
+    required: false,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  minAmount?: number;
 
-    @IsOptional()
-    @Type(() => Number)
-    @IsNumber()
-    maxAmount?: number;
+  @ApiProperty({
+    description: 'Valor máximo da transação',
+    example: 500,
+    required: false,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  maxAmount?: number;
 }

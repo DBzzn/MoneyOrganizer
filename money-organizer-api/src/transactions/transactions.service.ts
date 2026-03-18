@@ -1,4 +1,4 @@
-import {
+Ôªøimport {
     Injectable,
     NotFoundException,
     BadRequestException,
@@ -25,7 +25,7 @@ export class TransactionsService {
         });
 
         if (!category) {
-            throw new BadRequestException('Categoria n„o encontrada!');
+            throw new BadRequestException('Categoria n√£o encontrada!');
         }
 
         //Parcelamento
@@ -35,7 +35,7 @@ export class TransactionsService {
             }
 
             if (dto.currentInstallment > dto.totalInstallments) {
-                throw new BadRequestException('A parcela atual n„o pode ser maior que o total de parcelas!');
+                throw new BadRequestException('A parcela atual n√£o pode ser maior que o total de parcelas!');
             }
 
             if (!dto.installmentGroupId) {
@@ -199,7 +199,7 @@ export class TransactionsService {
 
                 return {
                     categoryId: agg.categoryId,
-                    categoryName: category?.name || 'Categoria n„o encontrada',
+                    categoryName: category?.name || 'Categoria n√£o encontrada',
                     categoryIcon: category?.icon || null,
                     totalAmount: agg._sum.amount?.toString() || '0',
                     transactionCount: agg._count.id,
@@ -256,7 +256,7 @@ export class TransactionsService {
                 }
             });
             if (!category) {
-                throw new BadRequestException('Categoria n„o encontrada!');
+                throw new BadRequestException('Categoria n√£o encontrada!');
             }
         }
 
@@ -301,7 +301,7 @@ export class TransactionsService {
             return transacation;
         } catch (error: any) {
             if (error.code === 'P2025') {
-                throw new NotFoundException('TransaÁ„o n„o encontrada!');
+                throw new NotFoundException('Transa√ß√£o n√£o encontrada!');
             }
             throw error;
         }
@@ -317,11 +317,11 @@ export class TransactionsService {
             });
 
             return {
-                message: 'TransaÁ„o deletada com sucesso!',
+                message: 'Transa√ß√£o deletada com sucesso!',
             }
         } catch (error: any) {
             if (error.code === 'P2025') {
-                throw new NotFoundException('TransaÁ„o n„o encontrada!');
+                throw new NotFoundException('Transa√ß√£o n√£o encontrada!');
             }
 
             throw error;
@@ -331,11 +331,11 @@ export class TransactionsService {
 
     async createInstallment(userId: string, dto: CreateInstallmentsDto) {
         if (dto.totalAmount && dto.installmentAmount) {
-            throw new BadRequestException('ForneÁa apenas o valor total ou o valor da parcela, n„o ambos!');
+            throw new BadRequestException('Forne√ßa apenas o valor total ou o valor da parcela, n√£o ambos!');
         }
 
         if (!dto.totalAmount && !dto.installmentAmount) {
-            throw new BadRequestException('ForneÁa pelo menos o valor total ou o valor da parcela!');
+            throw new BadRequestException('Forne√ßa pelo menos o valor total ou o valor da parcela!');
         }
 
         const category = await this.prisma.category.findFirst({
@@ -346,7 +346,7 @@ export class TransactionsService {
         });
 
         if (!category) {
-            throw new BadRequestException('Categoria n„o encontrada!');
+            throw new BadRequestException('Categoria n√£o encontrada!');
         }
 
         let baseAmountPerInstallment: number;

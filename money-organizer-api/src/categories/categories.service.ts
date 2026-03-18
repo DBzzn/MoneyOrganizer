@@ -1,4 +1,4 @@
-
+Ôªø
 import {
   Injectable,
   NotFoundException,
@@ -59,7 +59,7 @@ export class CategoriesService {
             })
         } catch (error: any) {
             if (error?.code == 'P2025') {
-                throw new NotFoundException('Categoria N√O encontrada!');
+                throw new NotFoundException('Categoria N√ÉO encontrada!');
             }
         }
     }
@@ -78,7 +78,7 @@ export class CategoriesService {
             return { message: 'Categoria deletada com sucesso!' };
         } catch(error: any) {
             if (error?.code == 'P2025') {
-                throw new NotFoundException('Categoria N√O encontrada!');
+                throw new NotFoundException('Categoria N√ÉO encontrada!');
             }
         }
     }   

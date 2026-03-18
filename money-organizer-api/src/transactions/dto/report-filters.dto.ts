@@ -1,11 +1,16 @@
-import {
+﻿import {
     IsOptional,
     IsString,
     Matches,
 } from 'class-validator';
+import { ApiProperty } from '@nestjs/swagger';
 
 export class ReportFiltersDto {
-    // Formato da data adotado: 'YYYY-MM'
+    @ApiProperty({
+        description: 'Mês específico para o relatório (formato YYYY-MM)',
+        example: '2024-03',
+        required: false,
+    })
     @IsOptional()
     @IsString()
     @Matches(/^\d{4}(-\d{2})?$/, {
@@ -13,6 +18,11 @@ export class ReportFiltersDto {
     })
     month?: string; 
 
+    @ApiProperty({
+        description: 'Mês inicial para evolução temporal (formato YYYY-MM)',
+        example: '2024-01',
+        required: false,
+    })
     @IsOptional()
     @IsString()
     @Matches(/^\d{4}(-\d{2})?$/, {
@@ -20,6 +30,11 @@ export class ReportFiltersDto {
     })
     startMonth?: string;
 
+    @ApiProperty({
+        description: 'Mês final para evolução temporal (formato YYYY-MM)',
+        example: '2024-06',
+        required: false,
+    })
     @IsOptional()
     @IsString()
     @Matches(/^\d{4}(-\d{2})?$/, {
