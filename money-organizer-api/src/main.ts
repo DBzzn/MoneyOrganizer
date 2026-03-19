@@ -17,6 +17,11 @@ async function bootstrap() {
         transform: true,
     }));
 
+    app.enableCors({
+      origin: 'http://localhost:5173', //configurar de acordo com a porta do front!
+      credentials: true,
+    })
+
   const config = new DocumentBuilder()
       .setTitle('MoneyOrganizerAPI')
       .setDescription('API para Gerenciamento Financeiro Pessoal')
@@ -39,7 +44,7 @@ async function bootstrap() {
       .build();
   const document = SwaggerModule.createDocument(app, config);
     SwaggerModule.setup('api', app, document);
-  await app.listen(process.env.PORT ?? 3000);
+  await app.listen(process.env.PORT ?? 3000); //lembra de configurar o .env do front com a mesma porta!
 }
 bootstrap().catch((error: unknown) => {
   console.error('Falha ao iniciar o app:', error);
