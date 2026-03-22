@@ -9,7 +9,7 @@ interface CategoryPayload {
 export const getCategories = () =>
     api.get<Category[]>('/categories')
 
-export const createCategories = (data: CategoryPayload) =>
+export const createCategory = (data: CategoryPayload) =>
     api.post<Category>('/categories', data)
 
 export const updateCategory = (id: string, data: CategoryPayload) =>
