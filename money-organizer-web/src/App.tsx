@@ -11,6 +11,7 @@ import { Register } from './pages/Register'
 import { Dashboard } from './pages/Dashboard'
 import { Categories } from './pages/Categories'
 import { Transactions } from './pages/Transactions'
+import { Reports } from './pages/Reports'
 
 export default function App() {
     return (
@@ -36,6 +37,12 @@ export default function App() {
                     <Route path="/transactions" element={
                         <PrivateRoute>
                             <Transactions />
+                        </PrivateRoute>
+                    }
+                    />
+                    <Route path="/reports" element={
+                        <PrivateRoute>
+                            <Reports />
                         </PrivateRoute>
                     }
                     />

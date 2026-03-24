@@ -40,7 +40,11 @@ export interface MonthlyBalance {
     income: number
     expenses: number
     balance: number
-    transactionCount: number
+    transactionCount: {
+        income: number
+        expenses: string
+        total: number
+    }
 }
 
 export interface ProjectionEntry {

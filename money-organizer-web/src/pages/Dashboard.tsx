@@ -68,7 +68,7 @@ export function Dashboard() {
     },
     {
       label: 'Transações',
-      value: balance?.transactionCount ?? 0,
+      value: balance?.transactionCount.total ?? 0,
       icon: Receipt,
       color: 'text-purple-600',
       bg: 'bg-purple-50',
@@ -88,10 +88,10 @@ export function Dashboard() {
     ]
 
   const pieData = categories
-    .filter((c) => c.totalAmount > 0)
+    .filter((c) => parseFloat(String(c.totalAmount)) > 0)
     .map((c) => ({
       name: `${c.categoryIcon ?? ''} ${c.categoryName}`,
-      value: c.totalAmount,
+      value: parseFloat(String(c.totalAmount)),
     }))
 
 

@@ -4,6 +4,7 @@ import {
     Tag,
     ArrowLeftRight,
     LogOut,
+    NotebookPen,
  } from "lucide-react";
 import { useAuth } from "../contexts/useAuth";
 
@@ -11,6 +12,7 @@ import { useAuth } from "../contexts/useAuth";
     {to: '/dashboard', icon: LayoutDashboard, Label: 'Dashboard'},
     {to: '/categories', icon: Tag, Label: 'Categorias'},
     {to: '/transactions', icon: ArrowLeftRight, Label: 'Transações'},
+    {to: '/reports', icon: NotebookPen, Label: 'Relatórios'},
  ]
 
  export function Sidebar() {

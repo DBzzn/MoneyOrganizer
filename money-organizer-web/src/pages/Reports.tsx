@@ -51,11 +51,7 @@ export function Reports() {
             getEvolution({ startMonth: evolutionStart, endMonth: evolutionEnd }),
             getProjection({ startMonth: projectionStart, endMonth: projectionEnd }),
         ])
-            .then(([balanceRes, evolutionRes, projectionRes]) => {
-                console.log('balance:', balanceRes.data )
-                console.log('evolution:', evolutionRes.data )
-                console.log('projection:', projectionRes.data )
-
+            .then(([balanceRes, evolutionRes, projectionRes]) => {                
                 setBalance(balanceRes.data)
                 setEvolution(evolutionRes.data)
                 setProjection(projectionRes.data)

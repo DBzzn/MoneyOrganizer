@@ -70,11 +70,11 @@ export const getTotalsByCategory = (filters?: TransactionFilters) =>
     api.get<CategoryTotal[]>('/transactions/totals/by-category', {params: filters})
 
 export const getMonthlyBalance = (filters?: ReportFilters) =>
-    api.get<MonthlyBalance>('/transactions/reports/monthly-balance', { params: filters })
+    api.get<MonthlyBalance>('/transactions/totals/monthly-balance', { params: filters })
 
 export const getEvolution = (filters?: ReportFilters) =>
     api.get<EvolutionEntry[]>('/transactions/reports/evolution', { params: filters })
 
 export const getProjection = (filters?: ReportFilters) =>
-    api.get<ProjectionEntry>('/transactions/reports/projection', { params: filters })
+    api.get<ProjectionEntry[]>('/transactions/reports/projection', { params: filters })
 
