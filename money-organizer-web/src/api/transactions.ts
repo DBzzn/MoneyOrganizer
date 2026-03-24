@@ -76,5 +76,5 @@ export const getEvolution = (filters?: ReportFilters) =>
     api.get<EvolutionEntry[]>('/transactions/reports/evolution', { params: filters })
 
 export const getProjection = (filters?: ReportFilters) =>
-    api.get<ProjectionEntry>('/transactions/reports/projeciton', { params: filters })
+    api.get<ProjectionEntry>('/transactions/reports/projection', { params: filters })
 

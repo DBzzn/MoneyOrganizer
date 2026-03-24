@@ -50,7 +50,7 @@ export class CreateTransactionDto {
     })
     @IsBoolean()
     @IsOptional()
-    IsPending?: boolean;
+    isPending?: boolean;
 
     @ApiProperty({
         description: 'Descrição da transação',

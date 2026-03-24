@@ -12,6 +12,18 @@ import { randomUUID } from 'crypto';
 import { QueryTransactionsDto } from './dto/query-transactions.dto';
 import { ReportFiltersDto } from './dto/report-filters.dto';
 
+
+function removeUndefined<T extends object>(obj: T): Partial<T> {
+    return Object.fromEntries(
+        Object.entries(obj).filter(([, v]) => v !== undefined)
+    ) as Partial<T>;
+}
+
+function toLocalDate(dateStr: string): Date {
+    const [y, m, d] = dateStr.split('-').map(Number)
+    return new Date(y, m - 1, d, 12, 0, 0)
+}
+
 @Injectable()
 export class TransactionsService {
     constructor(private readonly prisma: PrismaService) { }
@@ -51,8 +63,8 @@ export class TransactionsService {
             data: {
                 type: dto.type,
                 amount: new Prisma.Decimal(dto.amount),
-                date: new Date(dto.date),
-                isPending: dto.IsPending ?? false,
+                date: toLocalDate(dto.date),
+                isPending: dto.isPending ?? false,
                 description: dto.description,
                 totalInstallments: dto.totalInstallments,
                 currentInstallment: dto.currentInstallment,
@@ -260,14 +272,15 @@ export class TransactionsService {
             }
         }
 
-        const data: any = { ...dto };
-        if (dto.amount !== undefined) {
-            data.amount = new Prisma.Decimal(dto.amount);
-        }
-
-        if (dto.date) {
-            data.data = new Date(dto.date);
-        }
+        const data = removeUndefined({ // remove o que não foi passado para atualizar com o que foi
+            type:        dto.type,
+            amount:      dto.amount         !== undefined ? new Prisma.Decimal(dto.amount) : undefined,
+            date:        dto.date           !== undefined ? new Date (toLocalDate(dto.date)) : undefined,
+            isPending:   dto.isPending,
+            description: dto.description,
+            category:    dto.categoryId     !== undefined ? { connect: {id: dto.categoryId } } : undefined,
+        });
+       
 
         try {
             const transacation = await this.prisma.transaction.update({
