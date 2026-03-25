@@ -100,34 +100,36 @@ export function Dashboard() {
       <div className="space-y-8">
 
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-          <p className="text-gray-500 mt-1">Visão geral das suas finanças</p>
+          <h1 className="text-2xl font-bold" style={{ color: 'var(--color-text)' }}>Dashboard</h1>
+          <p className="mt-1" style={{ color: 'var(--color-text-muted)' }}>Visão geral das suas finanças</p>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
           {cards.map((card) => (
             <div
               key={card.label}
-              className="bg-white rounded-2xl border border-gray-200 p-6 flex items-center gap-4"
+              className="rounded-2xl p-6 flex items-center gap-4"
+              style={{ backgroundColor: 'var(--color-bg-card)', border: '1px solid var(--color-border)' }}
             >
               <div className={`${card.bg} p-3 rounded-xl`}>
                 <card.icon size={22} className={card.color} />
               </div>
               <div>
-                <p className="text-sm text-gray-500">{card.label}</p>
+                <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>{card.label}</p>
                 <p className={`text-xl font-bold ${card.color}`}>{card.value}</p>
               </div>
             </div>
           ))}
         </div>
 
-        <div className="bg-white rounded-2xl border border-gray-200 p-6">
-          <h2 className="text-lg font-semibold text-gray-800 mb-6">
+        <div className="rounded-2xl p-6"
+          style={{ backgroundColor: 'var(--color-bg-card)', border: '1px solid var(--color-border)' }}>
+          <h2 className="text-lg font-semibold mb-6" style={{ color: 'var(--color-text)' }}>
             Evolução dos últimos 6 meses
           </h2>
           {chartData.length === 0 ? (
             <div className="flex items-center justify-center h-48">
-              <p className="text-gray-400">Nenhum dado disponível ainda</p>
+              <p style={{ color: 'var(--color-text-muted)' }}>Nenhum dado disponível ainda</p>
             </div>
           ) : (
             <ResponsiveContainer width="100%" height={300}>
@@ -146,15 +148,15 @@ export function Dashboard() {
                     <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
                 <XAxis
                   dataKey="month"
-                  tick={{ fontSize: 12, fill: '#9ca3af' }}
+                  tick={{ fontSize: 12, fill: 'var(--color-text-muted)' }}
                   axisLine={false}
                   tickLine={false}
                 />
                 <YAxis
-                  tick={{ fontSize: 12, fill: '#9ca3af' }}
+                  tick={{ fontSize: 12, fill: 'var(--color-text-muted)' }}
                   axisLine={false}
                   tickLine={false}
                   tickFormatter={(v) => formatCurrency(v)}
@@ -163,43 +165,29 @@ export function Dashboard() {
                   formatter={(value) => formatCurrency(Number(value))}
                   contentStyle={{
                     borderRadius: '12px',
-                    border: '1px solid #e5e7eb',
+                    border: '1px solid var(--color-border)',
+                    background: 'var(--color-bg-card)',
+                    color: 'var(--color-text)',
                     fontSize: '13px',
+                    fontWeight: 'bold'
                   }}
                 />
-                <Area
-                  type="monotone"
-                  dataKey="Receitas"
-                  stroke="#22c55e"
-                  strokeWidth={2}
-                  fill="url(#colorReceitas)"
-                />
-                <Area
-                  type="monotone"
-                  dataKey="Despesas"
-                  stroke="#ef4444"
-                  strokeWidth={2}
-                  fill="url(#colorDespesas)"
-                />
-                <Area
-                  type="monotone"
-                  dataKey="Saldo"
-                  stroke="#3b82f6"
-                  strokeWidth={2}
-                  fill="url(#colorSaldo)"
-                />
+                <Area type="monotone" dataKey="Receitas" stroke="#22c55e" strokeWidth={2} fill="url(#colorReceitas)" />
+                <Area type="monotone" dataKey="Despesas" stroke="#ef4444" strokeWidth={2} fill="url(#colorDespesas)" />
+                <Area type="monotone" dataKey="Saldo" stroke="#3b82f6" strokeWidth={2} fill="url(#colorSaldo)" />
               </AreaChart>
             </ResponsiveContainer>
           )}
         </div>
 
-        <div className="bg-white rounded-2xl border border-gray-200 p-6">
-          <h2 className="text-lg font-semibold text-gray-800 mb-6">
+        <div className="rounded-2xl p-6"
+          style={{ backgroundColor: 'var(--color-bg-card)', border: '1px solid var(--color-border)' }}>
+          <h2 className="text-lg font-semibold mb-6" style={{ color: 'var(--color-text)' }}>
             Gastos por categoria
           </h2>
           {pieData.length === 0 ? (
             <div className="flex items-center justify-center h-48">
-              <p className="text-gray-400">Nenhum dado disponível ainda</p>
+              <p style={{ color: 'var(--color-text-muted)' }}>Nenhum dado disponível ainda</p>
             </div>
           ) : (
             <ResponsiveContainer width="100%" height={320}>
@@ -214,23 +202,23 @@ export function Dashboard() {
                   dataKey="value"
                 >
                   {pieData.map((_, index) => (
-                    <Cell
-                      key={`cell-${index}`}
-                      fill={PIE_COLORS[index % PIE_COLORS.length]}
-                    />
+                    <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
                   ))}
                 </Pie>
                 <Tooltip
                   formatter={(value) => formatCurrency(Number(value))}
                   contentStyle={{
                     borderRadius: '12px',
-                    border: '1px solid #e5e7eb',
+                    border: '1px solid var(--color-border)',
+                    background: 'var(--color-bg-card)',
+                    color: 'var(--color-text)',
                     fontSize: '13px',
+                    fontWeight: 'bold',
                   }}
                 />
                 <Legend
                   formatter={(value) => (
-                    <span style={{ fontSize: '13px', color: '#6b7280' }}>{value}</span>
+                    <span style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>{value}</span>
                   )}
                 />
               </PieChart>

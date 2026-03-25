@@ -169,439 +169,445 @@ export function Transactions() {
 
     return (
         <Layout>
-            <div className="space-y-6">
+      <div className="space-y-6">
 
-                <div className="flex items-center justify-between">
-                    <div>
-                        <h1 className="text-2xl font-bold text-gray-900">Transações</h1>
-                        <p className="text-gray-500 mt-1">Gerencie suas movimentações</p>
-                    </div>
-                    <div className="flex gap-2">
-                        <button
-                            onClick={() => { setFormMode('installment'); setServerError(null) }} //FORMULARIO DE PARCELAS (PARCELAR)
-                            className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2.5 rounded-lg text-sm font-medium transition"
-                        >
-                            <CreditCard size={16} />
-                            Parcelar
-                        </button>
-                        <button
-                            onClick={() => { setFormMode('transaction'); setServerError(null) }} //FORMULARIO DE TRANSAÇÕES
-                            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-lg text-sm font-medium transition"
-                        >
-                            <Plus size={16} />
-                            Nova transação
-                        </button>
-                    </div>
-                </div>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold" style={{ color: 'var(--color-text)' }}>Transações</h1>
+            <p className="mt-1" style={{ color: 'var(--color-text-muted)' }}>Gerencie suas movimentações</p>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => { setFormMode('installment'); setServerError(null) }}
+              className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2.5 rounded-lg text-sm font-medium transition"
+            >
+              <CreditCard size={16} />
+              Parcelar
+            </button>
+            <button
+              onClick={() => { setFormMode('transaction'); setServerError(null) }}
+              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-lg text-sm font-medium transition"
+            >
+              <Plus size={16} />
+              Nova transação
+            </button>
+          </div>
+        </div>
 
-                {formMode === 'transaction' && (
-                    <div className="bg-white border border-gray-200 rounded-2xl p-6">
-                        <div className="flex items-center justify-between mb-4">
-                            <h2 className="text-lg font-semibold text-gray-800">Nova transação</h2>
-                            <button onClick={handleClose} className="text-gray-400 hover:text-gray-600 transition">
-                                <X size={20} />
-                            </button>
-                        </div>
-
-                        <form onSubmit={transactionForm.handleSubmit(onSubmitTransaction)} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
-                                <select
-                                    {...transactionForm.register('type')}
-                                    className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                >
-                                    <option value="">Selecione...</option>
-                                    <option value="INCOME">Receita</option>
-                                    <option value="CREDIT_CASH">Crédito à vista</option>
-                                    <option value="DEBIT">Débito</option>
-                                    <option value="PIX">Pix</option>
-                                    <option value="CASH">Dinheiro</option>
-                                </select>
-                                {transactionForm.formState.errors.type && (
-                                    <p className="text-red-500 text-sm mt-1">{transactionForm.formState.errors.type.message}</p>
-                                )}
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Valor (R$)</label>
-                                <input
-                                    {...transactionForm.register('amount', { valueAsNumber: true })}
-                                    type="number"
-                                    step="0.01"
-                                    placeholder="0,00"
-                                    className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                />
-                                {transactionForm.formState.errors.amount && (
-                                    <p className="text-red-500 text-sm mt-1">{transactionForm.formState.errors.amount.message}</p>
-                                )}
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Data</label>
-                                <input
-                                    {...transactionForm.register('date')}
-                                    type="date"
-                                    className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                />
-                                {transactionForm.formState.errors.date && (
-                                    <p className="text-red-500 text-sm mt-1">{transactionForm.formState.errors.date.message}</p>
-                                )}
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Categoria</label>
-                                <select
-                                    {...transactionForm.register('categoryId')}
-                                    className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                >
-                                    <option value="">Selecione...</option>
-                                    {categories.map((cat) => (
-                                        <option key={cat.id} value={cat.id}>
-                                            {cat.icon} {cat.name}
-                                        </option>
-                                    ))}
-                                </select>
-                                {transactionForm.formState.errors.categoryId && (
-                                    <p className="text-red-500 text-sm mt-1">{transactionForm.formState.errors.categoryId.message}</p>
-                                )}
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Descrição (opcional)</label>
-                                <input
-                                    {...transactionForm.register('description')}
-                                    type="text"
-                                    placeholder="Ex: Almoço com cliente"
-                                    className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                />
-                            </div>
-
-                            <div className="flex items-center gap-2 pt-6">
-                                <input
-                                    {...transactionForm.register('isPending')}
-                                    type="checkbox"
-                                    id="isPending"
-                                    className="w-4 h-4 rounded border-gray-300 text-blue-600"
-                                    onChange={(e) => transactionForm.setValue('isPending', e.target.checked)}
-                                />
-                                <label htmlFor="isPending" className="text-sm text-gray-700">
-                                    Transação pendente
-                                </label>
-                            </div>
-
-                            {serverError && (
-                                <div className="sm:col-span-2 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
-                                    <p className="text-red-600 text-sm">{serverError}</p>
-                                </div>
-                            )}
-
-                            <div className="sm:col-span-2 flex justify-end">
-                                <button
-                                    type="submit"
-                                    disabled={transactionForm.formState.isSubmitting}
-                                    className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-6 py-2.5 rounded-lg text-sm font-medium transition"
-                                >
-                                    {transactionForm.formState.isSubmitting ? 'Salvando...' : 'Salvar transação'}
-                                </button>
-                            </div>
-
-                        </form>
-                    </div>
-                )}
-
-                {formMode === 'installment' && (
-                    <div className="bg-white border border-gray-200 rounded-2xl p-6">
-                        <div className="flex items-center justify-between mb-4">
-                            <h2 className="text-lg font-semibold text-gray-800">Novo parcelamento</h2>
-                            <button onClick={handleClose} className="text-gray-400 hover:text-gray-600 transition">
-                                <X size={20} />
-                            </button>
-                        </div>
-
-                        <form onSubmit={installmentForm.handleSubmit(onSubmitInstallment)} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Valor total (R$)</label>
-                                <input
-                                    {...installmentForm.register('totalAmount', { valueAsNumber: true })}
-                                    type="number"
-                                    step="0.01"
-                                    placeholder="0,00"
-                                    className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-purple-500"
-                                />
-                                {installmentForm.formState.errors.totalAmount && (
-                                    <p className="text-red-500 text-sm mt-1">{installmentForm.formState.errors.totalAmount.message}</p>
-                                )}
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Número de parcelas</label>
-                                <input
-                                    {...installmentForm.register('totalInstallments', { valueAsNumber: true })}
-                                    type="number"
-                                    min="2"
-                                    placeholder="Ex: 12"
-                                    className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-purple-500"
-                                />
-                                {installmentForm.formState.errors.totalInstallments && (
-                                    <p className="text-red-500 text-sm mt-1">{installmentForm.formState.errors.totalInstallments.message}</p>
-                                )}
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Data da primeira parcela</label>
-                                <input
-                                    {...installmentForm.register('firstInstallmentDate')}
-                                    type="date"
-                                    className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-purple-500"
-                                />
-                                {installmentForm.formState.errors.firstInstallmentDate && (
-                                    <p className="text-red-500 text-sm mt-1">{installmentForm.formState.errors.firstInstallmentDate.message}</p>
-                                )}
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Categoria</label>
-                                <select
-                                    {...installmentForm.register('categoryId')}
-                                    className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-purple-500"
-                                >
-                                    <option value="">Selecione...</option>
-                                    {categories.map((cat) => (
-                                        <option key={cat.id} value={cat.id}>
-                                            {cat.icon} {cat.name}
-                                        </option>
-                                    ))}
-                                </select>
-                                {installmentForm.formState.errors.categoryId && (
-                                    <p className="text-red-500 text-sm mt-1">{installmentForm.formState.errors.categoryId.message}</p>
-                                )}
-                            </div>
-
-                            <div className="sm:col-span-2">
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Descrição (opcional)</label>
-                                <input
-                                    {...installmentForm.register('description')}
-                                    type="text"
-                                    placeholder="Ex: iPhone 16 Pro"
-                                    className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-purple-500"
-                                />
-                            </div>
-
-                            {serverError && (
-                                <div className="sm:col-span-2 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
-                                    <p className="text-red-600 text-sm">{serverError}</p>
-                                </div>
-                            )}
-
-                            <div className="sm:col-span-2 flex justify-end">
-                                <button
-                                    type="submit"
-                                    disabled={installmentForm.formState.isSubmitting}
-                                    className="bg-purple-600 hover:bg-purple-700 disabled:bg-purple-400 text-white px-6 py-2.5 rounded-lg text-sm font-medium transition"
-                                >
-                                    {installmentForm.formState.isSubmitting ? 'Criando parcelas...' : 'Criar parcelamento'}
-                                </button>
-                            </div>
-
-                        </form>
-                    </div>
-                )}
-
-                {formMode === 'edit' && editingTransaction && (
-                    <div className="bg-white border border-gray-200 rounded-2xl p-6">
-                        <div className="flex items-center justify-between mb-4">
-                            <h2 className="text-lg font-semibold text-gray-800">Editar transação</h2>
-                            <button onClick={handleClose} className="text-gray-400 hover:text-gray-600 transition">
-                                <X size={20} />
-                            </button>
-                        </div>
-
-                        <form onSubmit={updateForm.handleSubmit(onSubmitUpdate)} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-
-                            {editingTransaction.type !== 'CREDIT_INSTALLMENT' && (
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
-                                    <select
-                                        {...updateForm.register('type')}
-                                        className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                    >
-                                        <option value="INCOME">Receita</option>
-                                        <option value="CREDIT_CASH">Crédito à vista</option>
-                                        <option value="DEBIT">Débito</option>
-                                        <option value="PIX">Pix</option>
-                                        <option value="CASH">Dinheiro</option>
-                                    </select>
-                                </div>
-                            )}
-
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Valor (R$)</label>
-                                <input
-                                    {...updateForm.register('amount', { valueAsNumber: true })}
-                                    type="number"
-                                    step="0.01"
-                                    className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                />
-                                {updateForm.formState.errors.amount && (
-                                    <p className="text-red-500 text-sm mt-1">{updateForm.formState.errors.amount.message}</p>
-                                )}
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Data</label>
-                                <input
-                                    {...updateForm.register('date')}
-                                    type="date"
-                                    className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                />
-                                {updateForm.formState.errors.date && (
-                                    <p className="text-red-500 text-sm mt-1">{updateForm.formState.errors.date.message}</p>
-                                )}
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Categoria</label>
-                                <select
-                                    {...updateForm.register('categoryId')}
-                                    className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                >
-                                    {categories.map((cat) => (
-                                        <option key={cat.id} value={cat.id}>
-                                            {cat.icon} {cat.name}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Descrição (opcional)</label>
-                                <input
-                                    {...updateForm.register('description')}
-                                    type="text"
-                                    className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                />
-                            </div>
-
-                            <div className="flex items-center gap-2 pt-6">
-                                <input
-                                    {...updateForm.register('isPending')}
-                                    type="checkbox"
-                                    id="isPendingEdit"
-                                    className="w-4 h-4 rounded border-gray-300"
-                                    onChange={(e) => updateForm.setValue('isPending', e.target.checked)}
-                                />
-                                <label htmlFor="isPendingEdit" className="text-sm text-gray-700">
-                                    Transação pendente
-                                </label>
-                            </div>
-
-                            {editingTransaction.type === 'CREDIT_INSTALLMENT' && (
-                                <div className="sm:col-span-2 bg-yellow-50 border border-yellow-200 rounded-lg px-4 py-3">
-                                    <p className="text-yellow-700 text-sm">
-                                        ⚠️ Parcela {editingTransaction.currentInstallment}/{editingTransaction.totalInstallments}x — tipo e dados de parcelamento são imutáveis
-                                    </p>
-                                </div>
-                            )}
-
-                            {serverError && (
-                                <div className="sm:col-span-2 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
-                                    <p className="text-red-600 text-sm">{serverError}</p>
-                                </div>
-                            )}
-
-                            <div className="sm:col-span-2 flex justify-end">
-                                <button
-                                    type="submit"
-                                    disabled={updateForm.formState.isSubmitting}
-                                    className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-6 py-2.5 rounded-lg text-sm font-medium transition"
-                                >
-                                    {updateForm.formState.isSubmitting ? 'Salvando...' : 'Salvar alterações'}
-                                </button>
-                            </div>
-
-                        </form>
-                    </div>
-                )}
-
-
-
-
-
-                {isLoading ? (
-                    <div className="flex items-center justify-center h-48">
-                        <p className="text-gray-400">Carregando...</p>
-                    </div>
-                ) : transactions.length === 0 ? (
-                    <div className="flex items-center justify-center h-48 bg-white rounded-2xl border border-gray-200">
-                        <p className="text-gray-400">Nenhuma transação encontrada</p>
-                    </div>
-                ) : (
-                    <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
-                        <table className="w-full">
-                            <thead>
-                                <tr className="border-b border-gray-100 bg-gray-50">
-                                    <th className="text-left text-xs font-medium text-gray-500 px-6 py-3">Data</th>
-                                    <th className="text-left text-xs font-medium text-gray-500 px-6 py-3">Descrição</th>
-                                    <th className="text-left text-xs font-medium text-gray-500 px-6 py-3">Categoria</th>
-                                    <th className="text-left text-xs font-medium text-gray-500 px-6 py-3">Tipo</th>
-                                    <th className="text-right text-xs font-medium text-gray-500 px-6 py-3">Valor</th>
-                                    <th className="px-6 py-3"></th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-100">
-                                {transactions.map((t) => (
-                                    <tr key={t.id} className="hover:bg-gray-50 transition">
-                                        <td className="px-6 py-4 text-sm text-gray-600 whitespace-nowrap">
-                                            {formatDate(t.date)}
-                                        </td>
-                                        <td className="px-6 py-4 text-sm text-gray-800">
-                                            {t.description ?? '—'}
-                                            {t.totalInstallments && (
-                                                <span className="ml-2 text-xs text-purple-600">
-                                                    {t.currentInstallment}/{t.totalInstallments}x
-                                                </span>
-                                            )}
-                                            {t.isPending && (
-                                                <span className="ml-2 text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full">
-                                                    Pendente
-                                                </span>
-                                            )}
-                                        </td>
-                                        <td className="px-6 py-4 text-sm text-gray-600">
-                                            {t.category.icon} {t.category.name}
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${typeColor[t.type]}`}>
-                                                {transactionTypeLabel(t.type)}
-                                            </span>
-                                        </td>
-                                        <td className={`px-6 py-4 text-sm font-semibold text-right whitespace-nowrap ${t.type === 'INCOME' ? 'text-green-600' : 'text-red-600'}`}>
-                                            {t.type === 'INCOME' ? '+' : '-'} {formatCurrency(t.amount)}
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            <button
-                                                onClick={() => handleOpenEdit(t)}
-                                                className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition"
-                                            >
-                                                <Pencil size={15} />
-                                            </button>
-                                            <button
-                                                onClick={() => handleDelete(t.id)}
-                                                className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
-                                            >
-                                                <Trash2 size={15} />
-                                            </button>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                )}
-
+        {/* ─── Formulário Nova Transação ─── */}
+        {formMode === 'transaction' && (
+          <div className="rounded-2xl p-6"
+            style={{ backgroundColor: 'var(--color-bg-card)', border: '1px solid var(--color-border)' }}>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold" style={{ color: 'var(--color-text)' }}>Nova transação</h2>
+              <button onClick={handleClose} className="transition" style={{ color: 'var(--color-text-muted)' }}>
+                <X size={20} />
+              </button>
             </div>
-        </Layout>
+
+            <form onSubmit={transactionForm.handleSubmit(onSubmitTransaction)} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+              <div>
+                <label className="block text-sm font-medium mb-1" style={{ color: 'var(--color-text)' }}>Tipo</label>
+                <select
+                  {...transactionForm.register('type')}
+                  className="w-full px-4 py-2.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  style={{ backgroundColor: 'var(--color-input-bg)', border: '1px solid var(--color-input-border)', color: 'var(--color-text)' }}
+                >
+                  <option value="">Selecione...</option>
+                  <option value="INCOME">Receita</option>
+                  <option value="CREDIT_CASH">Crédito à vista</option>
+                  <option value="DEBIT">Débito</option>
+                  <option value="PIX">Pix</option>
+                  <option value="CASH">Dinheiro</option>
+                </select>
+                {transactionForm.formState.errors.type && (
+                  <p className="text-red-500 text-sm mt-1">{transactionForm.formState.errors.type.message}</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1" style={{ color: 'var(--color-text)' }}>Valor (R$)</label>
+                <input
+                  {...transactionForm.register('amount', { valueAsNumber: true })}
+                  type="number" step="0.01" placeholder="0,00"
+                  className="w-full px-4 py-2.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  style={{ backgroundColor: 'var(--color-input-bg)', border: '1px solid var(--color-input-border)', color: 'var(--color-text)' }}
+                />
+                {transactionForm.formState.errors.amount && (
+                  <p className="text-red-500 text-sm mt-1">{transactionForm.formState.errors.amount.message}</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1" style={{ color: 'var(--color-text)' }}>Data</label>
+                <input
+                  {...transactionForm.register('date')}
+                  type="date"
+                  className="w-full px-4 py-2.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  style={{ backgroundColor: 'var(--color-input-bg)', border: '1px solid var(--color-input-border)', color: 'var(--color-text)' }}
+                />
+                {transactionForm.formState.errors.date && (
+                  <p className="text-red-500 text-sm mt-1">{transactionForm.formState.errors.date.message}</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1" style={{ color: 'var(--color-text)' }}>Categoria</label>
+                <select
+                  {...transactionForm.register('categoryId')}
+                  className="w-full px-4 py-2.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  style={{ backgroundColor: 'var(--color-input-bg)', border: '1px solid var(--color-input-border)', color: 'var(--color-text)' }}
+                >
+                  <option value="">Selecione...</option>
+                  {categories.map((cat) => (
+                    <option key={cat.id} value={cat.id}>{cat.icon} {cat.name}</option>
+                  ))}
+                </select>
+                {transactionForm.formState.errors.categoryId && (
+                  <p className="text-red-500 text-sm mt-1">{transactionForm.formState.errors.categoryId.message}</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1" style={{ color: 'var(--color-text)' }}>Descrição (opcional)</label>
+                <input
+                  {...transactionForm.register('description')}
+                  type="text" placeholder="Ex: Almoço com cliente"
+                  className="w-full px-4 py-2.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  style={{ backgroundColor: 'var(--color-input-bg)', border: '1px solid var(--color-input-border)', color: 'var(--color-text)' }}
+                />
+              </div>
+
+              <div className="flex items-center gap-2 pt-6">
+                <input
+                  {...transactionForm.register('isPending')}
+                  type="checkbox" id="isPending"
+                  className="w-4 h-4 rounded"
+                  onChange={(e) => transactionForm.setValue('isPending', e.target.checked)}
+                />
+                <label htmlFor="isPending" className="text-sm" style={{ color: 'var(--color-text)' }}>
+                  Transação pendente
+                </label>
+              </div>
+
+              {serverError && (
+                <div className="sm:col-span-2 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
+                  <p className="text-red-600 text-sm">{serverError}</p>
+                </div>
+              )}
+
+              <div className="sm:col-span-2 flex justify-end">
+                <button
+                  type="submit"
+                  disabled={transactionForm.formState.isSubmitting}
+                  className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-6 py-2.5 rounded-lg text-sm font-medium transition"
+                >
+                  {transactionForm.formState.isSubmitting ? 'Salvando...' : 'Salvar transação'}
+                </button>
+              </div>
+
+            </form>
+          </div>
+        )}
+
+        {/* ─── Formulário Parcelamento ─── */}
+        {formMode === 'installment' && (
+          <div className="rounded-2xl p-6"
+            style={{ backgroundColor: 'var(--color-bg-card)', border: '1px solid var(--color-border)' }}>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold" style={{ color: 'var(--color-text)' }}>Novo parcelamento</h2>
+              <button onClick={handleClose} className="transition" style={{ color: 'var(--color-text-muted)' }}>
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={installmentForm.handleSubmit(onSubmitInstallment)} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+              <div>
+                <label className="block text-sm font-medium mb-1" style={{ color: 'var(--color-text)' }}>Valor total (R$)</label>
+                <input
+                  {...installmentForm.register('totalAmount', { valueAsNumber: true })}
+                  type="number" step="0.01" placeholder="0,00"
+                  className="w-full px-4 py-2.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  style={{ backgroundColor: 'var(--color-input-bg)', border: '1px solid var(--color-input-border)', color: 'var(--color-text)' }}
+                />
+                {installmentForm.formState.errors.totalAmount && (
+                  <p className="text-red-500 text-sm mt-1">{installmentForm.formState.errors.totalAmount.message}</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1" style={{ color: 'var(--color-text)' }}>Número de parcelas</label>
+                <input
+                  {...installmentForm.register('totalInstallments', { valueAsNumber: true })}
+                  type="number" min="2" placeholder="Ex: 12"
+                  className="w-full px-4 py-2.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  style={{ backgroundColor: 'var(--color-input-bg)', border: '1px solid var(--color-input-border)', color: 'var(--color-text)' }}
+                />
+                {installmentForm.formState.errors.totalInstallments && (
+                  <p className="text-red-500 text-sm mt-1">{installmentForm.formState.errors.totalInstallments.message}</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1" style={{ color: 'var(--color-text)' }}>Data da primeira parcela</label>
+                <input
+                  {...installmentForm.register('firstInstallmentDate')}
+                  type="date"
+                  className="w-full px-4 py-2.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  style={{ backgroundColor: 'var(--color-input-bg)', border: '1px solid var(--color-input-border)', color: 'var(--color-text)' }}
+                />
+                {installmentForm.formState.errors.firstInstallmentDate && (
+                  <p className="text-red-500 text-sm mt-1">{installmentForm.formState.errors.firstInstallmentDate.message}</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1" style={{ color: 'var(--color-text)' }}>Categoria</label>
+                <select
+                  {...installmentForm.register('categoryId')}
+                  className="w-full px-4 py-2.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  style={{ backgroundColor: 'var(--color-input-bg)', border: '1px solid var(--color-input-border)', color: 'var(--color-text)' }}
+                >
+                  <option value="">Selecione...</option>
+                  {categories.map((cat) => (
+                    <option key={cat.id} value={cat.id}>{cat.icon} {cat.name}</option>
+                  ))}
+                </select>
+                {installmentForm.formState.errors.categoryId && (
+                  <p className="text-red-500 text-sm mt-1">{installmentForm.formState.errors.categoryId.message}</p>
+                )}
+              </div>
+
+              <div className="sm:col-span-2">
+                <label className="block text-sm font-medium mb-1" style={{ color: 'var(--color-text)' }}>Descrição (opcional)</label>
+                <input
+                  {...installmentForm.register('description')}
+                  type="text" placeholder="Ex: iPhone 16 Pro"
+                  className="w-full px-4 py-2.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  style={{ backgroundColor: 'var(--color-input-bg)', border: '1px solid var(--color-input-border)', color: 'var(--color-text)' }}
+                />
+              </div>
+
+              {serverError && (
+                <div className="sm:col-span-2 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
+                  <p className="text-red-600 text-sm">{serverError}</p>
+                </div>
+              )}
+
+              <div className="sm:col-span-2 flex justify-end">
+                <button
+                  type="submit"
+                  disabled={installmentForm.formState.isSubmitting}
+                  className="bg-purple-600 hover:bg-purple-700 disabled:bg-purple-400 text-white px-6 py-2.5 rounded-lg text-sm font-medium transition"
+                >
+                  {installmentForm.formState.isSubmitting ? 'Criando parcelas...' : 'Criar parcelamento'}
+                </button>
+              </div>
+
+            </form>
+          </div>
+        )}
+
+        {/* ─── Formulário Editar Transação ─── */}
+        {formMode === 'edit' && editingTransaction && (
+          <div className="rounded-2xl p-6"
+            style={{ backgroundColor: 'var(--color-bg-card)', border: '1px solid var(--color-border)' }}>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold" style={{ color: 'var(--color-text)' }}>Editar transação</h2>
+              <button onClick={handleClose} className="transition" style={{ color: 'var(--color-text-muted)' }}>
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={updateForm.handleSubmit(onSubmitUpdate)} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+              {editingTransaction.type !== 'CREDIT_INSTALLMENT' && (
+                <div>
+                  <label className="block text-sm font-medium mb-1" style={{ color: 'var(--color-text)' }}>Tipo</label>
+                  <select
+                    {...updateForm.register('type')}
+                    className="w-full px-4 py-2.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    style={{ backgroundColor: 'var(--color-input-bg)', border: '1px solid var(--color-input-border)', color: 'var(--color-text)' }}
+                  >
+                    <option value="INCOME">Receita</option>
+                    <option value="CREDIT_CASH">Crédito à vista</option>
+                    <option value="DEBIT">Débito</option>
+                    <option value="PIX">Pix</option>
+                    <option value="CASH">Dinheiro</option>
+                  </select>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-medium mb-1" style={{ color: 'var(--color-text)' }}>Valor (R$)</label>
+                <input
+                  {...updateForm.register('amount', { valueAsNumber: true })}
+                  type="number" step="0.01"
+                  className="w-full px-4 py-2.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  style={{ backgroundColor: 'var(--color-input-bg)', border: '1px solid var(--color-input-border)', color: 'var(--color-text)' }}
+                />
+                {updateForm.formState.errors.amount && (
+                  <p className="text-red-500 text-sm mt-1">{updateForm.formState.errors.amount.message}</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1" style={{ color: 'var(--color-text)' }}>Data</label>
+                <input
+                  {...updateForm.register('date')}
+                  type="date"
+                  className="w-full px-4 py-2.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  style={{ backgroundColor: 'var(--color-input-bg)', border: '1px solid var(--color-input-border)', color: 'var(--color-text)' }}
+                />
+                {updateForm.formState.errors.date && (
+                  <p className="text-red-500 text-sm mt-1">{updateForm.formState.errors.date.message}</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1" style={{ color: 'var(--color-text)' }}>Categoria</label>
+                <select
+                  {...updateForm.register('categoryId')}
+                  className="w-full px-4 py-2.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  style={{ backgroundColor: 'var(--color-input-bg)', border: '1px solid var(--color-input-border)', color: 'var(--color-text)' }}
+                >
+                  {categories.map((cat) => (
+                    <option key={cat.id} value={cat.id}>{cat.icon} {cat.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1" style={{ color: 'var(--color-text)' }}>Descrição (opcional)</label>
+                <input
+                  {...updateForm.register('description')}
+                  type="text"
+                  className="w-full px-4 py-2.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  style={{ backgroundColor: 'var(--color-input-bg)', border: '1px solid var(--color-input-border)', color: 'var(--color-text)' }}
+                />
+              </div>
+
+              <div className="flex items-center gap-2 pt-6">
+                <input
+                  {...updateForm.register('isPending')}
+                  type="checkbox" id="isPendingEdit"
+                  className="w-4 h-4 rounded"
+                  onChange={(e) => updateForm.setValue('isPending', e.target.checked)}
+                />
+                <label htmlFor="isPendingEdit" className="text-sm" style={{ color: 'var(--color-text)' }}>
+                  Transação pendente
+                </label>
+              </div>
+
+              {editingTransaction.type === 'CREDIT_INSTALLMENT' && (
+                <div className="sm:col-span-2 bg-yellow-50 border border-yellow-200 rounded-lg px-4 py-3">
+                  <p className="text-yellow-700 text-sm">
+                    ⚠️ Parcela {editingTransaction.currentInstallment}/{editingTransaction.totalInstallments}x — tipo e dados de parcelamento são imutáveis
+                  </p>
+                </div>
+              )}
+
+              {serverError && (
+                <div className="sm:col-span-2 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
+                  <p className="text-red-600 text-sm">{serverError}</p>
+                </div>
+              )}
+
+              <div className="sm:col-span-2 flex justify-end">
+                <button
+                  type="submit"
+                  disabled={updateForm.formState.isSubmitting}
+                  className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-6 py-2.5 rounded-lg text-sm font-medium transition"
+                >
+                  {updateForm.formState.isSubmitting ? 'Salvando...' : 'Salvar alterações'}
+                </button>
+              </div>
+
+            </form>
+          </div>
+        )}
+
+        {/* ─── Tabela ─── */}
+        {isLoading ? (
+          <div className="flex items-center justify-center h-48">
+            <p style={{ color: 'var(--color-text-muted)' }}>Carregando...</p>
+          </div>
+        ) : transactions.length === 0 ? (
+          <div className="flex items-center justify-center h-48 rounded-2xl"
+            style={{ backgroundColor: 'var(--color-bg-card)', border: '1px solid var(--color-border)' }}>
+            <p style={{ color: 'var(--color-text-muted)' }}>Nenhuma transação encontrada</p>
+          </div>
+        ) : (
+          <div className="rounded-2xl overflow-hidden"
+            style={{ backgroundColor: 'var(--color-bg-card)', border: '1px solid var(--color-border)' }}>
+            <table className="w-full">
+              <thead>
+                <tr style={{ borderBottom: '1px solid var(--color-border)', backgroundColor: 'var(--color-bg)' }}>
+                  <th className="text-left text-xs font-medium px-6 py-3" style={{ color: 'var(--color-text-muted)' }}>Data</th>
+                  <th className="text-left text-xs font-medium px-6 py-3" style={{ color: 'var(--color-text-muted)' }}>Descrição</th>
+                  <th className="text-left text-xs font-medium px-6 py-3" style={{ color: 'var(--color-text-muted)' }}>Categoria</th>
+                  <th className="text-left text-xs font-medium px-6 py-3" style={{ color: 'var(--color-text-muted)' }}>Tipo</th>
+                  <th className="text-right text-xs font-medium px-6 py-3" style={{ color: 'var(--color-text-muted)' }}>Valor</th>
+                  <th className="px-6 py-3"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {transactions.map((t) => (
+                  <tr key={t.id} className="transition"
+                    style={{ borderBottom: '1px solid var(--color-border)' }}>
+                    <td className="px-6 py-4 text-sm whitespace-nowrap" style={{ color: 'var(--color-text-muted)' }}>
+                      {formatDate(t.date)}
+                    </td>
+                    <td className="px-6 py-4 text-sm" style={{ color: 'var(--color-text)' }}>
+                      {t.description ?? '—'}
+                      {t.totalInstallments && (
+                        <span className="ml-2 text-xs text-purple-500">
+                          {t.currentInstallment}/{t.totalInstallments}x
+                        </span>
+                      )}
+                      {t.isPending && (
+                        <span className="ml-2 text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full">
+                          Pendente
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 text-sm" style={{ color: 'var(--color-text-muted)' }}>
+                      {t.category.icon} {t.category.name}
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${typeColor[t.type]}`}>
+                        {transactionTypeLabel(t.type)}
+                      </span>
+                    </td>
+                    <td className={`px-6 py-4 text-sm font-semibold text-right whitespace-nowrap ${t.type === 'INCOME' ? 'text-green-600' : 'text-red-500'}`}>
+                      {t.type === 'INCOME' ? '+' : '-'} {formatCurrency(t.amount)}
+                    </td>
+                    <td className="px-6 py-4 flex gap-1">
+                      <button
+                        onClick={() => handleOpenEdit(t)}
+                        className="p-1.5 rounded-lg transition hover:bg-blue-50"
+                        style={{ color: 'var(--color-text-muted)' }}
+                      >
+                        <Pencil size={15} />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(t.id)}
+                        className="p-1.5 rounded-lg transition hover:bg-red-50"
+                        style={{ color: 'var(--color-text-muted)' }}
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+      </div>
+    </Layout>
     )
 }

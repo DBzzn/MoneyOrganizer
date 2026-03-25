@@ -14,7 +14,7 @@ import { Plus, Pencil, Trash2, X, Check } from 'lucide-react'
 
 const categorySchema = z.object({
   name: z.string().min(1, 'O Nome é obrigatório!'),
-  icon: z.string().optional(), 
+  icon: z.string().optional(),
 })
 
 type CategoryFormData = z.infer<typeof categorySchema>
@@ -99,8 +99,8 @@ export function Categories() {
 
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Categorias</h1>
-            <p className="text-gray-500 mt-1">Gerencie suas categorias</p>
+            <h1 className="text-2xl font-bold" style={{ color: 'var(--color-text)' }}>Categorias</h1>
+            <p className="mt-1" style={{ color: 'var(--color-text-muted)' }}>Gerencie suas categorias</p>
           </div>
           <button
             onClick={handleOpenCreate}
@@ -112,14 +112,16 @@ export function Categories() {
         </div>
 
         {showForm && (
-          <div className="bg-white border border-gray-200 rounded-2xl p-6">
+          <div className="rounded-2xl p-6"
+            style={{ backgroundColor: 'var(--color-bg-card)', border: '1px solid var(--color-border)' }}>
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-gray-800">
+              <h2 className="text-lg font-semibold" style={{ color: 'var(--color-text)' }}>
                 {editing ? 'Editar categoria' : 'Nova categoria'}
               </h2>
               <button
                 onClick={handleClose}
-                className="text-gray-400 hover:text-gray-600 transition"
+                className="transition"
+                style={{ color: 'var(--color-text-muted)' }}
               >
                 <X size={20} />
               </button>
@@ -127,26 +129,36 @@ export function Categories() {
 
             <form onSubmit={handleSubmit(onSubmit)} className="flex gap-4 items-start">
               <div className="w-24">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium mb-1" style={{ color: 'var(--color-text)' }}>
                   Ícone
                 </label>
                 <input
                   {...register('icon')}
                   type="text"
                   placeholder="🍔"
-                  className="w-full px-3 py-2.5 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 text-center text-xl"
+                  className="w-full px-3 py-2.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-center text-xl"
+                  style={{
+                    backgroundColor: 'var(--color-input-bg)',
+                    border: '1px solid var(--color-input-border)',
+                    color: 'var(--color-text)'
+                  }}
                 />
               </div>
 
               <div className="flex-1">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium mb-1" style={{ color: 'var(--color-text)' }}>
                   Nome
                 </label>
                 <input
                   {...register('name')}
                   type="text"
                   placeholder="Ex: Alimentação"
-                  className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-2.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  style={{
+                    backgroundColor: 'var(--color-input-bg)',
+                    border: '1px solid var(--color-input-border)',
+                    color: 'var(--color-text)'
+                  }}
                 />
                 {errors.name && (
                   <p className="text-red-500 text-sm mt-1">{errors.name.message}</p>
@@ -173,33 +185,37 @@ export function Categories() {
 
         {isLoading ? (
           <div className="flex items-center justify-center h-48">
-            <p className="text-gray-400">Carregando...</p>
+            <p style={{ color: 'var(--color-text-muted)' }}>Carregando...</p>
           </div>
         ) : categories.length === 0 ? (
-          <div className="flex items-center justify-center h-48 bg-white rounded-2xl border border-gray-200">
-            <p className="text-gray-400">Nenhuma categoria encontrada</p>
+          <div className="flex items-center justify-center h-48 rounded-2xl"
+            style={{ backgroundColor: 'var(--color-bg-card)', border: '1px solid var(--color-border)' }}>
+            <p style={{ color: 'var(--color-text-muted)' }}>Nenhuma categoria encontrada</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
             {categories.map((category) => (
               <div
                 key={category.id}
-                className="bg-white border border-gray-200 rounded-2xl p-5 flex items-center justify-between"
+                className="rounded-2xl p-5 flex items-center justify-between"
+                style={{ backgroundColor: 'var(--color-bg-card)', border: '1px solid var(--color-border)' }}
               >
                 <div className="flex items-center gap-3">
                   <span className="text-2xl">{category.icon ?? '📁'}</span>
-                  <span className="font-medium text-gray-800">{category.name}</span>
+                  <span className="font-medium" style={{ color: 'var(--color-text)' }}>{category.name}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => handleOpenEdit(category)}
-                    className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition"
+                    className="p-2 rounded-lg transition hover:bg-blue-50"
+                    style={{ color: 'var(--color-text-muted)' }}
                   >
                     <Pencil size={16} />
                   </button>
                   <button
                     onClick={() => handleDelete(category.id)}
-                    className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
+                    className="p-2 rounded-lg transition hover:bg-red-50"
+                    style={{ color: 'var(--color-text-muted)' }}
                   >
                     <Trash2 size={16} />
                   </button>

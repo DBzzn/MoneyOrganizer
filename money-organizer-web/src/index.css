@@ -1,1 +1,31 @@
 @import "tailwindcss";
+
+
+:root {
+  --color-bg:           #f9fafb;
+  --color-bg-card:      #ffffff;
+  --color-bg-sidebar:   #1e293b;
+  --color-text:         #111827;
+  --color-text-muted:   #6b7280;
+  --color-border:       #e5e7eb;
+  --color-input-bg:     #ffffff;
+  --color-input-border: #d1d5db;
+}
+
+:root.dark {
+  --color-bg:           #0f172a;
+  --color-bg-card:      #1e293b;
+  --color-bg-sidebar:   #0f172a;
+  --color-text:         #f1f5f9;
+  --color-text-muted:   #94a3b8;
+  --color-border:       #334155;
+  --color-input-bg:     #1e293b;
+  --color-input-border: #475569;
+}
+
+/* ─── Aplica o fundo e texto globalmente ────────────────────────── */
+body {
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  transition: background-color 0.3s ease, color 0.3s ease;
+}

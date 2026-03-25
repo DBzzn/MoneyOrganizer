@@ -4,7 +4,6 @@ import {
     Route,
     Navigate,
 } from 'react-router-dom'
-import { AuthProvider } from './contexts/AuthProvider'
 import { PrivateRoute } from './components/PrivateRoute'
 import { Login } from './pages/Login'
 import { Register } from './pages/Register'
@@ -16,7 +15,6 @@ import { Reports } from './pages/Reports'
 export default function App() {
     return (
         <BrowserRouter>
-            <AuthProvider>
                 <Routes>
 
                     <Route path="/login" element={<Login />} />
@@ -48,7 +46,6 @@ export default function App() {
                     />
                     <Route path="*" element={<Navigate to="/login" replace  />} />
                 </Routes>
-            </AuthProvider>
         </BrowserRouter>
     )
 }
