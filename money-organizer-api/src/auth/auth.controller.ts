@@ -37,7 +37,7 @@ export class AuthController {
   @ApiResponse({ status: 401, description: 'Token inválido ou expirado' })
   @UseGuards(AuthGuard('jwt'))
   @Get('me')
-  getMe(@Request() req: AuthenticatedRequest) {
-    return req.user;
+  getMe(@Request() req: AuthenticatedRequest) {    
+    return this.authService.findById(req.user.id);
   }
 }

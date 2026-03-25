@@ -2,14 +2,16 @@
 
 
 :root {
-  --color-bg:           #f9fafb;
-  --color-bg-card:      #ffffff;
+  --color-bg:           #ffffff;
+  --color-bg-card:      #f5f5f5;
   --color-bg-sidebar:   #1e293b;
   --color-text:         #111827;
   --color-text-muted:   #6b7280;
-  --color-border:       #e5e7eb;
+  --color-border:       #acacac;
   --color-input-bg:     #ffffff;
   --color-input-border: #d1d5db;
+  --color-navbg-hover:  #bbd3ff;
+  --color-navtxt-on:    #155dfc;
 }
 
 :root.dark {
@@ -21,11 +23,29 @@
   --color-border:       #334155;
   --color-input-bg:     #1e293b;
   --color-input-border: #475569;
+  --color-navbg-hover:  #1e3a5f;
+  --color-navtxt-on:    #60a5fa;
 }
+
 
 /* ─── Aplica o fundo e texto globalmente ────────────────────────── */
 body {
   background-color: var(--color-bg);
   color: var(--color-text);
   transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+.nav-item {
+  color: var(--color-text-muted);
+  background-color: transparent;
+}
+
+.nav-item:hover {
+  background-color: var(--color-navbg-hover);
+  color: var(--color-navtxt-on);
+}
+
+.nav-item.active {
+  background-color: var(--color-navbg-hover);
+  color: var(--color-navtxt-on);
 }

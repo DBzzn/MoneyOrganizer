@@ -4,38 +4,38 @@ import { getMonthlyBalance, getEvolution, getTotalsByCategory } from '../api/tra
 import { formatCurrency, formatMonth } from '../utils'
 import type { MonthlyBalance, EvolutionEntry, CategoryTotal } from '../types'
 import {
-    ResponsiveContainer,
-    AreaChart,
-    Area,
-    XAxis,
-    YAxis,
-    CartesianGrid,
-    Tooltip,
-    PieChart,
-    Pie,
-    Cell,
-    Legend,
+  ResponsiveContainer,
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  PieChart,
+  Pie,
+  Cell,
+  Legend,
 } from 'recharts'
 import { TrendingUp, TrendingDown, Wallet, Receipt } from 'lucide-react'
 
 export function Dashboard() {
-    const [ isLoading, setIsLoading ] = useState(true)
-    const [categories, setCategories] = useState<CategoryTotal[]>([])
-    const [ evolution, setEvolution ] = useState<EvolutionEntry[]>([])
-    const [ balance, setBalance ] = useState<MonthlyBalance | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [categories, setCategories] = useState<CategoryTotal[]>([])
+  const [evolution, setEvolution] = useState<EvolutionEntry[]>([])
+  const [balance, setBalance] = useState<MonthlyBalance | null>(null)
 
-    useEffect(() => {
-        Promise.all([getMonthlyBalance(), getEvolution(), getTotalsByCategory()])
-            .then(([balanceRes, evolutionRes, categoriesRes]) => {
-                setBalance(balanceRes.data)
-                setEvolution(evolutionRes.data)
-                setCategories(categoriesRes.data)
-            })
-            .finally(() => setIsLoading(false))
-    }, [])
+  useEffect(() => {
+    Promise.all([getMonthlyBalance(), getEvolution(), getTotalsByCategory()])
+      .then(([balanceRes, evolutionRes, categoriesRes]) => {
+        setBalance(balanceRes.data)
+        setEvolution(evolutionRes.data)
+        setCategories(categoriesRes.data)
+      })
+      .finally(() => setIsLoading(false))
+  }, [])
 
-    if (isLoading) {
-        (
+  if (isLoading) {
+    (
       <Layout>
         <div className="flex items-center justify-center h-64">
           <p className="text-gray-400">Carregando...</p>
@@ -83,9 +83,9 @@ export function Dashboard() {
   }))
 
   const PIE_COLORS = [
-  '#3b82f6', '#22c55e', '#ef4444', '#f59e0b',
-  '#8b5cf6', '#ec4899', '#14b8a6', '#f97316',
-    ]
+    '#3b82f6', '#22c55e', '#ef4444', '#f59e0b',
+    '#8b5cf6', '#ec4899', '#14b8a6', '#f97316',
+  ]
 
   const pieData = categories
     .filter((c) => parseFloat(String(c.totalAmount)) > 0)

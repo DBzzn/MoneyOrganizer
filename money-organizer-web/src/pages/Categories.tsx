@@ -1,6 +1,7 @@
 import { Layout } from '../components/Layout'
 import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
+import { toast } from 'react-hot-toast'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import {
@@ -25,7 +26,6 @@ export function Categories() {
   const [isLoading, setIsLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [editing, setEditing] = useState<Category | null>(null)
-  const [serverError, setServerError] = useState<string | null>(null)
 
   const {
     register,
@@ -46,39 +46,37 @@ export function Categories() {
     setEditing(null)
     reset({ name: '', icon: '' })
     setShowForm(true)
-    setServerError(null)
   }
 
   const handleOpenEdit = (category: Category) => {
     setEditing(category)
     reset({ name: category.name, icon: category.icon ?? '' })
     setShowForm(true)
-    setServerError(null)
   }
 
   const handleClose = () => {
     setShowForm(false)
     setEditing(null)
     reset()
-    setServerError(null)
   }
 
   const onSubmit = async (data: CategoryFormData) => {
-    setServerError(null)
+    
     try {
       if (editing) {
         const res = await updateCategory(editing.id, data)
         setCategories((prev) =>
           prev.map((c) => (c.id === editing.id ? res.data : c))
         )
+        toast.success('Categoria atualizada com sucesso!')
       } else {
         const res = await createCategory(data)
         setCategories((prev) => [...prev, res.data])
+        toast.success('Categoria criada!')
       }
       handleClose()
     } catch (error) {
-      setServerError('Erro ao salvar a categoria! Tente novamente')
-      console.log(error)
+      toast.error('Erro ao salvar a categoria!')
     }
   }
 
@@ -87,9 +85,9 @@ export function Categories() {
     try {
       await deleteCategory(id)
       setCategories((prev) => prev.filter((c) => c.id !== id))
+      toast.success('Categoria removida com sucesso!')
     } catch (error) {
-      alert('Erro ao remover a categoria!')
-      console.log(error)
+      toast.error('Erro ao remover a categoria!')
     }
   }
 
@@ -163,11 +161,7 @@ export function Categories() {
                 {errors.name && (
                   <p className="text-red-500 text-sm mt-1">{errors.name.message}</p>
                 )}
-              </div>
-
-              {serverError && (
-                <p className="text-red-500 text-sm mt-1">{serverError}</p>
-              )}
+              </div>              
 
               <div className="pt-6">
                 <button

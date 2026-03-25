@@ -21,7 +21,7 @@
 - [Variáveis de ambiente](#variáveis-de-ambiente)
 - [Endpoints da API](#endpoints-da-api)
 - [Decisões técnicas](#decisões-técnicas)
-- [Roadmap](#roadmap)
+- [Roadmap](#Roadmap)
 
 ---
 
@@ -47,13 +47,14 @@ O sistema permite que cada usuário registre suas transações financeiras, orga
 - **Documentação automática** — Swagger/OpenAPI disponível em `/api`
 
 ### ⏳ Em desenvolvimento
-- Toast notifications
 - Modal de confirmação de exclusão
-- Filtro por mês na tabela de transações
-- Responsividade mobile
-- Saldo acumulado no período
+- Filtro por mês nas transações
 - Paginação
-
+- Hotfixes UI da pagina de transações
+- Recorrência automática de transações
+- Dividas a receber
+- Saldo acumulado no período
+[Continua no roadmap](#roadmap)
 ---
 
 ## Stack tecnológica
@@ -245,18 +246,21 @@ V4 usa plugin do Vite sem `tailwind.config.js` e importação direta via `@impor
 - [x] Dashboard com gráficos
 - [x] Relatórios e projeção
 - [x] Tema escuro
-- [ ] Saudação dinâmica na Sidebar
-- [ ] Toast notifications
+- [x] Saudação dinâmica na Sidebar
+- [x] Toast notifications
+- [x] Animação Sidebar
 - [ ] Modal de confirmação de exclusão
 - [ ] Filtro por mês nas transações
+- [ ] Paginação
+- [ ] Hotfixes UI da pagina de transações
+- [ ] Recorrência automática de transações
+- [ ] Dividas a receber
+- [ ] Saldo acumulado no período
 - [ ] Limite de campos
 - [ ] Responsividade mobile
-- [ ] Saldo acumulado no período
-- [ ] Paginação
 - [ ] Deploy (Railway + Vercel)
 - [ ] Metas financeiras
 - [ ] Exportar relatório em PDF
-- [ ] Recorrência automática de transações
 
 ---
 

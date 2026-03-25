@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
+import { toast } from 'react-hot-toast'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Layout } from '../components/Layout'
 import {
@@ -37,7 +38,6 @@ export function Transactions() {
     const [categories, setCategories] = useState<Category[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [formMode, setFormMode] = useState<FormMode>(null)
-    const [serverError, setServerError] = useState<string | null>(null)
     const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null)
 
 
@@ -90,7 +90,6 @@ export function Transactions() {
 
     const handleClose = () => {
         setFormMode(null)
-        setServerError(null)
         setEditingTransaction(null)
         transactionForm.reset()
         installmentForm.reset()
@@ -100,11 +99,10 @@ export function Transactions() {
     const handleOpenEdit = (tx: Transaction) => {
         setEditingTransaction(tx)        
         setFormMode('edit')
-        setServerError(null)
     }
 
     const onSubmitTransaction = async (data: TransactionFormData) => {
-        setServerError(null)
+        
         try {
             const payload = {
                 ...data,
@@ -113,37 +111,36 @@ export function Transactions() {
             const res = await createTransaction(payload)
             setTransactions((prev) => [res.data, ...prev])
             handleClose()
-        } catch (error) {
-            setServerError('Erro ao criar a transação! Verifique os dados.')
-            console.log(error)
+            toast.success('Transação criada com sucesso!')
+        } catch {
+            toast.error('Erro ao criar a transação! Verifique os dados.')
+            
         }
     }
 
-    const onSubmitInstallment = async (data: InstallmentFormData) => {
-        setServerError(null)
+    const onSubmitInstallment = async (data: InstallmentFormData) => {        
         try {
             await createInstallment(data)
             const res = await getTransactions()
             setTransactions(res.data)
             handleClose()
-        } catch (error) {
-            setServerError('Erro ao criar o parcelamento! Verifique os dados.')
-            console.log(error)
+            toast.success('Parcelamento criado com sucesso!')
+        } catch {
+            toast.error('Erro ao criar o parcelamento!')
         }
     }
 
     const onSubmitUpdate = async (data: UpdateTransactionFormData) => {
         if (!editingTransaction) return
-        setServerError(null)
         try {
             const res = await updateTransaction(editingTransaction.id, data)
             setTransactions((prev) =>
                 prev.map((t) => (t.id === editingTransaction.id ? res.data : t)),
             )
             handleClose()
-        } catch (error) {
-            setServerError('Erro ao atualizar a transação! Por favor, verifique os dados.')
-            console.log(error)
+            toast.success('Transação atualizada com sucesso!')
+        } catch {
+            toast.error('Erro ao atualizar a transação! Por favor, verifique os dados.')
         }
     }
 
@@ -152,9 +149,9 @@ export function Transactions() {
         try {
             await deleteTransaction(id)
             setTransactions((prev) => prev.filter((t) => t.id !== id))
+            toast.success('Transação removida com sucesso!')
         } catch (error) {
-            alert('Erro ao remover a transação!')
-            console.log(error)
+            toast.error('Erro ao remover a transação!')
         }
     }
 
@@ -178,14 +175,14 @@ export function Transactions() {
           </div>
           <div className="flex gap-2">
             <button
-              onClick={() => { setFormMode('installment'); setServerError(null) }}
+              onClick={() => setFormMode('installment')}
               className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2.5 rounded-lg text-sm font-medium transition"
             >
               <CreditCard size={16} />
               Parcelar
             </button>
             <button
-              onClick={() => { setFormMode('transaction'); setServerError(null) }}
+              onClick={() => setFormMode('transaction')}
               className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-lg text-sm font-medium transition"
             >
               <Plus size={16} />
@@ -193,6 +190,7 @@ export function Transactions() {
             </button>
           </div>
         </div>
+
 
         {/* ─── Formulário Nova Transação ─── */}
         {formMode === 'transaction' && (
@@ -289,13 +287,7 @@ export function Transactions() {
                 <label htmlFor="isPending" className="text-sm" style={{ color: 'var(--color-text)' }}>
                   Transação pendente
                 </label>
-              </div>
-
-              {serverError && (
-                <div className="sm:col-span-2 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
-                  <p className="text-red-600 text-sm">{serverError}</p>
-                </div>
-              )}
+              </div>              
 
               <div className="sm:col-span-2 flex justify-end">
                 <button
@@ -390,12 +382,7 @@ export function Transactions() {
                 />
               </div>
 
-              {serverError && (
-                <div className="sm:col-span-2 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
-                  <p className="text-red-600 text-sm">{serverError}</p>
-                </div>
-              )}
-
+              
               <div className="sm:col-span-2 flex justify-end">
                 <button
                   type="submit"
@@ -509,12 +496,7 @@ export function Transactions() {
                 </div>
               )}
 
-              {serverError && (
-                <div className="sm:col-span-2 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
-                  <p className="text-red-600 text-sm">{serverError}</p>
-                </div>
-              )}
-
+              
               <div className="sm:col-span-2 flex justify-end">
                 <button
                   type="submit"

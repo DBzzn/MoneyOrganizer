@@ -23,5 +23,5 @@ export const register = (data: RegisterPayload) =>
     api.post<User>('/users', data)
 
 export const getMe = () =>
-    api.get<{ id: string; email: string }>('/auth/me')
+    api.get<{ id: string, email: string }>('/auth/me')
 

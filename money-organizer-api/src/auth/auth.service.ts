@@ -33,4 +33,16 @@ export class AuthService {
       access_token: this.jwt.sign(payload),
     };
   }
+
+  async findById(id: string) {
+    const user = this.prisma.user.findUnique({
+      where: { id },
+      select: {
+        name: true,
+        email: true,
+        id: true,
+      }
+    })
+    return user;
+  }
 }
