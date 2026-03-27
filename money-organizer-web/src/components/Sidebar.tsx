@@ -25,7 +25,7 @@ const navItems = [
   { to: '/reports', icon: NotebookPen, Label: 'Relatórios' },
 ]
 function getGreeting(name: string): string {
-  console.log(name)
+  
   const now = new Date()
   const hour = now.getHours()
   const day = now.getDay()
@@ -49,22 +49,25 @@ function getGreeting(name: string): string {
 
 export function Sidebar({ isOpen, onToggle }: SidebarProps) {
   const { isDark, toggleTheme } = useTheme()
-  const [ greeting, setGreeting ] = useState('')
+  const [greeting, setGreeting] = useState('')
   const { signOut, user } = useAuth()
-  const [ hoveringTheme, setHoveringTheme ] = useState(false)
+  const [hoveringTheme, setHoveringTheme] = useState(false)
   const navigate = useNavigate()
 
   useEffect(() => {
     if (user && !greeting) {
       setGreeting(getGreeting(user.name))
+      localStorage.setItem('username', user.name)
     } else {
-      setGreeting(getGreeting("CAMPEÃO"))
+      const usr = String(localStorage.getItem('username'))        
+      setGreeting(getGreeting(usr))
     }
   }, [user])
   const handleSignOut = () => {
     signOut()
     navigate('/login')
   }
+  
 
   return (
     <>
@@ -78,8 +81,8 @@ export function Sidebar({ isOpen, onToggle }: SidebarProps) {
             color: 'var(--color-text)'
           }}
         >
-          <Menu size={20} />        
-        </button>        
+          <Menu size={20} />
+        </button>
       )}
 
       <aside
@@ -89,7 +92,7 @@ export function Sidebar({ isOpen, onToggle }: SidebarProps) {
           borderRight: '1px solid var(--color-border)',
           transform: isOpen ? 'translateX(0)' : 'translateX(-100%)',
         }}
-      >        
+      >
         <div className="p-6 flex items-center justify-between"
           style={{ borderBottom: '1px solid var(--color-border)' }}>
           <div>
@@ -97,22 +100,22 @@ export function Sidebar({ isOpen, onToggle }: SidebarProps) {
               onClick={onToggle}
               className="text-xl font-bold text-blue-600 hover:opacity-80 transition cursor-pointer"
             >
-              💰 MoneyOrganizer
-            </button>
-            {user && (
+              💰 MoneyOrganizer              
+            </button>            
+            {(
               <p className="text-sm mt-1" style={{ color: 'var(--color-text-muted)' }}>
                 {greeting}
               </p>
             )}
           </div>
         </div>
-            
-        <nav className="flex-1 p-4 space-y-1" > 
+
+        <nav className="flex-1 p-4 space-y-1" >
           {navItems.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
-              className={`nav-item flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition`}              
+              className={`nav-item flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition`}
             >
               <item.icon size={18} />
               {item.Label}
@@ -143,8 +146,7 @@ export function Sidebar({ isOpen, onToggle }: SidebarProps) {
         <div className="p-4" style={{ borderTop: '1px solid var(--color-border)' }}>
           <button
             onClick={handleSignOut}
-            className="flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition w-full hover:bg-red-50 hover:text-red-600"
-            style={{ color: 'var(--color-text-muted)' }}
+            className="btn-signout flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition w-full"
           >
             <LogOut size={18} />
             Sair

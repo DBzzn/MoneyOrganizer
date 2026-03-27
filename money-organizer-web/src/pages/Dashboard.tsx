@@ -45,35 +45,35 @@ export function Dashboard() {
   }
 
   const cards = [
-    {
-      label: 'Receitas do mês',
-      value: formatCurrency(balance?.income ?? 0),
-      icon: TrendingUp,
-      color: 'text-green-600',
-      bg: 'bg-green-50',
-    },
-    {
-      label: 'Despesas do mês',
-      value: formatCurrency(balance?.expenses ?? 0),
-      icon: TrendingDown,
-      color: 'text-red-600',
-      bg: 'bg-red-50',
-    },
-    {
-      label: 'Saldo do mês',
-      value: formatCurrency(balance?.balance ?? 0),
-      icon: Wallet,
-      color: balance?.balance ?? 0 >= 0 ? 'text-blue-600' : 'text-red-600',
-      bg: balance?.balance ?? 0 >= 0 ? 'bg-blue-50' : 'bg-red-50',
-    },
-    {
-      label: 'Transações',
-      value: balance?.transactionCount.total ?? 0,
-      icon: Receipt,
-      color: 'text-purple-600',
-      bg: 'bg-purple-50',
-    },
-  ]
+  {
+    label: 'Receitas do mês',
+    value: formatCurrency(balance?.income ?? 0),
+    icon: TrendingUp,
+    color: 'var(--color-income)',
+    bg: 'var(--color-income-bg)',
+  },
+  {
+    label: 'Despesas do mês',
+    value: formatCurrency(balance?.expenses ?? 0),
+    icon: TrendingDown,
+    color: 'var(--color-expense)',
+    bg: 'var(--color-expense-bg)',
+  },
+  {
+    label: 'Saldo do mês',
+    value: formatCurrency(balance?.balance ?? 0),
+    icon: Wallet,
+    color: (balance?.balance ?? 0) >= 0 ? 'var(--color-balance)' : 'var(--color-expense)',
+    bg: (balance?.balance ?? 0) >= 0 ? 'var(--color-balance-bg)' : 'var(--color-expense-bg)',
+  },
+  {
+    label: 'Transações',
+    value: balance?.transactionCount.total ?? 0,
+    icon: Receipt,
+    color: 'var(--color-count)',
+    bg: 'var(--color-count-bg)',
+  },
+]
 
   const chartData = evolution.map((e) => ({
     month: formatMonth(e.month),
@@ -111,12 +111,12 @@ export function Dashboard() {
               className="rounded-2xl p-6 flex items-center gap-4"
               style={{ backgroundColor: 'var(--color-bg-card)', border: '1px solid var(--color-border)' }}
             >
-              <div className={`${card.bg} p-3 rounded-xl`}>
+              <div className="p-3 rounded-xl" style={{ backgroundColor: card.bg }}>
                 <card.icon size={22} className={card.color} />
               </div>
               <div>
                 <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>{card.label}</p>
-                <p className={`text-xl font-bold ${card.color}`}>{card.value}</p>
+                <p className="text-xl font-bold" style={{ color: card.color }}>{card.value}</p>
               </div>
             </div>
           ))}

@@ -1,39 +1,64 @@
 @import "tailwindcss";
 
-
 :root {
-  --color-bg:           #ffffff;
-  --color-bg-card:      #f5f5f5;
-  --color-bg-sidebar:   #1e293b;
-  --color-text:         #111827;
-  --color-text-muted:   #6b7280;
-  --color-border:       #acacac;
-  --color-input-bg:     #ffffff;
-  --color-input-border: #d1d5db;
-  --color-navbg-hover:  #bbd3ff;
-  --color-navtxt-on:    #155dfc;
+  --color-bg:           transparent;
+  --color-bg-card:      rgba(0, 0, 0, 0.20);
+  --color-bg-modal:     rgba(77, 77, 77, 0.77);
+  --color-bg-sidebar:   rgba(0, 0, 0, 0.25);
+  --color-text:         #ffffff;
+  --color-text-muted:   #e2e8f0;
+  --color-border:       rgba(0, 0, 0, 0.25);
+  --color-input-bg:     rgba(0, 0, 0, 0.20);
+  --color-input-border: rgba(0, 0, 0, 0.30);
+  --color-navbg-hover:  rgba(0, 0, 0, 0.20);
+  --color-navtxt-on:    #60a5fa;
+  --color-income:       #4ade80;
+  --color-income-bg:    rgba(74, 222, 128, 0.15);
+  --color-expense:      #f87171;
+  --color-expense-bg:   rgba(248, 113, 113, 0.15);
+  --color-balance:      #60a5fa;
+  --color-balance-bg:   rgba(96, 165, 250, 0.15);
+  --color-count:        #c084fc;
+  --color-count-bg:     rgba(192, 132, 252, 0.15);
 }
 
 :root.dark {
-  --color-bg:           #0f172a;
-  --color-bg-card:      #1e293b;
-  --color-bg-sidebar:   #0f172a;
-  --color-text:         #f1f5f9;
-  --color-text-muted:   #94a3b8;
-  --color-border:       #334155;
-  --color-input-bg:     #1e293b;
-  --color-input-border: #475569;
-  --color-navbg-hover:  #1e3a5f;
+  --color-bg:           transparent;
+  --color-bg-card:      rgba(0, 0, 0, 0.35);
+  --color-bg-modal:     rgba(0, 0, 0, 0.85);
+  --color-bg-sidebar:   rgba(0, 0, 0, 0.45);
+  --color-text:         #ffffff;
+  --color-text-muted:   #e2e8f0;
+  --color-border:       rgba(0, 0, 0, 0.40);
+  --color-input-bg:     rgba(0, 0, 0, 0.35);
+  --color-input-border: rgba(0, 0, 0, 0.50);
+  --color-navbg-hover:  rgba(0, 0, 0, 0.35);
   --color-navtxt-on:    #60a5fa;
+  --color-income:       #4ade80;
+  --color-income-bg:    rgba(74, 222, 128, 0.15);
+  --color-expense:      #f87171;
+  --color-expense-bg:   rgba(248, 113, 113, 0.15);
+  --color-balance:      #60a5fa;
+  --color-balance-bg:   rgba(96, 165, 250, 0.15);
+  --color-count:        #c084fc;
+  --color-count-bg:     rgba(192, 132, 252, 0.15);
+}
+
+:root.dark body {
+  background: linear-gradient(135deg, #1a1c22 0%, #0f1117 35%, #0d0f14 65%, #161820 100%);
+  background-attachment: fixed;
 }
 
 
-/* ─── Aplica o fundo e texto globalmente ────────────────────────── */
+
 body {
-  background-color: var(--color-bg);
+  background: linear-gradient(135deg, #71737a 0%, #5a5c61 35%, #515356 65%, #68696e 100%);
+  background-attachment: fixed;
   color: var(--color-text);
-  transition: background-color 0.3s ease, color 0.3s ease;
+  transition: color 0.3s ease;
 }
+
+
 
 .nav-item {
   color: var(--color-text-muted);
@@ -48,4 +73,14 @@ body {
 .nav-item.active {
   background-color: var(--color-navbg-hover);
   color: var(--color-navtxt-on);
+}
+
+.btn-signout {
+  color: var(--color-text-muted);
+  background-color: transparent;
+}
+
+.btn-signout:hover {
+  background-color: rgba(248, 113, 113, 0.15);
+  color: #f87171;
 }

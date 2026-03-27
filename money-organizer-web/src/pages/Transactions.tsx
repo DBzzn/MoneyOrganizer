@@ -4,168 +4,186 @@ import { toast } from 'react-hot-toast'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Layout } from '../components/Layout'
 import {
-    getTransactions,
-    updateTransaction,
-    deleteTransaction,
-    createTransaction,
-    createInstallment,
+  getTransactions,
+  updateTransaction,
+  deleteTransaction,
+  createTransaction,
+  createInstallment,
 } from '../api/transactions'
 import { getCategories } from '../api/categories'
 import type { Transaction, Category } from '../types'
 import {
-    transactionSchema,
-    installmentSchema,
-    type TransactionFormData,
-    type InstallmentFormData,
-    type UpdateTransactionFormData,
-    updateTransactionSchema,
+  transactionSchema,
+  installmentSchema,
+  type TransactionFormData,
+  type InstallmentFormData,
+  type UpdateTransactionFormData,
+  updateTransactionSchema,
 } from '../schemas'
 import { formatCurrency, formatDate, transactionTypeLabel } from '../utils'
 import { Plus, Trash2, X, CreditCard, Pencil } from 'lucide-react'
+import ConfirmModal from '../components/ConfirmModal'
 
 type FormMode = 'transaction' | 'installment' | 'edit' | null
 
 function toInputDate(isoString: string): string {
-    const isoD = new Date(isoString)
-    const y = isoD.getFullYear()
-    const m = String(isoD.getMonth() + 1).padStart(2, '0')
-    const d = String(isoD.getDate()).padStart(2,'0')
-    return `${y}-${m}-${d}`
+  const isoD = new Date(isoString)
+  const y = isoD.getFullYear()
+  const m = String(isoD.getMonth() + 1).padStart(2, '0')
+  const d = String(isoD.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
 }
 
 export function Transactions() {
-    const [transactions, setTransactions] = useState<Transaction[]>([])
-    const [categories, setCategories] = useState<Category[]>([])
-    const [isLoading, setIsLoading] = useState(true)
-    const [formMode, setFormMode] = useState<FormMode>(null)
-    const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null)
+  const [transactions, setTransactions] = useState<Transaction[]>([])
+  const [categories, setCategories] = useState<Category[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [formMode, setFormMode] = useState<FormMode>(null)
+  const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null)
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean
+    message: string
+    onConfirm: () => void
+  }>({
+    isOpen: false,
+    message: '',
+    onConfirm: () => {},
+  })
 
 
-    const transactionForm = useForm<TransactionFormData>({
-        resolver: zodResolver(transactionSchema),
-        defaultValues: {
-            isPending: false,
-            amount: 0.01
+  const transactionForm = useForm<TransactionFormData>({
+    resolver: zodResolver(transactionSchema),
+    defaultValues: {
+      isPending: false,
+      amount: 0.01
+    }
+  })
+
+  const installmentForm = useForm<InstallmentFormData>({
+    resolver: zodResolver(installmentSchema),
+    defaultValues: {
+      isPending: true,
+      totalAmount: 0.01,
+      totalInstallments: 2
+    } //naturalmente um ou mais parcelamentos estão pendentes!
+  })
+
+  const updateForm = useForm<UpdateTransactionFormData>({
+    resolver: zodResolver(updateTransactionSchema),
+    defaultValues: { amount: 0.01 }
+
+  })
+
+  useEffect(() => {
+    if (!editingTransaction) return
+    console.log('data bruta da API:', editingTransaction.date)
+    console.log('data convertida:', toInputDate(editingTransaction.date))
+    updateForm.reset({
+      amount: editingTransaction.amount,
+      date: toInputDate(editingTransaction.date),
+      categoryId: editingTransaction.categoryId,
+      isPending: editingTransaction.isPending,
+      description: editingTransaction.description ?? '',
+      type: editingTransaction.type,
+    })
+  }, [editingTransaction])
+
+  useEffect(() => {
+    Promise.all([getTransactions(), getCategories()])
+      .then(([transRes, catRes]) => {
+        setTransactions(transRes.data),
+          setCategories(catRes.data)
+      })
+      .finally(() => setIsLoading(false))
+
+  }, [])
+
+  const handleClose = () => {
+    setFormMode(null)
+    setEditingTransaction(null)
+    transactionForm.reset()
+    installmentForm.reset()
+    updateForm.reset()
+  }
+
+  const handleOpenEdit = (tx: Transaction) => {
+    setEditingTransaction(tx)
+    setFormMode('edit')
+  }
+
+  const onSubmitTransaction = async (data: TransactionFormData) => {
+
+    try {
+      const payload = {
+        ...data,
+        isPending: data.isPending ?? false
+      }
+      const res = await createTransaction(payload)
+      setTransactions((prev) => [res.data, ...prev])
+      handleClose()
+      toast.success('Transação criada com sucesso!')
+    } catch {
+      toast.error('Erro ao criar a transação! Verifique os dados.')
+
+    }
+  }
+
+  const onSubmitInstallment = async (data: InstallmentFormData) => {
+    try {
+      await createInstallment(data)
+      const res = await getTransactions()
+      setTransactions(res.data)
+      handleClose()
+      toast.success('Parcelamento criado com sucesso!')
+    } catch {
+      toast.error('Erro ao criar o parcelamento!')
+    }
+  }
+
+  const onSubmitUpdate = async (data: UpdateTransactionFormData) => {
+    if (!editingTransaction) return
+    try {
+      const res = await updateTransaction(editingTransaction.id, data)
+      setTransactions((prev) =>
+        prev.map((t) => (t.id === editingTransaction.id ? res.data : t)),
+      )
+      handleClose()
+      toast.success('Transação atualizada com sucesso!')
+    } catch {
+      toast.error('Erro ao atualizar a transação! Por favor, verifique os dados.')
+    }
+  }
+
+  const handleDelete = (id: string) => {
+    setConfirmModal({
+      isOpen: true,
+      message: 'Você tem certeza que deseja remover essa transação?',
+      onConfirm: async () => {
+        try {
+          await deleteTransaction(id)
+          setTransactions((prev) => prev.filter((t) => t.id !== id))
+          setConfirmModal((prev) => ({...prev, isOpen: false}))
+          toast.success('Transação removida com sucesso!')
+        } catch {
+          toast.error('Erro ao remover a transação!')
+        }
         }
     })
 
-    const installmentForm = useForm<InstallmentFormData>({
-        resolver: zodResolver(installmentSchema),
-        defaultValues: {
-            isPending: true,
-            totalAmount: 0.01,
-            totalInstallments: 2
-        } //naturalmente um ou mais parcelamentos estão pendentes!
-    })
+    
+  }
 
-    const updateForm = useForm<UpdateTransactionFormData>({
-        resolver: zodResolver(updateTransactionSchema),
-        defaultValues: { amount: 0.01 }
+  const typeColor: Record<string, string> = {
+    INCOME: 'bg-green-100 text-green-700',
+    CREDIT_CASH: 'bg-blue-100 text-blue-700',
+    CREDIT_INSTALLMENT: 'bg-purple-100 text-purple-700',
+    DEBIT: 'bg-orange-100 text-orange-700',
+    PIX: 'bg-teal-100 text-teal-700',
+    CASH: 'bg-gray-100 text-gray-700',
+  }
 
-    })
-
-    useEffect(() => {
-        if (!editingTransaction) return
-        console.log('data bruta da API:', editingTransaction.date)
-        console.log('data convertida:', toInputDate(editingTransaction.date))
-        updateForm.reset({
-            amount: editingTransaction.amount,
-            date: toInputDate(editingTransaction.date),
-            categoryId: editingTransaction.categoryId,
-            isPending: editingTransaction.isPending,
-            description: editingTransaction.description ?? '',
-            type: editingTransaction.type,
-        })
-    }, [editingTransaction])
-
-    useEffect(() => {
-        Promise.all([getTransactions(), getCategories()])
-            .then(([transRes, catRes]) => {
-                setTransactions(transRes.data),
-                    setCategories(catRes.data)
-            })
-            .finally(() => setIsLoading(false))
-
-    }, [])
-
-    const handleClose = () => {
-        setFormMode(null)
-        setEditingTransaction(null)
-        transactionForm.reset()
-        installmentForm.reset()
-        updateForm.reset()
-    }
-
-    const handleOpenEdit = (tx: Transaction) => {
-        setEditingTransaction(tx)        
-        setFormMode('edit')
-    }
-
-    const onSubmitTransaction = async (data: TransactionFormData) => {
-        
-        try {
-            const payload = {
-                ...data,
-                isPending: data.isPending ?? false
-            }
-            const res = await createTransaction(payload)
-            setTransactions((prev) => [res.data, ...prev])
-            handleClose()
-            toast.success('Transação criada com sucesso!')
-        } catch {
-            toast.error('Erro ao criar a transação! Verifique os dados.')
-            
-        }
-    }
-
-    const onSubmitInstallment = async (data: InstallmentFormData) => {        
-        try {
-            await createInstallment(data)
-            const res = await getTransactions()
-            setTransactions(res.data)
-            handleClose()
-            toast.success('Parcelamento criado com sucesso!')
-        } catch {
-            toast.error('Erro ao criar o parcelamento!')
-        }
-    }
-
-    const onSubmitUpdate = async (data: UpdateTransactionFormData) => {
-        if (!editingTransaction) return
-        try {
-            const res = await updateTransaction(editingTransaction.id, data)
-            setTransactions((prev) =>
-                prev.map((t) => (t.id === editingTransaction.id ? res.data : t)),
-            )
-            handleClose()
-            toast.success('Transação atualizada com sucesso!')
-        } catch {
-            toast.error('Erro ao atualizar a transação! Por favor, verifique os dados.')
-        }
-    }
-
-    const handleDelete = async (id: string) => {
-        if (!confirm('Você tem certeza que deseja remover essa transação?')) return
-        try {
-            await deleteTransaction(id)
-            setTransactions((prev) => prev.filter((t) => t.id !== id))
-            toast.success('Transação removida com sucesso!')
-        } catch (error) {
-            toast.error('Erro ao remover a transação!')
-        }
-    }
-
-    const typeColor: Record<string, string> = {
-        INCOME: 'bg-green-100 text-green-700',
-        CREDIT_CASH: 'bg-blue-100 text-blue-700',
-        CREDIT_INSTALLMENT: 'bg-purple-100 text-purple-700',
-        DEBIT: 'bg-orange-100 text-orange-700',
-        PIX: 'bg-teal-100 text-teal-700',
-        CASH: 'bg-gray-100 text-gray-700',
-    }
-
-    return (
-        <Layout>
+  return (
+    <Layout>
       <div className="space-y-6">
 
         <div className="flex items-center justify-between">
@@ -287,7 +305,7 @@ export function Transactions() {
                 <label htmlFor="isPending" className="text-sm" style={{ color: 'var(--color-text)' }}>
                   Transação pendente
                 </label>
-              </div>              
+              </div>
 
               <div className="sm:col-span-2 flex justify-end">
                 <button
@@ -382,7 +400,7 @@ export function Transactions() {
                 />
               </div>
 
-              
+
               <div className="sm:col-span-2 flex justify-end">
                 <button
                   type="submit"
@@ -496,7 +514,7 @@ export function Transactions() {
                 </div>
               )}
 
-              
+
               <div className="sm:col-span-2 flex justify-end">
                 <button
                   type="submit"
@@ -590,6 +608,15 @@ export function Transactions() {
         )}
 
       </div>
+      <ConfirmModal 
+        isOpen={confirmModal.isOpen}
+        message={confirmModal.message}
+        onConfirm={confirmModal.onConfirm}
+        onCancel={() => setConfirmModal((prev) => ({ ...prev, isOpen:false }))}
+      
+      />
+
+
     </Layout>
-    )
+  )
 }

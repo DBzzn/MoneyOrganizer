@@ -18,7 +18,7 @@ const DEFAULT_CATEGORIES = [
 export class UsersService {
   constructor(private prisma: PrismaService) {}
   async create(dto: CreateUserDto) {
-    const hashedPassword = await bcrypt.hash(dto.password, 7);
+    const hashedPassword = await bcrypt.hash(dto.password, 10);
     try {
       const user = await this.prisma.user.create({
         data: {
