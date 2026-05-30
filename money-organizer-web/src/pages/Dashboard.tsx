@@ -108,7 +108,7 @@ export function Dashboard() {
           {cards.map((card) => (
             <div
               key={card.label}
-              className="rounded-2xl p-6 flex items-center gap-4"
+              className="glass rounded-2xl p-6 flex items-center gap-4"
               style={{ backgroundColor: 'var(--color-bg-card)', border: '1px solid var(--color-border)' }}
             >
               <div className="p-3 rounded-xl" style={{ backgroundColor: card.bg }}>
@@ -122,7 +122,7 @@ export function Dashboard() {
           ))}
         </div>
 
-        <div className="rounded-2xl p-6"
+        <div className="glass rounded-2xl p-6"
           style={{ backgroundColor: 'var(--color-bg-card)', border: '1px solid var(--color-border)' }}>
           <h2 className="text-lg font-semibold mb-6" style={{ color: 'var(--color-text)' }}>
             Evolução dos últimos 6 meses
@@ -180,7 +180,7 @@ export function Dashboard() {
           )}
         </div>
 
-        <div className="rounded-2xl p-6"
+        <div className="glass rounded-2xl p-6"
           style={{ backgroundColor: 'var(--color-bg-card)', border: '1px solid var(--color-border)' }}>
           <h2 className="text-lg font-semibold mb-6" style={{ color: 'var(--color-text)' }}>
             Gastos por categoria

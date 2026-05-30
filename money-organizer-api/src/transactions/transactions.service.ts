@@ -253,6 +253,12 @@ export class TransactionsService {
                 createdAt: true,
             },
         });
+
+        if (!transaction) {
+            throw new NotFoundException('Transação não encontrada!');
+        }
+
+        return transaction;    
     }
 
     async update(
@@ -340,6 +346,28 @@ export class TransactionsService {
             throw error;
         }
 
+    }
+
+    async removeMany(userId: string, ids: string[]) {
+        const found = await this.prisma.transaction.findMany({
+            where: {
+                id: { in: ids },
+                userId,
+            },
+            select: { id: true }
+        });
+
+        if (found.length !== ids.length) {
+            throw new NotFoundException(
+                'Uma ou mais transações não foram encontradas ou não pertencem ao usuário.'
+            )
+        }
+
+        await this.prisma.$transaction(
+            ids.map((id) => this.prisma.transaction.delete({ where: { id } }))
+        );
+
+        return { message: `${ids.length} transação(ões) deletada(s) com sucesso.` };
     }
 
     async createInstallment(userId: string, dto: CreateInstallmentsDto) {

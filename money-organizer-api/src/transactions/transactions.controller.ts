@@ -13,6 +13,7 @@
 import { AuthGuard } from '@nestjs/passport';
 import { TransactionsService } from './transactions.service';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
+import { BulkDeleteTransactionsDto } from './dto/bulk-delete-transactions.dto';
 import { CreateInstallmentsDto } from './dto/create-installments.dto';
 import { UpdateTransactionDto } from './dto/update-transaction.dto';
 import { QueryTransactionsDto } from './dto/query-transactions.dto';
@@ -114,6 +115,19 @@ export class TransactionsController {
     ) {
         return this.transactionsService.getProjection(req.user.id, filters);
     }
+
+    @ApiOperation({ summary: 'Remover múltiplas transações (bulk delete)' })
+    @ApiResponse({ status: 200, description: 'Transações removidas com sucesso' })
+    @ApiResponse({ status: 404, description: 'Uma ou mais transações não encontradas' })
+    @Delete('bulk')
+    removeMany(
+        @Request() req: AuthenticatedRequest,
+        @Body() dto: BulkDeleteTransactionsDto,
+    ) {
+        return this.transactionsService.removeMany(req.user.id, dto.ids);    }
+
+
+
 
     //Tudo que não for pra ser ID tem que vir antes daqui!
     @ApiOperation({ summary: 'Buscar transação específica por ID' })

@@ -63,6 +63,9 @@ export const updateTransaction = (id: string, data: Partial<TransactionPayload>)
 export const deleteTransaction = (id: string) =>
     api.delete<Transaction>(`/transactions/${id}`)
 
+export const bulkDeleteTransactions = (ids: string[]) =>
+    api.delete('/transactions/bulk', { data: { ids } })
+
 export const createInstallment = (data: InstallmentPayload) =>
     api.post<InstallmentResponse>('/transactions/installments', data)
 

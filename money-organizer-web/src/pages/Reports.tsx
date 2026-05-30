@@ -82,7 +82,7 @@ export function Reports() {
                 </div>
 
                 {/* ─── Balanço Mensal ─── */}
-                <div className="rounded-2xl p-6 space-y-4"
+                <div className="glass rounded-2xl p-6 space-y-4"
                     style={{ backgroundColor: 'var(--color-bg-card)', border: '1px solid var(--color-border)' }}>
                     <div className="flex items-center justify-between flex-wrap gap-3">
                         <h2 className="text-lg font-semibold" style={{ color: 'var(--color-text)' }}>Balanço Mensal</h2>
@@ -126,7 +126,7 @@ export function Reports() {
                 </div>
 
                 {/* ─── Evolução ─── */}
-                <div className="rounded-2xl p-6 space-y-4"
+                <div className="glass rounded-2xl p-6 space-y-4"
                     style={{ backgroundColor: 'var(--color-bg-card)', border: '1px solid var(--color-border)' }}>
                     <div className="flex items-center justify-between flex-wrap gap-3">
                         <h2 className="text-lg font-semibold" style={{ color: 'var(--color-text)' }}>Evolução por período</h2>
@@ -187,7 +187,7 @@ export function Reports() {
                 </div>
 
                 {/* ─── Projeção ─── */}
-                <div className="rounded-2xl p-6 space-y-4"
+                <div className="glass rounded-2xl p-6 space-y-4"
                     style={{ backgroundColor: 'var(--color-bg-card)', border: '1px solid var(--color-border)' }}>
                     <div className="flex items-center justify-between flex-wrap gap-3">
                         <h2 className="text-lg font-semibold" style={{ color: 'var(--color-text)' }}>Projeção futura</h2>
@@ -233,7 +233,7 @@ export function Reports() {
 
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-2">
                                 {projection.map((p) => (
-                                    <div key={p.month} className="rounded-xl p-4 space-y-2"
+                                    <div key={p.month} className="glass rounded-xl p-4 space-y-2"
                                         style={{ backgroundColor: 'var(--color-bg)', border: '1px solid var(--color-border)' }}>
                                         <p className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>{formatMonth(p.month)}</p>
                                         <div className="flex justify-between text-xs" style={{ color: 'var(--color-text-muted)' }}>

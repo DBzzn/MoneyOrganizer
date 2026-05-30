@@ -1,86 +1,108 @@
-@import "tailwindcss";
+﻿@import "tailwindcss";
 
+/* ─── LIGHT THEME ─── */
 :root {
-  --color-bg:           transparent;
-  --color-bg-card:      rgba(0, 0, 0, 0.20);
-  --color-bg-modal:     rgba(77, 77, 77, 0.77);
-  --color-bg-sidebar:   rgba(0, 0, 0, 0.25);
-  --color-text:         #ffffff;
-  --color-text-muted:   #e2e8f0;
-  --color-border:       rgba(0, 0, 0, 0.25);
-  --color-input-bg:     rgba(0, 0, 0, 0.20);
-  --color-input-border: rgba(0, 0, 0, 0.30);
-  --color-navbg-hover:  rgba(0, 0, 0, 0.20);
-  --color-navtxt-on:    #60a5fa;
-  --color-income:       #4ade80;
-  --color-income-bg:    rgba(74, 222, 128, 0.15);
-  --color-expense:      #f87171;
-  --color-expense-bg:   rgba(248, 113, 113, 0.15);
-  --color-balance:      #60a5fa;
-  --color-balance-bg:   rgba(96, 165, 250, 0.15);
-  --color-count:        #c084fc;
-  --color-count-bg:     rgba(192, 132, 252, 0.15);
+    --color-bg: transparent;
+    --color-bg-card: rgba(255, 255, 255, 0.55);
+    --color-bg-card-hover: rgba(255, 255, 255, 0.70);
+    --color-bg-sidebar: rgba(255, 255, 255, 0.40);
+    --color-bg-modal: rgba(245, 243, 255, 0.85);
+    --color-bg-solid: #f0f2ff;
+    --color-bg-input: rgba(255, 255, 255, 0.70);
+    --color-text: #1e1b4b;
+    --color-text-muted: #6b63a8;
+    --color-border: rgba(139, 120, 221, 0.25);
+    --color-border-soft: rgba(139, 120, 221, 0.12);
+    --color-input-bg: rgba(255, 255, 255, 0.70);
+    --color-input-border: rgba(148, 130, 255, 0.45);
+    --color-navbg-hover: rgba(255, 255, 255, 0.45);
+    --color-navtxt-on: #4f46e5;
+    --color-income: #16a34a;
+    --color-income-bg: rgba(22, 163, 74, 0.12);
+    --color-expense: #dc2626;
+    --color-expense-bg: rgba(220, 38, 38, 0.12);
+    --color-balance: #4f46e5;
+    --color-balance-bg: rgba(79, 70, 229, 0.12);
+    --color-count: #7c3aed;
+    --color-count-bg: rgba(124, 58, 237, 0.12);
 }
 
-:root.dark {
-  --color-bg:           transparent;
-  --color-bg-card:      rgba(0, 0, 0, 0.35);
-  --color-bg-modal:     rgba(0, 0, 0, 0.85);
-  --color-bg-sidebar:   rgba(0, 0, 0, 0.45);
-  --color-text:         #ffffff;
-  --color-text-muted:   #e2e8f0;
-  --color-border:       rgba(0, 0, 0, 0.40);
-  --color-input-bg:     rgba(0, 0, 0, 0.35);
-  --color-input-border: rgba(0, 0, 0, 0.50);
-  --color-navbg-hover:  rgba(0, 0, 0, 0.35);
-  --color-navtxt-on:    #60a5fa;
-  --color-income:       #4ade80;
-  --color-income-bg:    rgba(74, 222, 128, 0.15);
-  --color-expense:      #f87171;
-  --color-expense-bg:   rgba(248, 113, 113, 0.15);
-  --color-balance:      #60a5fa;
-  --color-balance-bg:   rgba(96, 165, 250, 0.15);
-  --color-count:        #c084fc;
-  --color-count-bg:     rgba(192, 132, 252, 0.15);
+    /* ─── DARK THEME ─── */
+    :root.dark {
+        --color-bg: transparent;
+        --color-bg-card: rgba(255, 255, 255, 0.06);
+        --color-bg-card-hover: rgba(255, 255, 255, 0.10);
+        --color-bg-sidebar: rgba(255, 255, 255, 0.04);
+        --color-bg-modal: rgba(15, 12, 41, 0.75);
+        --color-bg-solid: #13112a;
+        --color-bg-input: rgba(255, 255, 255, 0.07);
+        --color-text: #f1f5f9;
+        --color-text-muted: #94a3b8;
+        --color-border: rgba(255, 255, 255, 0.12);
+        --color-border-soft: rgba(255, 255, 255, 0.06);
+        --color-input-bg: rgba(255, 255, 255, 0.07);
+        --color-input-border: rgba(255, 255, 255, 0.15);
+        --color-navbg-hover: rgba(255, 255, 255, 0.08);
+        --color-navtxt-on: #818cf8;
+        --color-income: #4ade80;
+        --color-income-bg: rgba(74, 222, 128, 0.12);
+        --color-expense: #f87171;
+        --color-expense-bg: rgba(248, 113, 113, 0.12);
+        --color-balance: #818cf8;
+        --color-balance-bg: rgba(129, 140, 248, 0.12);
+        --color-count: #c084fc;
+        --color-count-bg: rgba(192, 132, 252, 0.12);
+    }
+
+/* ─── BACKGROUNDS ─── */
+body {
+    background: linear-gradient(135deg, #dbeafe 0%, #ede9fe 35%, #faf5ff 65%, #e0e7ff 100%);
+    background-attachment: fixed;
+    color: var(--color-text);
+    transition: color 0.3s ease, background 0.3s ease;
 }
 
 :root.dark body {
-  background: linear-gradient(135deg, #1a1c22 0%, #0f1117 35%, #0d0f14 65%, #161820 100%);
-  background-attachment: fixed;
+    background: linear-gradient(135deg, #0a0a1a 0%, #0f0c29 30%, #1a0a2e 65%, #0d1117 100%);
+    background-attachment: fixed;
 }
 
-
-
-body {
-  background: linear-gradient(135deg, #71737a 0%, #5a5c61 35%, #515356 65%, #68696e 100%);
-  background-attachment: fixed;
-  color: var(--color-text);
-  transition: color 0.3s ease;
+/* ─── GLASS EFFECT ─── */
+/* Aplicar essa classe em: cards, sidebar, modal, header */
+.glass {
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
 }
 
+.glass-heavy {
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+}
 
-
+/* ─── NAV ─── */
 .nav-item {
-  color: var(--color-text-muted);
-  background-color: transparent;
+    color: var(--color-text-muted);
+    background-color: transparent;
+    transition: background-color 0.2s ease, color 0.2s ease;
 }
 
-.nav-item:hover {
-  background-color: var(--color-navbg-hover);
-  color: var(--color-navtxt-on);
-}
+    .nav-item:hover {
+        background-color: var(--color-navbg-hover);
+        color: var(--color-navtxt-on);
+    }
 
-.nav-item.active {
-  background-color: var(--color-navbg-hover);
-  color: var(--color-navtxt-on);
-}
+    .nav-item.active {
+        background-color: var(--color-navbg-hover);
+        color: var(--color-navtxt-on);
+    }
 
 .btn-signout {
-  color: var(--color-text-muted);
-  background-color: transparent;
+    color: var(--color-text-muted);
+    background-color: transparent;
+    transition: background-color 0.2s ease, color 0.2s ease;
 }
 
-.btn-signout:hover {
-  background-color: rgba(248, 113, 113, 0.15);
-  color: #f87171;
-}
+    .btn-signout:hover {
+        background-color: rgba(248, 113, 113, 0.15);
+        color: #f87171;
+    }

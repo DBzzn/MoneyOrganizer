@@ -63,11 +63,12 @@ export interface EvolutionEntry {
     transactionCount: number
 }
 
+// DEPOIS
 export interface CategoryTotal {
     categoryId: string
     categoryName: string
     categoryIcon?: string
-    totalAmount: number
+    totalAmount: string
     transactionCount: number
 }
 
