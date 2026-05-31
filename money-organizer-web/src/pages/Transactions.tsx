@@ -21,11 +21,58 @@ import {
     updateTransactionSchema,
 } from '../schemas'
 import { formatCurrency, formatDate, transactionTypeLabel } from '../utils'
-import { Plus, Trash2, X, CreditCard, Pencil } from 'lucide-react'
+import { Plus, Trash2, X, CreditCard, Pencil, Search, ArrowUpDown } from 'lucide-react'
 import ConfirmModal from '../components/ConfirmModal'
 import { bulkDeleteTransactions } from '../api/transactions'
 
 type FormMode = 'transaction' | 'installment' | 'edit' | null
+type SortKey = 'date' | 'description' | 'category' | 'type' | 'amount'
+type SortDirection = 'asc' | 'desc'
+
+function compareText(a: string, b: string): number {
+    return a.localeCompare(b, 'pt-BR', { sensitivity: 'base' })
+}
+
+function getSortComparison(a: Transaction, b: Transaction, key: SortKey): number {
+    switch (key) {
+        case 'date':
+            return new Date(a.date).getTime() - new Date(b.date).getTime()
+        case 'description':
+            return compareText(a.description ?? '', b.description ?? '')
+        case 'category':
+            return compareText(a.category.name, b.category.name)
+        case 'type':
+            return compareText(transactionTypeLabel(a.type), transactionTypeLabel(b.type))
+        case 'amount':
+            return Number(a.amount) - Number(b.amount)
+    }
+}
+
+function SortHeader({
+    label,
+    sort,
+    activeSort,
+    align = 'left',
+    onSort,
+}: {
+    label: string
+    sort: SortKey
+    activeSort: SortKey
+    align?: 'left' | 'right'
+    onSort: (sort: SortKey) => void
+}) {
+    return (
+        <button
+            type="button"
+            onClick={() => onSort(sort)}
+            className={`inline-flex items-center gap-1.5 text-xs font-medium transition hover:opacity-80 ${align === 'right' ? 'justify-end w-full' : ''}`}
+            style={{ color: activeSort === sort ? 'var(--color-text)' : 'var(--color-text-muted)' }}
+        >
+            {label}
+            <ArrowUpDown size={13} />
+        </button>
+    )
+}
 
 function toInputDate(isoString: string): string {
     const isoD = new Date(isoString)
@@ -63,6 +110,10 @@ export function Transactions() {
     const [formMode, setFormMode] = useState<FormMode>(null)
     const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null)
     const [currentMonth, setCurrentMonth] = useState(getCurrentMonth)
+    const [searchInput, setSearchInput] = useState('')
+    const [searchTerm, setSearchTerm] = useState('')
+    const [sortKey, setSortKey] = useState<SortKey>('date')
+    const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
     const [confirmModal, setConfirmModal] = useState<{
         isOpen: boolean
         message: string
@@ -100,8 +151,6 @@ export function Transactions() {
 
     useEffect(() => {
         if (!editingTransaction) return
-        console.log('data bruta da API:', editingTransaction.date)
-        console.log('data convertida:', toInputDate(editingTransaction.date))
         updateForm.reset({
             amount: editingTransaction.amount,
             date: toInputDate(editingTransaction.date),
@@ -110,12 +159,16 @@ export function Transactions() {
             description: editingTransaction.description ?? '',
             type: editingTransaction.type,
         })
-    }, [editingTransaction])
+    }, [editingTransaction, updateForm])
 
     useEffect(() => {
         const range = monthToRange(currentMonth)
+        const filters = {
+            ...range,
+            ...(searchTerm ? { search: searchTerm } : {}),
+        }
 
-        Promise.all([getTransactions(range), getCategories()])
+        Promise.all([getTransactions(filters), getCategories()])
             .then(([transRes, catRes]) => {
                 setTransactions(transRes.data)
                 setCategories(catRes.data)
@@ -123,7 +176,15 @@ export function Transactions() {
             .finally(() => setIsLoading(false))
 
         return () => { setIsLoading(true) }
-    }, [currentMonth])
+    }, [currentMonth, searchTerm])
+
+    useEffect(() => {
+        const timeoutId = window.setTimeout(() => {
+            setSearchTerm(searchInput.trim())
+        }, 350)
+
+        return () => window.clearTimeout(timeoutId)
+    }, [searchInput])
 
     const handleClose = () => {
         setFormMode(null)
@@ -246,7 +307,20 @@ export function Transactions() {
         )
     }
 
+    const handleSort = (key: SortKey) => {
+        if (sortKey === key) {
+            setSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'))
+            return
+        }
 
+        setSortKey(key)
+        setSortDirection(key === 'date' ? 'desc' : 'asc')
+    }
+
+    const sortedTransactions = [...transactions].sort((a, b) => {
+        const comparison = getSortComparison(a, b, sortKey)
+        return sortDirection === 'asc' ? comparison : -comparison
+    })
 
     return (
         <Layout>
@@ -300,6 +374,29 @@ export function Transactions() {
 
 
                 {/* ─── Formulário Nova Transação ─── */}
+                <div className="glass rounded-2xl p-4 w-full md:w-1/5 min-w-72"
+                    style={{ backgroundColor: 'var(--color-bg-card)', border: '1px solid var(--color-border)' }}>
+                    <div className="relative">
+                        <Search
+                            size={17}
+                            className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
+                            style={{ color: 'var(--color-text-muted)' }}
+                        />
+                        <input
+                            type="search"
+                            value={searchInput}
+                            onChange={(e) => setSearchInput(e.target.value)}
+                            placeholder="Buscar por descricao no mes selecionado"
+                            className="w-full pl-10 pr-4 py-2.5 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            style={{
+                                backgroundColor: 'var(--color-input-bg)',
+                                border: '1px solid var(--color-input-border)',
+                                color: 'var(--color-text)',
+                            }}
+                        />
+                    </div>
+                </div>
+
                 {formMode === 'transaction' && (
                     <div className="glass rounded-2xl p-6"
                         style={{ backgroundColor: 'var(--color-bg-card)', border: '1px solid var(--color-border)' }}>
@@ -634,33 +731,51 @@ export function Transactions() {
                         <table className="w-full">
                             <thead>
                                 <tr style={{ borderBottom: '1px solid var(--color-border)', backgroundColor: 'var(--color-bg)' }}>
-                                    <th className="text-left text-xs font-medium px-6 py-3" style={{ color: 'var(--color-text-muted)' }}>Data</th>
-                                    <th className="text-left text-xs font-medium px-6 py-3" style={{ color: 'var(--color-text-muted)' }}>Descrição</th>
-                                    <th className="text-left text-xs font-medium px-6 py-3" style={{ color: 'var(--color-text-muted)' }}>Categoria</th>
-                                    <th className="text-left text-xs font-medium px-6 py-3" style={{ color: 'var(--color-text-muted)' }}>Tipo</th>
-                                    <th className="text-right text-xs font-medium px-6 py-3" style={{ color: 'var(--color-text-muted)' }}>Valor</th>
+                                    <th className="text-left px-6 py-3">
+                                        <SortHeader label="Data" sort="date" activeSort={sortKey} onSort={handleSort} />
+                                    </th>
+                                    <th className="text-left px-6 py-3">
+                                        <SortHeader label="Descricao" sort="description" activeSort={sortKey} onSort={handleSort} />
+                                    </th>
+                                    <th className="text-left px-6 py-3">
+                                        <SortHeader label="Categoria" sort="category" activeSort={sortKey} onSort={handleSort} />
+                                    </th>
+                                    <th className="text-left px-6 py-3">
+                                        <SortHeader label="Tipo" sort="type" activeSort={sortKey} onSort={handleSort} />
+                                    </th>
+                                    <th className="text-right px-6 py-3">
+                                        <SortHeader label="Valor" sort="amount" activeSort={sortKey} onSort={handleSort} align="right" />
+                                    </th>
                                     <th className="px-6 py-3"></th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {transactions.map((t) => (
+                                {sortedTransactions.map((t) => (
                                     <tr key={t.id} className="transition"
                                         style={{ borderBottom: '1px solid var(--color-border)' }}>
                                         <td className="px-6 py-4 text-sm whitespace-nowrap" style={{ color: 'var(--color-text-muted)' }}>
                                             {formatDate(t.date)}
                                         </td>
                                         <td className="px-6 py-4 text-sm" style={{ color: 'var(--color-text)' }}>
-                                            {t.description ?? '—'}
-                                            {t.totalInstallments && (
-                                                <span className="ml-2 text-xs text-purple-500">
-                                                    {t.currentInstallment}/{t.totalInstallments}x
+                                            <div className="flex flex-col gap-1.5">
+                                                <span className="break-words leading-5">
+                                                    {t.description ?? '—'}
                                                 </span>
-                                            )}
-                                            {t.isPending && (
-                                                <span className="ml-2 text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full">
-                                                    Pendente
-                                                </span>
-                                            )}
+                                                {(t.totalInstallments || t.isPending) && (
+                                                    <div className="flex flex-wrap items-center gap-1.5">
+                                                        {t.totalInstallments && (
+                                                            <span className="inline-flex items-center whitespace-nowrap text-xs text-purple-500">
+                                                                {t.currentInstallment}/{t.totalInstallments}x
+                                                            </span>
+                                                        )}
+                                                        {t.isPending && (
+                                                            <span className="inline-flex items-center whitespace-nowrap text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full">
+                                                                Pendente
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
                                         </td>
                                         <td className="px-6 py-4 text-sm" style={{ color: 'var(--color-text-muted)' }}>
                                             {t.category.icon} {t.category.name}

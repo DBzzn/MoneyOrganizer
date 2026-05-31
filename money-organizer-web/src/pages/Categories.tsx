@@ -91,7 +91,7 @@ export function Categories() {
                 toast.success('Categoria criada!')
             }
             handleClose()
-        } catch (error) {
+        } catch {
             toast.error('Erro ao salvar a categoria!')
         }
     }
@@ -108,17 +108,6 @@ export function Categories() {
             setConfirmModal({ isOpen: false, categoryId: null })
         }
     }
-
-    const EMOJI_OPTIONS = [
-        '🍔', '🍕', '🍣', '🍜', '🥗', '🍺', '☕', '🛒',
-        '🚗', '🚌', '🚇', '✈️', '🛵', '⛽',
-        '💊', '🏥', '🧘', '🏋️',
-        '🏠', '💡', '🔧', '🛋️', '📦',
-        '🎮', '🎬', '🎵', '📚', '🎯', '🏖️',
-        '💼', '💻', '📱',
-        '💰', '💳', '📈', '🏦',
-        '🎁', '👗', '✂️', '🐾', '🌱',
-    ]
 
     const getTotalForCategory = (categoryId: string) =>
         categoryTotals.find((t) => t.categoryId === categoryId)

@@ -36,7 +36,7 @@ export default tseslint.config(
             }],
             '@typescript-eslint/no-unsafe-argument': 'off',    
             '@typescript-eslint/no-unsafe-assignment': 'off',
-            '@typescript-eslint/no-sparse-arrays': "warn", 
+            'no-sparse-arrays': "warn", 
     },
   },
 );

@@ -1,4 +1,5 @@
-﻿import {
+﻿/* eslint-disable prettier/prettier */
+import {
     Injectable,
     NotFoundException,
     BadRequestException,
@@ -22,6 +23,22 @@ function removeUndefined<T extends object>(obj: T): Partial<T> {
 function toLocalDate(dateStr: string): Date {
     const [y, m, d] = dateStr.split('-').map(Number)
     return new Date(y, m - 1, d, 12, 0, 0)
+}
+
+function startOfToday(): Date {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+}
+
+function withCurrentPendingStatus<T extends { date: Date; isPending: boolean }>(transaction: T): T {
+    if (!transaction.isPending || transaction.date >= startOfToday()) {
+        return transaction;
+    }
+
+    return {
+        ...transaction,
+        isPending: false,
+    };
 }
 
 @Injectable()
@@ -164,7 +181,7 @@ export class TransactionsService {
         });
         
 
-        return transactions;
+        return transactions.map(withCurrentPendingStatus);
     }
 
     async getTotalsByCategory(userId: string, filters?: QueryTransactionsDto) {

@@ -1,5 +1,5 @@
 import { NavLink, useNavigate } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
     LayoutDashboard,
     Tag,
@@ -49,18 +49,17 @@ function getGreeting(name: string): string {
 
 export function Sidebar({ isOpen, onToggle }: SidebarProps) {
     const { isDark, toggleTheme } = useTheme()
-    const [greeting, setGreeting] = useState('')
     const { signOut, user } = useAuth()
     const [hoveringTheme, setHoveringTheme] = useState(false)
     const navigate = useNavigate()
+    const greeting = useMemo(() => {
+        const storedName = localStorage.getItem('username') ?? 'usuário'
+        return getGreeting(user?.name ?? storedName)
+    }, [user?.name])
 
     useEffect(() => {
-        if (user && !greeting) {
-            setGreeting(getGreeting(user.name))
+        if (user) {
             localStorage.setItem('username', user.name)
-        } else {
-            const usr = String(localStorage.getItem('username'))
-            setGreeting(getGreeting(usr))
         }
     }, [user])
     const handleSignOut = () => {

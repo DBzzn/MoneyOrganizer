@@ -42,7 +42,7 @@ export interface MonthlyBalance {
     balance: number
     transactionCount: {
         income: number
-        expenses: string
+        expenses: number
         total: number
     }
 }
@@ -60,7 +60,11 @@ export interface EvolutionEntry {
     income: number
     expenses: number
     balance: number
-    transactionCount: number
+    transactionCount: {
+        income: number
+        expenses: number
+        total: number
+    }
 }
 
 // DEPOIS
@@ -83,5 +87,4 @@ export interface ApiError {
     message: string
     statusCode: number
 }
-
 

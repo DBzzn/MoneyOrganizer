@@ -2,6 +2,7 @@ import { Layout } from '../components/Layout'
 import { useState, useEffect } from 'react'
 import { getMonthlyBalance, getEvolution, getTotalsByCategory } from '../api/transactions'
 import { formatCurrency, formatMonth } from '../utils'
+import { ChartTooltip } from '../components/ChartTooltip'
 import type { MonthlyBalance, EvolutionEntry, CategoryTotal } from '../types'
 import {
   ResponsiveContainer,
@@ -18,6 +19,19 @@ import {
 } from 'recharts'
 import { TrendingUp, TrendingDown, Wallet, Receipt } from 'lucide-react'
 
+function getCurrentMonthRange(): { startDate: string; endDate: string } {
+  const now = new Date()
+  const year = now.getFullYear()
+  const month = now.getMonth() + 1
+  const monthKey = `${year}-${String(month).padStart(2, '0')}`
+  const lastDay = new Date(year, month, 0).getDate()
+
+  return {
+    startDate: `${monthKey}-01`,
+    endDate: `${monthKey}-${String(lastDay).padStart(2, '0')}`,
+  }
+}
+
 export function Dashboard() {
   const [isLoading, setIsLoading] = useState(true)
   const [categories, setCategories] = useState<CategoryTotal[]>([])
@@ -25,7 +39,9 @@ export function Dashboard() {
   const [balance, setBalance] = useState<MonthlyBalance | null>(null)
 
   useEffect(() => {
-    Promise.all([getMonthlyBalance(), getEvolution(), getTotalsByCategory()])
+    const currentMonthRange = getCurrentMonthRange()
+
+    Promise.all([getMonthlyBalance(), getEvolution(), getTotalsByCategory(currentMonthRange)])
       .then(([balanceRes, evolutionRes, categoriesRes]) => {
         setBalance(balanceRes.data)
         setEvolution(evolutionRes.data)
@@ -35,7 +51,7 @@ export function Dashboard() {
   }, [])
 
   if (isLoading) {
-    (
+    return (
       <Layout>
         <div className="flex items-center justify-center h-64">
           <p className="text-gray-400">Carregando...</p>
@@ -43,6 +59,8 @@ export function Dashboard() {
       </Layout>
     )
   }
+
+  const monthlyBalance = Number(balance?.balance ?? 0)
 
   const cards = [
   {
@@ -62,9 +80,9 @@ export function Dashboard() {
   {
     label: 'Saldo do mês',
     value: formatCurrency(balance?.balance ?? 0),
-    icon: Wallet,
-    color: (balance?.balance ?? 0) >= 0 ? 'var(--color-balance)' : 'var(--color-expense)',
-    bg: (balance?.balance ?? 0) >= 0 ? 'var(--color-balance-bg)' : 'var(--color-expense-bg)',
+    icon: monthlyBalance >= 0 ? Wallet : TrendingDown,
+    color: monthlyBalance >= 0 ? 'var(--color-balance)' : 'var(--color-expense)',
+    bg: monthlyBalance >= 0 ? 'var(--color-balance-bg)' : 'var(--color-expense-bg)',
   },
   {
     label: 'Transações',
@@ -94,6 +112,7 @@ export function Dashboard() {
       value: parseFloat(String(c.totalAmount)),
     }))
 
+  const pieTotal = pieData.reduce((sum, item) => sum + item.value, 0)
 
   return (
     <Layout>
@@ -162,15 +181,7 @@ export function Dashboard() {
                   tickFormatter={(v) => formatCurrency(v)}
                 />
                 <Tooltip
-                  formatter={(value) => formatCurrency(Number(value))}
-                  contentStyle={{
-                    borderRadius: '12px',
-                    border: '1px solid var(--color-border)',
-                    background: 'var(--color-bg-card)',
-                    color: 'var(--color-text)',
-                    fontSize: '13px',
-                    fontWeight: 'bold'
-                  }}
+                  content={<ChartTooltip valueFormatter={formatCurrency} />}
                 />
                 <Area type="monotone" dataKey="Receitas" stroke="#22c55e" strokeWidth={2} fill="url(#colorReceitas)" />
                 <Area type="monotone" dataKey="Despesas" stroke="#ef4444" strokeWidth={2} fill="url(#colorDespesas)" />
@@ -206,15 +217,7 @@ export function Dashboard() {
                   ))}
                 </Pie>
                 <Tooltip
-                  formatter={(value) => formatCurrency(Number(value))}
-                  contentStyle={{
-                    borderRadius: '12px',
-                    border: '1px solid var(--color-border)',
-                    background: 'var(--color-bg-card)',
-                    color: 'var(--color-text)',
-                    fontSize: '13px',
-                    fontWeight: 'bold',
-                  }}
+                  content={<ChartTooltip valueFormatter={formatCurrency} showPercentage total={pieTotal} />}
                 />
                 <Legend
                   formatter={(value) => (
