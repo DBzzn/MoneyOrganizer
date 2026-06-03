@@ -120,11 +120,11 @@ export class TransactionsController {
     @ApiResponse({ status: 200, description: 'Transações removidas com sucesso' })
     @ApiResponse({ status: 404, description: 'Uma ou mais transações não encontradas' })
     @Delete('bulk')
-    removeMany(
+    removeBulk(
         @Request() req: AuthenticatedRequest,
         @Body() dto: BulkDeleteTransactionsDto,
     ) {
-        return this.transactionsService.removeMany(req.user.id, dto.ids);    }
+        return this.transactionsService.remove(req.user.id, dto.ids);    }
 
 
 

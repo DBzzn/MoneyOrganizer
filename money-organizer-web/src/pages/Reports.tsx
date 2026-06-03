@@ -324,8 +324,7 @@ export function Reports() {
                             value={balanceMonthDraft}
                             onChange={(e) => setBalanceMonthDraft(e.target.value)}
                             onBlur={applyBalanceMonth}
-                            className="px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            style={{ backgroundColor: 'var(--color-input-bg)', border: '1px solid var(--color-input-border)', color: 'var(--color-text)' }}
+                            className="app-control app-control-compact text-sm"
                         />
                     </div>
                     {isLoading ? (
@@ -370,8 +369,7 @@ export function Reports() {
                                 value={evolutionStartDraft}
                                 onChange={(e) => setEvolutionStartDraft(e.target.value)}
                                 onBlur={applyEvolutionRange}
-                                className="px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                style={{ backgroundColor: 'var(--color-input-bg)', border: '1px solid var(--color-input-border)', color: 'var(--color-text)' }}
+                                className="app-control app-control-compact"
                             />
                             <span style={{ color: 'var(--color-text-muted)' }}>até</span>
                             <input
@@ -379,8 +377,7 @@ export function Reports() {
                                 value={evolutionEndDraft}
                                 onChange={(e) => setEvolutionEndDraft(e.target.value)}
                                 onBlur={applyEvolutionRange}
-                                className="px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                style={{ backgroundColor: 'var(--color-input-bg)', border: '1px solid var(--color-input-border)', color: 'var(--color-text)' }}
+                                className="app-control app-control-compact"
                             />
                         </div>
                     </div>
@@ -437,8 +434,7 @@ export function Reports() {
                                 value={projectionStartDraft}
                                 onChange={(e) => setProjectionStartDraft(e.target.value)}
                                 onBlur={applyProjectionRange}
-                                className="px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                style={{ backgroundColor: 'var(--color-input-bg)', border: '1px solid var(--color-input-border)', color: 'var(--color-text)' }}
+                                className="app-control app-control-compact"
                             />
                             <span style={{ color: 'var(--color-text-muted)' }}>até</span>
                             <input
@@ -446,8 +442,7 @@ export function Reports() {
                                 value={projectionEndDraft}
                                 onChange={(e) => setProjectionEndDraft(e.target.value)}
                                 onBlur={applyProjectionRange}
-                                className="px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                style={{ backgroundColor: 'var(--color-input-bg)', border: '1px solid var(--color-input-border)', color: 'var(--color-text)' }}
+                                className="app-control app-control-compact"
                             />
                         </div>
                     </div>

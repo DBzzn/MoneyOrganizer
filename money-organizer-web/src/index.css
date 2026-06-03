@@ -106,3 +106,80 @@ body {
         background-color: rgba(248, 113, 113, 0.15);
         color: #f87171;
     }
+
+/* ─── THEMED CONTROLS ─── */
+.app-control {
+    width: 100%;
+    border-radius: 0.5rem;
+    background-color: var(--color-input-bg);
+    border: 1px solid var(--color-input-border);
+    color: var(--color-text);
+    padding: 0.625rem 1rem;
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+    outline: none;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+}
+
+.app-control:focus {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.45);
+}
+
+.app-control-purple:focus {
+    border-color: #a855f7;
+    box-shadow: 0 0 0 2px rgba(168, 85, 247, 0.45);
+}
+
+.app-control-compact {
+    width: auto;
+    padding: 0.5rem 0.75rem;
+}
+
+.app-control::placeholder {
+    color: var(--color-text-muted);
+}
+
+.app-control option {
+    background-color: var(--color-bg-solid);
+    color: var(--color-text);
+}
+
+.app-control-shell {
+    background-color: var(--color-bg-input);
+    border: 1px solid var(--color-input-border);
+    color: var(--color-text);
+}
+
+.app-icon-control {
+    background-color: var(--color-bg-input);
+    border: 1px solid var(--color-input-border);
+    color: var(--color-text);
+    transition: opacity 0.2s ease, border-color 0.2s ease, background-color 0.2s ease;
+}
+
+.app-icon-control:hover {
+    opacity: 0.82;
+}
+
+.app-icon-control:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
+.app-popover {
+    background-color: var(--color-bg-solid);
+    border: 1px solid var(--color-border);
+    color: var(--color-text);
+    box-shadow: 0 20px 45px rgba(15, 23, 42, 0.22);
+}
+
+:root.dark .app-control,
+:root.dark .app-control-shell {
+    color-scheme: dark;
+}
+
+:root:not(.dark) .app-control,
+:root:not(.dark) .app-control-shell {
+    color-scheme: light;
+}

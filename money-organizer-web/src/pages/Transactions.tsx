@@ -6,12 +6,12 @@ import { Layout } from '../components/Layout'
 import {
     getTransactions,
     updateTransaction,
-    deleteTransaction,
+    deleteTransactions,
     createTransaction,
     createInstallment,
 } from '../api/transactions'
 import { getCategories } from '../api/categories'
-import type { Transaction, Category } from '../types'
+import type { Transaction, Category, TransactionType } from '../types'
 import {
     transactionSchema,
     installmentSchema,
@@ -23,11 +23,26 @@ import {
 import { formatCurrency, formatDate, transactionTypeLabel } from '../utils'
 import { Plus, Trash2, X, CreditCard, Pencil, Search, ArrowUpDown } from 'lucide-react'
 import ConfirmModal from '../components/ConfirmModal'
-import { bulkDeleteTransactions } from '../api/transactions'
 
 type FormMode = 'transaction' | 'installment' | 'edit' | null
 type SortKey = 'date' | 'description' | 'category' | 'type' | 'amount'
 type SortDirection = 'asc' | 'desc'
+type QuickFilter = 'all' | 'income' | 'expenses' | 'pending'
+
+const EXPENSE_TRANSACTION_TYPES: TransactionType[] = [
+    'CREDIT_CASH',
+    'CREDIT_INSTALLMENT',
+    'DEBIT',
+    'PIX',
+    'CASH',
+]
+
+const QUICK_FILTERS: Array<{ key: QuickFilter; label: string }> = [
+    { key: 'all', label: 'Todos' },
+    { key: 'income', label: 'Receitas' },
+    { key: 'expenses', label: 'Despesas' },
+    { key: 'pending', label: 'Pendentes' },
+]
 
 function compareText(a: string, b: string): number {
     return a.localeCompare(b, 'pt-BR', { sensitivity: 'base' })
@@ -46,6 +61,27 @@ function getSortComparison(a: Transaction, b: Transaction, key: SortKey): number
         case 'amount':
             return Number(a.amount) - Number(b.amount)
     }
+}
+
+function isExpenseTransaction(transaction: Transaction): boolean {
+    return EXPENSE_TRANSACTION_TYPES.includes(transaction.type)
+}
+
+function matchesQuickFilter(transaction: Transaction, filter: QuickFilter): boolean {
+    switch (filter) {
+        case 'all':
+            return true
+        case 'income':
+            return transaction.type === 'INCOME'
+        case 'expenses':
+            return isExpenseTransaction(transaction)
+        case 'pending':
+            return transaction.isPending
+    }
+}
+
+function getQuickFilterCount(transactions: Transaction[], filter: QuickFilter): number {
+    return transactions.filter((transaction) => matchesQuickFilter(transaction, filter)).length
 }
 
 function SortHeader({
@@ -114,6 +150,7 @@ export function Transactions() {
     const [searchTerm, setSearchTerm] = useState('')
     const [sortKey, setSortKey] = useState<SortKey>('date')
     const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
+    const [quickFilter, setQuickFilter] = useState<QuickFilter>('all')
     const [confirmModal, setConfirmModal] = useState<{
         isOpen: boolean
         message: string
@@ -252,7 +289,7 @@ export function Transactions() {
                 : 'Tem certeza que deseja remover essa transação?',
             onConfirm: async () => {
                 try {
-                    await deleteTransaction(t.id)
+                    await deleteTransactions(t.id)
                     setTransactions((prev) => prev.filter((tx) => tx.id !== t.id))
                     setConfirmModal((prev) => ({ ...prev, isOpen: false }))
                     toast.success('Transação removida com sucesso!')
@@ -265,10 +302,16 @@ export function Transactions() {
                     label: 'Deletar todas do grupo',
                     onClick: async () => {
                         try {
-                            const groupIds = transactions
+                            const allTransactions = await getTransactions()
+                            const groupIds = allTransactions.data
                                 .filter((tx) => tx.installmentGroupId === t.installmentGroupId)
                                 .map((tx) => tx.id)
-                            await bulkDeleteTransactions(groupIds)
+
+                            if (groupIds.length === 0) {
+                                throw new Error('Parcelamento não encontrado.')
+                            }
+
+                            await deleteTransactions(groupIds)
                             setTransactions((prev) =>
                                 prev.filter((tx) => tx.installmentGroupId !== t.installmentGroupId)
                             )
@@ -317,7 +360,11 @@ export function Transactions() {
         setSortDirection(key === 'date' ? 'desc' : 'asc')
     }
 
-    const sortedTransactions = [...transactions].sort((a, b) => {
+    const filteredTransactions = transactions.filter((transaction) =>
+        matchesQuickFilter(transaction, quickFilter)
+    )
+
+    const sortedTransactions = [...filteredTransactions].sort((a, b) => {
         const comparison = getSortComparison(a, b, sortKey)
         return sortDirection === 'asc' ? comparison : -comparison
     })
@@ -374,6 +421,33 @@ export function Transactions() {
 
 
                 {/* ─── Formulário Nova Transação ─── */}
+                <div
+                    className="glass rounded-2xl p-1 flex flex-wrap gap-1 w-full xl:w-fit"
+                    style={{ backgroundColor: 'var(--color-bg-card)', border: '1px solid var(--color-border)' }}
+                >
+                    {QUICK_FILTERS.map((filter) => {
+                        const isActive = quickFilter === filter.key
+                        const count = getQuickFilterCount(transactions, filter.key)
+
+                        return (
+                            <button
+                                key={filter.key}
+                                type="button"
+                                aria-label={`${filter.label} ${count}`}
+                                onClick={() => setQuickFilter(filter.key)}
+                                className="min-w-28 rounded-xl px-3 py-2 text-sm font-medium transition"
+                                style={{
+                                    backgroundColor: isActive ? '#2563eb' : 'transparent',
+                                    color: isActive ? 'white' : 'var(--color-text-muted)',
+                                }}
+                            >
+                                {filter.label}
+                                <span aria-hidden="true" className="ml-2 text-xs opacity-75">{count}</span>
+                            </button>
+                        )
+                    })}
+                </div>
+
                 <div className="glass rounded-2xl p-4 w-full md:w-1/5 min-w-72"
                     style={{ backgroundColor: 'var(--color-bg-card)', border: '1px solid var(--color-border)' }}>
                     <div className="relative">
@@ -387,12 +461,7 @@ export function Transactions() {
                             value={searchInput}
                             onChange={(e) => setSearchInput(e.target.value)}
                             placeholder="Buscar por descricao no mes selecionado"
-                            className="w-full pl-10 pr-4 py-2.5 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            style={{
-                                backgroundColor: 'var(--color-input-bg)',
-                                border: '1px solid var(--color-input-border)',
-                                color: 'var(--color-text)',
-                            }}
+                            className="app-control w-full pl-10 pr-4"
                         />
                     </div>
                 </div>
@@ -413,8 +482,7 @@ export function Transactions() {
                                 <label className="block text-sm font-medium mb-1" style={{ color: 'var(--color-text)' }}>Tipo</label>
                                 <select
                                     {...transactionForm.register('type')}
-                                    className="w-full px-4 py-2.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                    style={{ backgroundColor: 'var(--color-input-bg)', border: '1px solid var(--color-input-border)', color: 'var(--color-text)' }}
+                                    className="app-control w-full"
                                 >
                                     <option value="">Selecione...</option>
                                     <option value="INCOME">Receita</option>
@@ -433,8 +501,7 @@ export function Transactions() {
                                 <input
                                     {...transactionForm.register('amount', { valueAsNumber: true })}
                                     type="number" step="0.01" placeholder="0,00"
-                                    className="w-full px-4 py-2.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                    style={{ backgroundColor: 'var(--color-input-bg)', border: '1px solid var(--color-input-border)', color: 'var(--color-text)' }}
+                                    className="app-control w-full"
                                 />
                                 {transactionForm.formState.errors.amount && (
                                     <p className="text-red-500 text-sm mt-1">{transactionForm.formState.errors.amount.message}</p>
@@ -446,8 +513,7 @@ export function Transactions() {
                                 <input
                                     {...transactionForm.register('date')}
                                     type="date"
-                                    className="w-full px-4 py-2.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                    style={{ backgroundColor: 'var(--color-input-bg)', border: '1px solid var(--color-input-border)', color: 'var(--color-text)' }}
+                                    className="app-control w-full"
                                 />
                                 {transactionForm.formState.errors.date && (
                                     <p className="text-red-500 text-sm mt-1">{transactionForm.formState.errors.date.message}</p>
@@ -458,8 +524,7 @@ export function Transactions() {
                                 <label className="block text-sm font-medium mb-1" style={{ color: 'var(--color-text)' }}>Categoria</label>
                                 <select
                                     {...transactionForm.register('categoryId')}
-                                    className="w-full px-4 py-2.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                    style={{ backgroundColor: 'var(--color-input-bg)', border: '1px solid var(--color-input-border)', color: 'var(--color-text)' }}
+                                    className="app-control w-full"
                                 >
                                     <option value="">Selecione...</option>
                                     {categories.map((cat) => (
@@ -476,8 +541,7 @@ export function Transactions() {
                                 <input
                                     {...transactionForm.register('description')}
                                     type="text" placeholder="Ex: Almoço com cliente"
-                                    className="w-full px-4 py-2.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                    style={{ backgroundColor: 'var(--color-input-bg)', border: '1px solid var(--color-input-border)', color: 'var(--color-text)' }}
+                                    className="app-control w-full"
                                 />
                             </div>
 
@@ -525,8 +589,7 @@ export function Transactions() {
                                 <input
                                     {...installmentForm.register('totalAmount', { valueAsNumber: true })}
                                     type="number" step="0.01" placeholder="0,00"
-                                    className="w-full px-4 py-2.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                                    style={{ backgroundColor: 'var(--color-input-bg)', border: '1px solid var(--color-input-border)', color: 'var(--color-text)' }}
+                                    className="app-control app-control-purple w-full"
                                 />
                                 {installmentForm.formState.errors.totalAmount && (
                                     <p className="text-red-500 text-sm mt-1">{installmentForm.formState.errors.totalAmount.message}</p>
@@ -538,8 +601,7 @@ export function Transactions() {
                                 <input
                                     {...installmentForm.register('totalInstallments', { valueAsNumber: true })}
                                     type="number" min="2" placeholder="Ex: 12"
-                                    className="w-full px-4 py-2.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                                    style={{ backgroundColor: 'var(--color-input-bg)', border: '1px solid var(--color-input-border)', color: 'var(--color-text)' }}
+                                    className="app-control app-control-purple w-full"
                                 />
                                 {installmentForm.formState.errors.totalInstallments && (
                                     <p className="text-red-500 text-sm mt-1">{installmentForm.formState.errors.totalInstallments.message}</p>
@@ -551,8 +613,7 @@ export function Transactions() {
                                 <input
                                     {...installmentForm.register('firstInstallmentDate')}
                                     type="date"
-                                    className="w-full px-4 py-2.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                                    style={{ backgroundColor: 'var(--color-input-bg)', border: '1px solid var(--color-input-border)', color: 'var(--color-text)' }}
+                                    className="app-control app-control-purple w-full"
                                 />
                                 {installmentForm.formState.errors.firstInstallmentDate && (
                                     <p className="text-red-500 text-sm mt-1">{installmentForm.formState.errors.firstInstallmentDate.message}</p>
@@ -563,8 +624,7 @@ export function Transactions() {
                                 <label className="block text-sm font-medium mb-1" style={{ color: 'var(--color-text)' }}>Categoria</label>
                                 <select
                                     {...installmentForm.register('categoryId')}
-                                    className="w-full px-4 py-2.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                                    style={{ backgroundColor: 'var(--color-input-bg)', border: '1px solid var(--color-input-border)', color: 'var(--color-text)' }}
+                                    className="app-control app-control-purple w-full"
                                 >
                                     <option value="">Selecione...</option>
                                     {categories.map((cat) => (
@@ -581,8 +641,7 @@ export function Transactions() {
                                 <input
                                     {...installmentForm.register('description')}
                                     type="text" placeholder="Ex: iPhone 16 Pro"
-                                    className="w-full px-4 py-2.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                                    style={{ backgroundColor: 'var(--color-input-bg)', border: '1px solid var(--color-input-border)', color: 'var(--color-text)' }}
+                                    className="app-control app-control-purple w-full"
                                 />
                             </div>
 
@@ -619,8 +678,7 @@ export function Transactions() {
                                     <label className="block text-sm font-medium mb-1" style={{ color: 'var(--color-text)' }}>Tipo</label>
                                     <select
                                         {...updateForm.register('type')}
-                                        className="w-full px-4 py-2.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                        style={{ backgroundColor: 'var(--color-input-bg)', border: '1px solid var(--color-input-border)', color: 'var(--color-text)' }}
+                                        className="app-control w-full"
                                     >
                                         <option value="INCOME">Receita</option>
                                         <option value="CREDIT_CASH">Crédito à vista</option>
@@ -636,8 +694,7 @@ export function Transactions() {
                                 <input
                                     {...updateForm.register('amount', { valueAsNumber: true })}
                                     type="number" step="0.01"
-                                    className="w-full px-4 py-2.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                    style={{ backgroundColor: 'var(--color-input-bg)', border: '1px solid var(--color-input-border)', color: 'var(--color-text)' }}
+                                    className="app-control w-full"
                                 />
                                 {updateForm.formState.errors.amount && (
                                     <p className="text-red-500 text-sm mt-1">{updateForm.formState.errors.amount.message}</p>
@@ -649,8 +706,7 @@ export function Transactions() {
                                 <input
                                     {...updateForm.register('date')}
                                     type="date"
-                                    className="w-full px-4 py-2.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                    style={{ backgroundColor: 'var(--color-input-bg)', border: '1px solid var(--color-input-border)', color: 'var(--color-text)' }}
+                                    className="app-control w-full"
                                 />
                                 {updateForm.formState.errors.date && (
                                     <p className="text-red-500 text-sm mt-1">{updateForm.formState.errors.date.message}</p>
@@ -661,8 +717,7 @@ export function Transactions() {
                                 <label className="block text-sm font-medium mb-1" style={{ color: 'var(--color-text)' }}>Categoria</label>
                                 <select
                                     {...updateForm.register('categoryId')}
-                                    className="w-full px-4 py-2.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                    style={{ backgroundColor: 'var(--color-input-bg)', border: '1px solid var(--color-input-border)', color: 'var(--color-text)' }}
+                                    className="app-control w-full"
                                 >
                                     {categories.map((cat) => (
                                         <option key={cat.id} value={cat.id}>{cat.icon} {cat.name}</option>
@@ -675,8 +730,7 @@ export function Transactions() {
                                 <input
                                     {...updateForm.register('description')}
                                     type="text"
-                                    className="w-full px-4 py-2.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                    style={{ backgroundColor: 'var(--color-input-bg)', border: '1px solid var(--color-input-border)', color: 'var(--color-text)' }}
+                                    className="app-control w-full"
                                 />
                             </div>
 
@@ -720,7 +774,7 @@ export function Transactions() {
                     <div className="flex items-center justify-center h-48">
                         <p style={{ color: 'var(--color-text-muted)' }}>Carregando...</p>
                     </div>
-                ) : transactions.length === 0 ? (
+                ) : sortedTransactions.length === 0 ? (
                     <div className="glass flex items-center justify-center h-48 rounded-2xl"
                         style={{ backgroundColor: 'var(--color-bg-card)', border: '1px solid var(--color-border)' }}>
                         <p style={{ color: 'var(--color-text-muted)' }}>Nenhuma transação encontrada</p>
@@ -781,7 +835,7 @@ export function Transactions() {
                                             {t.category.icon} {t.category.name}
                                         </td>
                                         <td className="px-6 py-4">
-                                            <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${typeColor[t.type]}`}>
+                                            <span className={`whitespace-nowrap text-xs font-medium px-2.5 py-1 rounded-full ${typeColor[t.type]}`}>
                                                 {transactionTypeLabel(t.type)}
                                             </span>
                                         </td>

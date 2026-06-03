@@ -60,11 +60,21 @@ export const createTransaction = (data: TransactionPayload) =>
 export const updateTransaction = (id: string, data: Partial<TransactionPayload>) =>
     api.patch<Transaction>(`/transactions/${id}`, data)
 
+export const deleteTransactions = (ids: string | string[]) => {
+    const transactionIds = Array.isArray(ids) ? ids : [ids]
+
+    if (transactionIds.length === 1) {
+        return api.delete(`/transactions/${transactionIds[0]}`)
+    }
+
+    return api.delete('/transactions/bulk', { data: { ids: transactionIds } })
+}
+
 export const deleteTransaction = (id: string) =>
-    api.delete<Transaction>(`/transactions/${id}`)
+    deleteTransactions(id)
 
 export const bulkDeleteTransactions = (ids: string[]) =>
-    api.delete('/transactions/bulk', { data: { ids } })
+    deleteTransactions(ids)
 
 export const createInstallment = (data: InstallmentPayload) =>
     api.post<InstallmentResponse>('/transactions/installments', data)
@@ -80,4 +90,3 @@ export const getEvolution = (filters?: ReportFilters) =>
 
 export const getProjection = (filters?: ReportFilters) =>
     api.get<ProjectionEntry[]>('/transactions/reports/projection', { params: filters })
-

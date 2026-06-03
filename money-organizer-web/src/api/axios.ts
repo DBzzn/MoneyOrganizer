@@ -1,7 +1,17 @@
 import axios from 'axios'
 
+function resolveApiBaseURL(): string {
+    const configuredApiUrl = import.meta.env.VITE_API_URL
+
+    if (configuredApiUrl && configuredApiUrl !== 'auto') {
+        return configuredApiUrl
+    }
+
+    return `${window.location.protocol}//${window.location.hostname}:3000`
+}
+
 const api = axios.create({
-    baseURL: import.meta.env.VITE_API_URL,
+    baseURL: resolveApiBaseURL(),
 })
 
 api.interceptors.request.use((config) => {

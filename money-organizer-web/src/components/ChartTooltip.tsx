@@ -43,11 +43,8 @@ export function ChartTooltip({
 
     return (
         <div
-            className="rounded-xl px-3 py-2 shadow-lg"
+            className="app-popover rounded-xl px-3 py-2"
             style={{
-                backgroundColor: 'var(--color-bg-solid)',
-                border: '1px solid var(--color-border)',
-                color: 'var(--color-text)',
                 minWidth: 160,
             }}
         >

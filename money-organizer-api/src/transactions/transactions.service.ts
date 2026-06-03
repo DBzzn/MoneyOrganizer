@@ -343,48 +343,48 @@ export class TransactionsService {
         }
     }
 
-    async remove(userId: string, transactionId: string) {
-        try {
-            await this.prisma.transaction.delete({
+    async remove(userId: string, ids: string | string[]) {
+        const transactionIds = Array.isArray(ids) ? ids : [ids];
+        const uniqueIds = [...new Set(transactionIds)];
+
+        if (uniqueIds.length === 0) {
+            throw new BadRequestException('Informe ao menos uma transação para deletar.');
+        }
+
+        await this.prisma.$transaction(async (tx) => {
+            const found = await tx.transaction.findMany({
                 where: {
-                    userId: userId,
-                    id: transactionId,
-                }
+                    id: { in: uniqueIds },
+                    userId,
+                },
+                select: { id: true }
             });
 
-            return {
-                message: 'Transação deletada com sucesso!',
-            }
-        } catch (error: any) {
-            if (error.code === 'P2025') {
-                throw new NotFoundException('Transação não encontrada!');
+            if (found.length !== uniqueIds.length) {
+                throw new NotFoundException(
+                    'Uma ou mais transações não foram encontradas ou não pertencem ao usuário.'
+                )
             }
 
-            throw error;
-        }
+            const deleted = await tx.transaction.deleteMany({
+                where: {
+                    id: { in: uniqueIds },
+                    userId,
+                },
+            });
 
-    }
-
-    async removeMany(userId: string, ids: string[]) {
-        const found = await this.prisma.transaction.findMany({
-            where: {
-                id: { in: ids },
-                userId,
-            },
-            select: { id: true }
+            if (deleted.count !== uniqueIds.length) {
+                throw new NotFoundException(
+                    'Uma ou mais transações não foram encontradas ou não pertencem ao usuário.'
+                );
+            }
         });
 
-        if (found.length !== ids.length) {
-            throw new NotFoundException(
-                'Uma ou mais transações não foram encontradas ou não pertencem ao usuário.'
-            )
+        if (uniqueIds.length === 1) {
+            return { message: 'Transação deletada com sucesso!' };
         }
 
-        await this.prisma.$transaction(
-            ids.map((id) => this.prisma.transaction.delete({ where: { id } }))
-        );
-
-        return { message: `${ids.length} transação(ões) deletada(s) com sucesso.` };
+        return { message: `${uniqueIds.length} transação(ões) deletada(s) com sucesso.` };
     }
 
     async createInstallment(userId: string, dto: CreateInstallmentsDto) {

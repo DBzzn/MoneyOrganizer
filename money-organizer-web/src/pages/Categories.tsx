@@ -171,22 +171,12 @@ export function Categories() {
                                         type="text"
                                         placeholder="🍔"
                                         maxLength={2}
-                                        className="w-full px-3 py-2.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-center text-xl"
-                                        style={{
-                                            backgroundColor: 'var(--color-input-bg)',
-                                            border: '1px solid var(--color-input-border)',
-                                            color: 'var(--color-text)',
-                                        }}
+                                        className="app-control w-full text-center text-xl"
                                     />
                                     <button
                                         type="button"
                                         onClick={() => setShowEmojiPicker((prev) => !prev)}
-                                        className="p-2.5 rounded-lg transition"
-                                        style={{
-                                            backgroundColor: 'var(--color-input-bg)',
-                                            border: '1px solid var(--color-input-border)',
-                                            color: 'var(--color-text-muted)',
-                                        }}
+                                        className="app-icon-control p-2.5 rounded-lg"
                                     >
                                         <SmilePlus size={18} />
                                     </button>
@@ -194,14 +184,12 @@ export function Categories() {
 
                                 {showEmojiPicker && (
                                     <div
-                                        className="absolute z-50 mt-2 p-3 rounded-xl shadow-xl overflow-y-auto"
+                                        className="app-popover absolute z-50 mt-2 p-3 rounded-xl overflow-y-auto"
                                         style={{
                                             top: '100%',
                                             left: 0,
                                             width: '320px',
                                             maxHeight: '280px',
-                                            backgroundColor: 'var(--color-bg-card)',                                            
-                                            border: '1px solid var(--color-border)',
                                             opacity: 1,
                                         }}
                                     >
@@ -256,12 +244,7 @@ export function Categories() {
                                     {...register('name')}
                                     type="text"
                                     placeholder="Ex: Alimentação"
-                                    className="w-full px-4 py-2.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                    style={{
-                                        backgroundColor: 'var(--color-input-bg)',
-                                        border: '1px solid var(--color-input-border)',
-                                        color: 'var(--color-text)'
-                                    }}
+                                    className="app-control w-full"
                                 />
                                 {errors.name && (
                                     <p className="text-red-500 text-sm mt-1">{errors.name.message}</p>
