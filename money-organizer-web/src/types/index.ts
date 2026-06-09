@@ -12,6 +12,26 @@ export interface Category {
     createdAt: string
 }
 
+export type FinancialAccountType =
+    | 'BANK_ACCOUNT'
+    | 'CASH_WALLET'
+    | 'OTHER'
+
+export interface FinancialAccount {
+    id: string
+    name: string
+    type: FinancialAccountType
+    institutionName?: string
+    icon?: string
+    color?: string
+    initialBalance: number
+    currentBalance: number
+    includeInDashboard: boolean
+    isArchived: boolean
+    createdAt: string
+    updatedAt: string
+}
+
 export type TransactionType =
     | 'CREDIT_CASH'
     | 'CREDIT_INSTALLMENT'
@@ -32,6 +52,8 @@ export interface Transaction {
     installmentGroupId?: string
     categoryId: string
     category: Category
+    financialAccountId: string
+    financialAccount: FinancialAccount
     createdAt: string
 }
 
@@ -87,4 +109,3 @@ export interface ApiError {
     message: string
     statusCode: number
 }
-

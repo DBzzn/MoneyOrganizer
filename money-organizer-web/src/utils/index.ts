@@ -1,8 +1,8 @@
-export function formatCurrency(value: number): string {
+export function formatCurrency(value: number | string): string {
     return new Intl.NumberFormat('pt-BR', {
         style: 'currency',
         currency: 'BRL',
-    }).format(value)
+    }).format(Number(value))
 }
 
 export function formatMonth(yearMonth: string): string {
@@ -13,6 +13,21 @@ export function formatMonth(yearMonth: string): string {
 
 export function formatDate(dateString: string): string {
     return new Date(dateString).toLocaleDateString('pt-BR')
+}
+
+export function buildAccountIdsParam(
+    selectedAccountIds: string[],
+    allAccountCount: number,
+): string | undefined {
+    if (
+        allAccountCount === 0 ||
+        selectedAccountIds.length === 0 ||
+        selectedAccountIds.length === allAccountCount
+    ) {
+        return undefined
+    }
+
+    return selectedAccountIds.join(',')
 }
 
 export function transactionTypeLabel(type: string): string {

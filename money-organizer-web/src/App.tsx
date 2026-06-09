@@ -11,6 +11,7 @@ import { Dashboard } from './pages/Dashboard'
 import { Categories } from './pages/Categories'
 import { Transactions } from './pages/Transactions'
 import { Reports } from './pages/Reports'
+import { FinancialAccounts } from './pages/FinancialAccounts'
 
 export default function App() {
     return (
@@ -29,6 +30,12 @@ export default function App() {
                     <Route path="/categories" element={
                         <PrivateRoute>
                             <Categories />
+                        </PrivateRoute>
+                    }
+                    />
+                    <Route path="/accounts" element={
+                        <PrivateRoute>
+                            <FinancialAccounts />
                         </PrivateRoute>
                     }
                     />

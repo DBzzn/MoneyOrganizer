@@ -1,9 +1,11 @@
 import { Layout } from '../components/Layout'
 import { useState, useEffect } from 'react'
 import { getMonthlyBalance, getEvolution, getProjection, getTotalsByCategory } from '../api/transactions'
-import { formatCurrency, formatMonth } from '../utils'
+import { getFinancialAccounts } from '../api/financialAccounts'
+import { buildAccountIdsParam, formatCurrency, formatMonth } from '../utils'
 import { ChartTooltip } from '../components/ChartTooltip'
-import type { MonthlyBalance, EvolutionEntry, ProjectionEntry, CategoryTotal, TransactionType } from '../types'
+import { AccountFilter } from '../components/AccountFilter'
+import type { FinancialAccount, MonthlyBalance, EvolutionEntry, ProjectionEntry, CategoryTotal, TransactionType } from '../types'
 import {
     ResponsiveContainer,
     AreaChart,
@@ -83,6 +85,8 @@ export function Reports() {
     const [evolution, setEvolution] = useState<EvolutionEntry[]>([])
     const [projection, setProjection] = useState<ProjectionEntry[]>([])
     const [categoryTotals, setCategoryTotals] = useState<CategoryTotal[]>([])
+    const [financialAccounts, setFinancialAccounts] = useState<FinancialAccount[]>([])
+    const [selectedAccountIds, setSelectedAccountIds] = useState<string[]>([])
 
     const [balanceMonth, setBalanceMonth] = useState(currentMonth)
     const [evolutionStart, setEvolutionStart] = useState(sixMonthsAgo)
@@ -94,6 +98,25 @@ export function Reports() {
     const [evolutionEndDraft, setEvolutionEndDraft] = useState(currentMonth)
     const [projectionStartDraft, setProjectionStartDraft] = useState(currentMonth)
     const [projectionEndDraft, setProjectionEndDraft] = useState(threeMonthsAhead)
+    const accountIdsParam = buildAccountIdsParam(selectedAccountIds, financialAccounts.length)
+
+    useEffect(() => {
+        getFinancialAccounts()
+            .then((res) => {
+                const accountIds = res.data.map((account) => account.id)
+
+                setFinancialAccounts(res.data)
+                setSelectedAccountIds((currentIds) => {
+                    if (currentIds.length === 0) {
+                        return accountIds
+                    }
+
+                    const validIds = currentIds.filter((id) => accountIds.includes(id))
+
+                    return validIds.length > 0 ? validIds : accountIds
+                })
+            })
+    }, [])
 
     const applyBalanceMonth = () => {
         if (isValidMonth(balanceMonthDraft)) {
@@ -136,12 +159,13 @@ export function Reports() {
 
     useEffect(() => {
         const categoryRange = monthToRange(evolutionStart, evolutionEnd)
+        const accountFilters = accountIdsParam ? { financialAccountIds: accountIdsParam } : {}
 
         Promise.all([
-            getMonthlyBalance({ month: balanceMonth }),
-            getEvolution({ startMonth: evolutionStart, endMonth: evolutionEnd }),
-            getProjection({ startMonth: projectionStart, endMonth: projectionEnd }),
-            Promise.all(EXPENSE_TYPES.map((type) => getTotalsByCategory({ ...categoryRange, type }))),
+            getMonthlyBalance({ month: balanceMonth, ...accountFilters }),
+            getEvolution({ startMonth: evolutionStart, endMonth: evolutionEnd, ...accountFilters }),
+            getProjection({ startMonth: projectionStart, endMonth: projectionEnd, ...accountFilters }),
+            Promise.all(EXPENSE_TYPES.map((type) => getTotalsByCategory({ ...categoryRange, type, ...accountFilters }))),
         ])
             .then(([balanceRes, evolutionRes, projectionRes, categoryResponses]) => {
                 setBalance(balanceRes.data)
@@ -152,7 +176,7 @@ export function Reports() {
             .finally(() => setIsLoading(false))
 
         return () => { setIsLoading(true) }
-    }, [balanceMonth, evolutionStart, evolutionEnd, projectionStart, projectionEnd])
+    }, [accountIdsParam, balanceMonth, evolutionStart, evolutionEnd, projectionStart, projectionEnd])
 
     const evolutionChartData = evolution.reduce<Array<{
         month: string
@@ -203,6 +227,13 @@ export function Reports() {
                     <p className="mt-1" style={{ color: 'var(--color-text-muted)' }}>Análise detalhada das suas finanças</p>
                 </div>
 
+                <AccountFilter
+                    accounts={financialAccounts}
+                    selectedAccountIds={selectedAccountIds}
+                    onChange={setSelectedAccountIds}
+                    title="Contas do relatório"
+                />
+
                 {/* ─── Balanço Mensal ─── */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
                     {[
@@ -237,15 +268,15 @@ export function Reports() {
                     ].map((card) => (
                         <div
                             key={card.label}
-                            className="glass rounded-2xl p-5 flex items-center gap-4"
+                            className="glass flex items-center gap-4 rounded-2xl p-5"
                             style={{ backgroundColor: 'var(--color-bg-card)', border: '1px solid var(--color-border)' }}
                         >
-                            <div className={`${card.bg} p-3 rounded-xl`}>
+                            <div className={`${card.bg} shrink-0 p-3 rounded-xl`}>
                                 <card.icon size={20} className={card.color} />
                             </div>
                             <div className="min-w-0">
                                 <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>{card.label}</p>
-                                <p className={`text-lg font-bold truncate ${card.color}`}>{card.value}</p>
+                                <p className={`break-words text-lg font-bold leading-tight ${card.color}`}>{card.value}</p>
                             </div>
                         </div>
                     ))}
@@ -268,7 +299,7 @@ export function Reports() {
                     </div>
                 </div>
 
-                <div className="glass rounded-2xl p-6 space-y-4"
+                <div className="glass rounded-2xl p-5 space-y-4 sm:p-6"
                     style={{ backgroundColor: 'var(--color-bg-card)', border: '1px solid var(--color-border)' }}>
                     <div>
                         <h2 className="text-lg font-semibold" style={{ color: 'var(--color-text)' }}>Maiores gastos por categoria</h2>
@@ -315,16 +346,16 @@ export function Reports() {
                     )}
                 </div>
 
-                <div className="glass rounded-2xl p-6 space-y-4"
+                <div className="glass rounded-2xl p-5 space-y-4 sm:p-6"
                     style={{ backgroundColor: 'var(--color-bg-card)', border: '1px solid var(--color-border)' }}>
-                    <div className="flex items-center justify-between flex-wrap gap-3">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                         <h2 className="text-lg font-semibold" style={{ color: 'var(--color-text)' }}>Balanço Mensal</h2>
                         <input
                             type="month"
                             value={balanceMonthDraft}
                             onChange={(e) => setBalanceMonthDraft(e.target.value)}
                             onBlur={applyBalanceMonth}
-                            className="app-control app-control-compact text-sm"
+                            className="app-control app-control-responsive-compact text-sm"
                         />
                     </div>
                     {isLoading ? (
@@ -345,12 +376,12 @@ export function Reports() {
                             ].map((card) => (
                                 <div key={card.label} className="flex items-center gap-4 p-4 rounded-xl"
                                     style={{ backgroundColor: 'var(--color-bg)', border: '1px solid var(--color-border)' }}>
-                                    <div className={`${card.bg} p-3 rounded-xl`}>
+                                    <div className={`${card.bg} shrink-0 p-3 rounded-xl`}>
                                         <card.icon size={20} className={card.color} />
                                     </div>
-                                    <div>
+                                    <div className="min-w-0">
                                         <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>{card.label}</p>
-                                        <p className={`text-lg font-bold ${card.color}`}>{card.value}</p>
+                                        <p className={`break-words text-lg font-bold leading-tight ${card.color}`}>{card.value}</p>
                                     </div>
                                 </div>
                             ))}
@@ -359,25 +390,25 @@ export function Reports() {
                 </div>
 
                 {/* ─── Evolução ─── */}
-                <div className="glass rounded-2xl p-6 space-y-4"
+                <div className="glass rounded-2xl p-5 space-y-4 sm:p-6"
                     style={{ backgroundColor: 'var(--color-bg-card)', border: '1px solid var(--color-border)' }}>
-                    <div className="flex items-center justify-between flex-wrap gap-3">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                         <h2 className="text-lg font-semibold" style={{ color: 'var(--color-text)' }}>Evolução por período</h2>
-                        <div className="flex items-center gap-2 text-sm">
+                        <div className="flex w-full flex-col gap-2 text-sm sm:w-auto sm:flex-row sm:items-center">
                             <input
                                 type="month"
                                 value={evolutionStartDraft}
                                 onChange={(e) => setEvolutionStartDraft(e.target.value)}
                                 onBlur={applyEvolutionRange}
-                                className="app-control app-control-compact"
+                                className="app-control app-control-responsive-compact"
                             />
-                            <span style={{ color: 'var(--color-text-muted)' }}>até</span>
+                            <span className="text-center sm:text-left" style={{ color: 'var(--color-text-muted)' }}>até</span>
                             <input
                                 type="month"
                                 value={evolutionEndDraft}
                                 onChange={(e) => setEvolutionEndDraft(e.target.value)}
                                 onBlur={applyEvolutionRange}
-                                className="app-control app-control-compact"
+                                className="app-control app-control-responsive-compact"
                             />
                         </div>
                     </div>
@@ -424,25 +455,25 @@ export function Reports() {
                 </div>
 
                 {/* ─── Projeção ─── */}
-                <div className="glass rounded-2xl p-6 space-y-4"
+                <div className="glass rounded-2xl p-5 space-y-4 sm:p-6"
                     style={{ backgroundColor: 'var(--color-bg-card)', border: '1px solid var(--color-border)' }}>
-                    <div className="flex items-center justify-between flex-wrap gap-3">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                         <h2 className="text-lg font-semibold" style={{ color: 'var(--color-text)' }}>Projeção futura</h2>
-                        <div className="flex items-center gap-2 text-sm">
+                        <div className="flex w-full flex-col gap-2 text-sm sm:w-auto sm:flex-row sm:items-center">
                             <input
                                 type="month"
                                 value={projectionStartDraft}
                                 onChange={(e) => setProjectionStartDraft(e.target.value)}
                                 onBlur={applyProjectionRange}
-                                className="app-control app-control-compact"
+                                className="app-control app-control-responsive-compact"
                             />
-                            <span style={{ color: 'var(--color-text-muted)' }}>até</span>
+                            <span className="text-center sm:text-left" style={{ color: 'var(--color-text-muted)' }}>até</span>
                             <input
                                 type="month"
                                 value={projectionEndDraft}
                                 onChange={(e) => setProjectionEndDraft(e.target.value)}
                                 onBlur={applyProjectionRange}
-                                className="app-control app-control-compact"
+                                className="app-control app-control-responsive-compact"
                             />
                         </div>
                     </div>

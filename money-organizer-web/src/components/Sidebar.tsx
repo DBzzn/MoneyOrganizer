@@ -8,18 +8,24 @@ import {
     NotebookPen,
     Sun,
     Moon,
-    Menu
+    CircleDollarSign,
+    WalletCards,
+    PanelLeftClose,
+    PanelLeftOpen
 } from "lucide-react";
 import { useAuth } from "../contexts/useAuth";
 import { useTheme } from '../contexts/useTheme'
 
 interface SidebarProps {
     isOpen: boolean,
+    isMobile: boolean,
+    onNavigate: () => void,
     onToggle: () => void
 }
 
 const navItems = [
     { to: '/dashboard', icon: LayoutDashboard, Label: 'Dashboard' },
+    { to: '/accounts', icon: WalletCards, Label: 'Contas' },
     { to: '/categories', icon: Tag, Label: 'Categorias' },
     { to: '/transactions', icon: ArrowLeftRight, Label: 'Transações' },
     { to: '/reports', icon: NotebookPen, Label: 'Relatórios' },
@@ -47,7 +53,7 @@ function getGreeting(name: string): string {
     else return pick(messages.evening)
 }
 
-export function Sidebar({ isOpen, onToggle }: SidebarProps) {
+export function Sidebar({ isOpen, isMobile, onNavigate, onToggle }: SidebarProps) {
     const { isDark, toggleTheme } = useTheme()
     const { signOut, user } = useAuth()
     const [hoveringTheme, setHoveringTheme] = useState(false)
@@ -70,8 +76,45 @@ export function Sidebar({ isOpen, onToggle }: SidebarProps) {
 
     return (
         <>
-            {!isOpen && ( //toggle Sidebar
+            {isMobile && !isOpen && (
+                <div
+                    className="fixed bottom-4 left-1/2 z-50 flex max-w-[calc(100vw-2rem)] -translate-x-1/2 gap-1 overflow-x-auto rounded-2xl p-1.5 glass"
+                    style={{
+                        backgroundColor: 'var(--color-bg-card)',
+                        border: '1px solid var(--color-border)',
+                    }}
+                >
+                    <button
+                        type="button"
+                        aria-label="Expandir menu"
+                        title="Expandir menu"
+                        onClick={onToggle}
+                        className="app-icon-control flex h-10 w-10 items-center justify-center rounded-xl"
+                    >
+                        <PanelLeftOpen size={18} />
+                    </button>
+                    <div className="mx-1 w-px shrink-0" style={{ backgroundColor: 'var(--color-border)' }} />
+
+                    {navItems.map((item) => (
+                        <NavLink
+                            key={item.to}
+                            to={item.to}
+                            aria-label={item.Label}
+                            title={item.Label}
+                            onClick={onNavigate}
+                            className="nav-item flex h-10 w-10 items-center justify-center rounded-xl transition"
+                        >
+                            <item.icon size={18} />
+                        </NavLink>
+                    ))}
+                </div>
+            )}
+
+            {!isMobile && !isOpen && ( //toggle Sidebar
                 <button
+                    type="button"
+                    aria-label="Expandir menu"
+                    title="Expandir menu"
                     onClick={onToggle}
                     className="fixed bottom-4 left-4 z-50 p-2 rounded-lg transition glass"
                     style={{
@@ -80,33 +123,47 @@ export function Sidebar({ isOpen, onToggle }: SidebarProps) {
                         color: 'var(--color-text)'
                     }}
                 >
-                    <Menu size={20} />
+                    <PanelLeftOpen size={20} />
                 </button>
             )}
 
             <aside
-                className="w-64 flex flex-col h-screen fixed top-0 left-0 transition-transform duration-300 ease-in-out glass"
+                className="fixed left-0 top-0 z-50 flex h-screen w-64 max-w-[calc(100vw-2rem)] flex-col transition-transform duration-300 ease-in-out glass"
                 style={{
                     backgroundColor: 'var(--color-bg-sidebar)',
                     borderRight: '1px solid var(--color-border)',
                     transform: isOpen ? 'translateX(0)' : 'translateX(-100%)',
                 }}
             >
-                <div className="p-6 flex items-center justify-between"
+                <div className="flex items-start justify-between gap-3 p-6"
                     style={{ borderBottom: '1px solid var(--color-border)' }}>
-                    <div>
-                        <button
-                            onClick={onToggle}
-                            className="text-xl font-bold text-blue-600 hover:opacity-80 transition cursor-pointer"
+                    <div className="min-w-0">
+                        <div
+                            className="flex items-center gap-2"
+                            aria-label="Money Organizer"
+                            style={{ color: 'var(--color-brand)' }}
                         >
-                            💰 MoneyOrganizer
-                        </button>
+                            <CircleDollarSign size={34} className="shrink-0" strokeWidth={2.3} />
+                            <div className="text-xl font-bold leading-tight">
+                                <span className="block whitespace-nowrap">Money</span>
+                                <span className="block whitespace-nowrap">Organizer</span>
+                            </div>
+                        </div>
                         {(
                             <p className="text-sm mt-1" style={{ color: 'var(--color-text-muted)' }}>
                                 {greeting}
                             </p>
                         )}
                     </div>
+                    <button
+                        type="button"
+                        aria-label="Recolher menu"
+                        title="Recolher menu"
+                        onClick={onToggle}
+                        className="app-icon-control flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
+                    >
+                        <PanelLeftClose size={18} />
+                    </button>
                 </div>
 
                 <nav className="flex-1 p-4 space-y-1" >
@@ -114,6 +171,7 @@ export function Sidebar({ isOpen, onToggle }: SidebarProps) {
                         <NavLink
                             key={item.to}
                             to={item.to}
+                            onClick={onNavigate}
                             className={`nav-item flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition`}
                         >
                             <item.icon size={18} />

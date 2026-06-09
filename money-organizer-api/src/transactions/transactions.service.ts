@@ -8,7 +8,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
 import { CreateInstallmentsDto } from './dto/create-installments.dto';
 import { UpdateTransactionDto } from './dto/update-transaction.dto';
-import { TransactionType, Prisma } from '../../generated/prisma/client';
+import { FinancialAccountType, TransactionType, Prisma } from '../../generated/prisma/client';
 import { randomUUID } from 'crypto';
 import { QueryTransactionsDto } from './dto/query-transactions.dto';
 import { ReportFiltersDto } from './dto/report-filters.dto';
@@ -23,6 +23,11 @@ function removeUndefined<T extends object>(obj: T): Partial<T> {
 function toLocalDate(dateStr: string): Date {
     const [y, m, d] = dateStr.split('-').map(Number)
     return new Date(y, m - 1, d, 12, 0, 0)
+}
+
+function endOfLocalDate(dateStr: string): Date {
+    const [y, m, d] = dateStr.split('-').map(Number)
+    return new Date(y, m - 1, d, 23, 59, 59, 999)
 }
 
 function startOfToday(): Date {
@@ -41,9 +46,109 @@ function withCurrentPendingStatus<T extends { date: Date; isPending: boolean }>(
     };
 }
 
+const DEFAULT_FINANCIAL_ACCOUNT_NAME = 'Conta inicial';
+
+const FINANCIAL_ACCOUNT_SUMMARY_SELECT = {
+    id: true,
+    name: true,
+    type: true,
+    institutionName: true,
+    icon: true,
+    color: true,
+    isArchived: true,
+};
+
+interface FinancialAccountFilterInput {
+    financialAccountId?: string;
+    financialAccountIds?: string[];
+}
+
 @Injectable()
 export class TransactionsService {
     constructor(private readonly prisma: PrismaService) { }
+
+    private async getOrCreateDefaultFinancialAccountId(userId: string): Promise<string> {
+        const existingAccount = await this.prisma.financialAccount.findFirst({
+            where: {
+                userId,
+                name: DEFAULT_FINANCIAL_ACCOUNT_NAME,
+            },
+            select: { id: true },
+        });
+
+        if (existingAccount) {
+            return existingAccount.id;
+        }
+
+        const account = await this.prisma.financialAccount.create({
+            data: {
+                name: DEFAULT_FINANCIAL_ACCOUNT_NAME,
+                type: FinancialAccountType.BANK_ACCOUNT,
+                initialBalance: new Prisma.Decimal(0),
+                includeInDashboard: true,
+                userId,
+            },
+            select: { id: true },
+        });
+
+        return account.id;
+    }
+
+    private async resolveFinancialAccountId(
+        userId: string,
+        financialAccountId?: string,
+    ): Promise<string> {
+        if (!financialAccountId) {
+            return this.getOrCreateDefaultFinancialAccountId(userId);
+        }
+
+        const account = await this.prisma.financialAccount.findFirst({
+            where: {
+                id: financialAccountId,
+                userId,
+                isArchived: false,
+            },
+            select: { id: true },
+        });
+
+        if (!account) {
+            throw new BadRequestException('Conta financeira não encontrada!');
+        }
+
+        return account.id;
+    }
+
+    private async getFinancialAccountIdsFilter(
+        userId: string,
+        filters?: FinancialAccountFilterInput,
+    ): Promise<string[] | undefined> {
+        const requestedIds = [
+            ...(filters?.financialAccountId ? [filters.financialAccountId] : []),
+            ...(filters?.financialAccountIds ?? []),
+        ]
+            .map((id) => id.trim())
+            .filter(Boolean);
+
+        const uniqueIds = [...new Set(requestedIds)];
+
+        if (uniqueIds.length === 0) {
+            return undefined;
+        }
+
+        const accounts = await this.prisma.financialAccount.findMany({
+            where: {
+                id: { in: uniqueIds },
+                userId,
+            },
+            select: { id: true },
+        });
+
+        if (accounts.length !== uniqueIds.length) {
+            throw new BadRequestException('Uma ou mais contas financeiras não foram encontradas!');
+        }
+
+        return uniqueIds;
+    }
 
     async create(userId: string, dto: CreateTransactionDto) {
         const category = await this.prisma.category.findFirst({
@@ -56,6 +161,11 @@ export class TransactionsService {
         if (!category) {
             throw new BadRequestException('Categoria não encontrada!');
         }
+
+        const financialAccountId = await this.resolveFinancialAccountId(
+            userId,
+            dto.financialAccountId,
+        );
 
         //Parcelamento
         if (dto.type === TransactionType.CREDIT_INSTALLMENT) {
@@ -87,6 +197,7 @@ export class TransactionsService {
                 currentInstallment: dto.currentInstallment,
                 installmentGroupId: dto.installmentGroupId,
                 categoryId: dto.categoryId,
+                financialAccountId,
                 userId: userId,
             },
             select: {
@@ -100,13 +211,17 @@ export class TransactionsService {
                 currentInstallment: true,
                 installmentGroupId: true,   
                 categoryId: true,
+                financialAccountId: true,
                 category: {
                     select: {
                         id: true,
                         name: true,
                         icon: true,
                     }
-                }
+                },
+                financialAccount: {
+                    select: FINANCIAL_ACCOUNT_SUMMARY_SELECT,
+                },
             }
         });
 
@@ -120,15 +235,21 @@ export class TransactionsService {
         const where: any = { userId }
 
         if (filters.startDate) {
-            where.date = { ...where.date, gte: new Date(filters.startDate) };
+            where.date = { ...where.date, gte: toLocalDate(filters.startDate) };
         }
 
         if (filters.endDate) {
-            where.date = { ...where.date, lte: new Date(filters.endDate) };
+            where.date = { ...where.date, lte: endOfLocalDate(filters.endDate) };
         }
 
         if (filters.categoryId) {
             where.categoryId = filters.categoryId;
+        }
+
+        const financialAccountIds = await this.getFinancialAccountIdsFilter(userId, filters);
+
+        if (financialAccountIds) {
+            where.financialAccountId = { in: financialAccountIds };
         }
 
         if (filters.type) {
@@ -167,13 +288,17 @@ export class TransactionsService {
                 installmentGroupId: true,
                 createdAt: true,
                 categoryId: true,
+                financialAccountId: true,
                 category: {
                     select: {
                         id: true,
                         name: true,
                         icon: true,
                     }
-                }
+                },
+                financialAccount: {
+                    select: FINANCIAL_ACCOUNT_SUMMARY_SELECT,
+                },
             },
             orderBy: {
                 date: 'desc',
@@ -188,15 +313,21 @@ export class TransactionsService {
         const where: any = { userId };
 
         if (filters?.startDate) {
-            where.date = { ...where.date, gte: new Date(filters.startDate) };
+            where.date = { ...where.date, gte: toLocalDate(filters.startDate) };
         }
 
         if (filters?.endDate) {
-            where.date = { ...where.date, lte: new Date(filters.endDate) };
+            where.date = { ...where.date, lte: endOfLocalDate(filters.endDate) };
         }
 
         if (filters?.type) {
             where.type = filters.type;
+        }
+
+        const financialAccountIds = await this.getFinancialAccountIdsFilter(userId, filters);
+
+        if (financialAccountIds) {
+            where.financialAccountId = { in: financialAccountIds };
         }
 
         if (filters?.isPending !== undefined) {
@@ -215,26 +346,33 @@ export class TransactionsService {
             },
         });
 
-        const totals = await Promise.all( //espera executar tudo os findUnique em paralelo
-            aggregations.map(async (agg) => {
-                const category = await this.prisma.category.findUnique({
-                    where: { id: agg.categoryId },
-                    select: {
-                        id: true,
-                        name: true,
-                        icon: true,
-                    }
-                });
+        const categories = await this.prisma.category.findMany({
+            where: {
+                id: { in: aggregations.map((agg) => agg.categoryId) },
+                userId,
+            },
+            select: {
+                id: true,
+                name: true,
+                icon: true,
+            },
+        });
 
-                return {
-                    categoryId: agg.categoryId,
-                    categoryName: category?.name || 'Categoria não encontrada',
-                    categoryIcon: category?.icon || null,
-                    totalAmount: agg._sum.amount?.toString() || '0',
-                    transactionCount: agg._count.id,
-                };
-            })
+        const categoriesById = new Map(
+            categories.map((category) => [category.id, category])
         );
+
+        const totals = aggregations.map((agg) => {
+            const category = categoriesById.get(agg.categoryId);
+
+            return {
+                categoryId: agg.categoryId,
+                categoryName: category?.name || 'Categoria não encontrada',
+                categoryIcon: category?.icon || null,
+                totalAmount: agg._sum.amount?.toString() || '0',
+                transactionCount: agg._count.id,
+            };
+        });
 
         return totals.sort((a, b) =>
             parseFloat(b.totalAmount) - parseFloat(a.totalAmount)
@@ -260,12 +398,16 @@ export class TransactionsService {
                 currentInstallment: true,
                 installmentGroupId: true,
                 categoryId: true,
+                financialAccountId: true,
                 category: {
                     select: {
                         id: true,
                         name: true,
                         icon: true,
                     },
+                },
+                financialAccount: {
+                    select: FINANCIAL_ACCOUNT_SUMMARY_SELECT,
                 },
                 createdAt: true,
             },
@@ -295,6 +437,10 @@ export class TransactionsService {
             }
         }
 
+        if (dto.financialAccountId) {
+            await this.resolveFinancialAccountId(userId, dto.financialAccountId);
+        }
+
         const data = removeUndefined({ // remove o que não foi passado para atualizar com o que foi
             type:        dto.type,
             amount:      dto.amount         !== undefined ? new Prisma.Decimal(dto.amount) : undefined,
@@ -302,6 +448,7 @@ export class TransactionsService {
             isPending:   dto.isPending,
             description: dto.description,
             category:    dto.categoryId     !== undefined ? { connect: {id: dto.categoryId } } : undefined,
+            financialAccount: dto.financialAccountId !== undefined ? { connect: { id: dto.financialAccountId } } : undefined,
         });
        
 
@@ -324,13 +471,17 @@ export class TransactionsService {
                     installmentGroupId: true,
                     createdAt: true,
                     categoryId: true,
+                    financialAccountId: true,
                     category: {
                         select: {
                             id: true,
                             name: true,
                             icon: true,
                         }
-                    }
+                    },
+                    financialAccount: {
+                        select: FINANCIAL_ACCOUNT_SUMMARY_SELECT,
+                    },
                 }
             });
 
@@ -407,19 +558,28 @@ export class TransactionsService {
             throw new BadRequestException('Categoria não encontrada!');
         }
 
-        let baseAmountPerInstallment: number;
-        let totalToDistribute: number;
+        const financialAccountId = await this.resolveFinancialAccountId(
+            userId,
+            dto.financialAccountId,
+        );
+
+        let baseAmountCents: number;
+        let totalToDistributeCents: number;
 
         if (dto.totalAmount) {
-            totalToDistribute = dto.totalAmount;
-            baseAmountPerInstallment = Math.floor((dto.totalAmount / dto.totalInstallments) * 100) / 100;
+            totalToDistributeCents = Math.round(dto.totalAmount * 100);
+            baseAmountCents = Math.floor(totalToDistributeCents / dto.totalInstallments);
         } else {
-            baseAmountPerInstallment = dto.installmentAmount!;
-            totalToDistribute = dto.installmentAmount! * dto.totalInstallments;
+            baseAmountCents = Math.round(dto.installmentAmount! * 100);
+            totalToDistributeCents = baseAmountCents * dto.totalInstallments;
+        }
+
+        if (baseAmountCents < 1) {
+            throw new BadRequestException('O valor total é pequeno demais para o número de parcelas.');
         }
 
         const installmentGroupId = randomUUID();
-        const firstDate = new Date(dto.firstInstallmentDate);
+        const firstDate = toLocalDate(dto.firstInstallmentDate);
 
         const installmentsData: Array<{
             type: TransactionType;
@@ -431,28 +591,28 @@ export class TransactionsService {
             currentInstallment: number;
             installmentGroupId: string;
             categoryId: string;
+            financialAccountId: string;
             userId: string;
         }> = [];
 
-        let accumulatedAmount = 0;
+        let accumulatedAmountCents = 0;
 
         for (let i = 1; i <= dto.totalInstallments; i++) {
             const installmentDate = new Date(firstDate);
             installmentDate.setMonth(firstDate.getMonth() + (i - 1));
 
-            let currentAmount: number;
+            let currentAmountCents: number;
 
             if (i === dto.totalInstallments) {
-                currentAmount = totalToDistribute - accumulatedAmount;
-                currentAmount = Math.round(currentAmount * 100) / 100;
+                currentAmountCents = totalToDistributeCents - accumulatedAmountCents;
             } else {
-                currentAmount = baseAmountPerInstallment;
-                accumulatedAmount += currentAmount;
+                currentAmountCents = baseAmountCents;
+                accumulatedAmountCents += currentAmountCents;
             }
 
             installmentsData.push({
                 type: TransactionType.CREDIT_INSTALLMENT,
-                amount: currentAmount,
+                amount: currentAmountCents / 100,
                 date: installmentDate,
                 isPending: dto.isPending || false,
                 description: dto.description || null,
@@ -460,6 +620,7 @@ export class TransactionsService {
                 currentInstallment: i,
                 installmentGroupId: installmentGroupId,
                 categoryId: dto.categoryId,
+                financialAccountId,
                 userId: userId,
             });
         }
@@ -472,7 +633,7 @@ export class TransactionsService {
             message: `${dto.totalInstallments} parcelas criadas com sucesso!`,
             installmentGroupId: installmentGroupId,
             totalInstallments: dto.totalInstallments,
-            installmentValue: baseAmountPerInstallment.toFixed(2),
+            installmentValue: (baseAmountCents / 100).toFixed(2),
             installments: createdInstallments.map((installment) => ({
                 id: installment.id,
                 currentInstallment: installment.currentInstallment,
@@ -489,15 +650,22 @@ export class TransactionsService {
         const [year, monthNum] = month.split('-');
         const startDate = new Date(parseInt(year), parseInt(monthNum) - 1, 1);
         const endDate = new Date(parseInt(year), parseInt(monthNum), 0, 23, 59, 59);
+        const financialAccountIds = await this.getFinancialAccountIdsFilter(userId, filters);
+
+        const where: Prisma.TransactionWhereInput = {
+            userId,
+            date: {
+                gte: startDate,
+                lte: endDate,
+            },
+        };
+
+        if (financialAccountIds) {
+            where.financialAccountId = { in: financialAccountIds };
+        }
 
         const transactions = await this.prisma.transaction.findMany({
-            where: {
-                userId,
-                date: {
-                    gte: startDate,
-                    lte: endDate,
-                },
-            },
+            where,
             select: {
                 type: true,
                 amount: true,
@@ -553,15 +721,22 @@ export class TransactionsService {
 
         const startDate = new Date(startYear, startMonthNum - 1, 1);
         const endDate = new Date(endYear, endMonthNum, 0, 23, 59, 59)
+        const financialAccountIds = await this.getFinancialAccountIdsFilter(userId, filters);
+
+        const where: Prisma.TransactionWhereInput = {
+            userId,
+            date: {
+                gte: startDate,
+                lte: endDate,
+            },
+        };
+
+        if (financialAccountIds) {
+            where.financialAccountId = { in: financialAccountIds };
+        }
 
         const transactions = await this.prisma.transaction.findMany({
-            where: {
-                userId,
-                date: {
-                    gte: startDate,
-                    lte: endDate,
-                },
-            },
+            where,
             select: {
                 type: true,
                 amount: true,
@@ -634,16 +809,23 @@ export class TransactionsService {
 
         const startDate = new Date(startYear, startMonthNum - 1, 1)
         const endDate = new Date(endYear, endMonthNum, 0, 23, 59, 59)
+        const financialAccountIds = await this.getFinancialAccountIdsFilter(userId, filters);
+
+        const where: Prisma.TransactionWhereInput = {
+            userId,
+            date: {
+                gte: startDate,
+                lte: endDate,
+            },
+        };
+
+        if (financialAccountIds) {
+            where.financialAccountId = { in: financialAccountIds };
+        }
 
 
         const transactions = await this.prisma.transaction.findMany({
-            where: {
-                userId,
-                date: {
-                    gte: startDate,
-                    lte: endDate,
-                },
-            },
+            where,
             select: {
                 type: true,
                 amount: true,

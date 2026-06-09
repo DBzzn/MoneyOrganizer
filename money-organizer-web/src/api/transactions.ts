@@ -14,6 +14,7 @@ interface TransactionPayload {
     amount: number
     date: string
     categoryId: string
+    financialAccountId?: string
     isPending?: boolean
     description?: string
     totalInstallments?: number
@@ -27,6 +28,7 @@ interface InstallmentPayload {
     totalInstallments: number
     firstInstallmentDate: string
     categoryId: string
+    financialAccountId?: string
     description?: string
     isPending?: boolean
 }
@@ -35,6 +37,8 @@ interface TransactionFilters {
     startDate?: string
     endDate?: string
     categoryId?: string
+    financialAccountId?: string
+    financialAccountIds?: string
     type?: TransactionType
     isPending?: boolean
     search?: string
@@ -46,6 +50,7 @@ interface ReportFilters {
     month?: string
     startMonth?: string
     endMonth?: string
+    financialAccountIds?: string
 }
 
 export const getTransactions = (filters?: TransactionFilters) =>

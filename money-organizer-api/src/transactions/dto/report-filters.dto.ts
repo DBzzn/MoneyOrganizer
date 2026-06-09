@@ -3,6 +3,7 @@
     IsString,
     Matches,
 } from 'class-validator';
+import { Transform } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class ReportFiltersDto {
@@ -13,7 +14,7 @@ export class ReportFiltersDto {
     })
     @IsOptional()
     @IsString()
-    @Matches(/^\d{4}(-\d{2})?$/, {
+    @Matches(/^\d{4}-\d{2}$/, {
         message: 'a data deve estar no formato YYYY-MM (ex: 2026-03)'
     })
     month?: string; 
@@ -25,7 +26,7 @@ export class ReportFiltersDto {
     })
     @IsOptional()
     @IsString()
-    @Matches(/^\d{4}(-\d{2})?$/, {
+    @Matches(/^\d{4}-\d{2}$/, {
         message: 'a data deve estar no formato YYYY-MM (ex: 2052-06)'
     })
     startMonth?: string;
@@ -37,8 +38,28 @@ export class ReportFiltersDto {
     })
     @IsOptional()
     @IsString()
-    @Matches(/^\d{4}(-\d{2})?$/, {
+    @Matches(/^\d{4}-\d{2}$/, {
         message: 'a data deve estar no formato YYYY-MM (ex: 2013-12)'
     })
     endMonth ?: string;
+
+    @ApiProperty({
+        description: 'Filtrar relatórios por múltiplas contas financeiras',
+        example: 'uuid-conta-1,uuid-conta-2',
+        required: false,
+    })
+    @IsOptional()
+    @Transform(({ value }) => {
+        if (Array.isArray(value)) {
+            return value.flatMap((item) => String(item).split(',')).filter(Boolean);
+        }
+
+        if (typeof value === 'string') {
+            return value.split(',').filter(Boolean);
+        }
+
+        return undefined;
+    })
+    @IsString({ each: true })
+    financialAccountIds?: string[];
 }

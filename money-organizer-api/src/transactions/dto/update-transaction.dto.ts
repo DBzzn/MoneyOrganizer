@@ -69,4 +69,13 @@ export class UpdateTransactionDto {
     @IsString()
     @IsOptional()
     categoryId?: string;
+
+    @ApiProperty({
+        description: 'ID da conta financeira',
+        example: 'novo-uuid-da-conta-financeira',
+        required: false,
+    })
+    @IsString()
+    @IsOptional()
+    financialAccountId?: string;
 }

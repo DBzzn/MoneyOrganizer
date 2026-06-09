@@ -1,6 +1,6 @@
 ﻿import { ConflictException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { Prisma } from '../../generated/prisma/client';
+import { FinancialAccountType, Prisma } from '../../generated/prisma/client';
 import { CreateUserDto } from './dto/create-user.dto';
 import * as bcrypt from 'bcrypt';
 
@@ -38,6 +38,16 @@ export class UsersService {
                 ...category,
                 userId: user.id,
             })),
+        });
+
+        await this.prisma.financialAccount.create({
+            data: {
+                name: 'Conta inicial',
+                type: FinancialAccountType.BANK_ACCOUNT,
+                initialBalance: new Prisma.Decimal(0),
+                includeInDashboard: true,
+                userId: user.id,
+            },
         });
 
         return user;

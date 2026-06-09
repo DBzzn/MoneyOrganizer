@@ -8,6 +8,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { CategoriesModule } from './categories/categories.module';
 import { TransactionsModule } from './transactions/transactions.module';
+import { FinancialAccountsModule } from './financial-accounts/financial-accounts.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { TransactionsModule } from './transactions/transactions.module';
     PrismaModule,
     AuthModule,
     CategoriesModule,
+    FinancialAccountsModule,
     TransactionsModule,
   ],
   controllers: [AppController],

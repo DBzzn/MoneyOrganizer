@@ -2,7 +2,7 @@
 import {
   Injectable,
   NotFoundException,
-  ForbiddenException,
+  BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
@@ -42,11 +42,6 @@ export class CategoriesService {
 
     async update(userId: string, categoryId: string, dto: UpdateCategoryDto) {
         try {
-            const category = await this.prisma.category.findUnique({
-                where: { id: categoryId, userId, },
-            });
-
-
             return await this.prisma.category.update({
                 where: { id: categoryId, userId, },
                 data: dto,
@@ -61,6 +56,7 @@ export class CategoriesService {
             if (error?.code == 'P2025') {
                 throw new NotFoundException('Categoria NÃO encontrada!');
             }
+            throw error;
         }
     }
 
@@ -69,7 +65,25 @@ export class CategoriesService {
         try { 
             const category = await this.prisma.category.findUnique({
                 where: { id: categoryId, userId, },
+                select: { id: true },
             });
+
+            if (!category) {
+                throw new NotFoundException('Categoria NÃO encontrada!');
+            }
+
+            const linkedTransactions = await this.prisma.transaction.count({
+                where: {
+                    categoryId,
+                    userId,
+                },
+            });
+
+            if (linkedTransactions > 0) {
+                throw new BadRequestException(
+                    'Não é possível deletar uma categoria com transações vinculadas.'
+                );
+            }
 
             await this.prisma.category.delete({
                 where: { id: categoryId, userId, },
@@ -80,6 +94,7 @@ export class CategoriesService {
             if (error?.code == 'P2025') {
                 throw new NotFoundException('Categoria NÃO encontrada!');
             }
+            throw error;
         }
     }   
 

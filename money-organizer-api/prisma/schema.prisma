@@ -14,21 +14,22 @@ datasource db {
 }
 
 model User {
-  id           String        @id @default(uuid())
-  name         String
-  email        String        @unique
-  password     String
-  createdAt    DateTime      @default(now())
-  categories   Category[]
-  transactions Transaction[]
+  id                String             @id @default(uuid())
+  name              String
+  email             String             @unique
+  password          String
+  createdAt         DateTime           @default(now())
+  categories        Category[]
+  transactions      Transaction[]
+  financialAccounts FinancialAccount[]
 }
 
 model Category {
   id           String        @id @default(uuid())
   name         String
-  icon         String?  
+  icon         String?
   userId       String
-  user         User         @relation(fields: [userId], references: [id])
+  user         User          @relation(fields: [userId], references: [id])
   transactions Transaction[]
   createdAt    DateTime      @default(now())
 }
@@ -42,19 +43,49 @@ enum TransactionType {
   INCOME
 }
 
+enum FinancialAccountType {
+  BANK_ACCOUNT
+  CASH_WALLET
+  OTHER
+}
+
+model FinancialAccount {
+  id                 String               @id @default(uuid())
+  name               String
+  type               FinancialAccountType @default(BANK_ACCOUNT)
+  institutionName    String?
+  icon               String?
+  color              String?
+  initialBalance     Decimal              @default(0) @db.Decimal(10, 2)
+  includeInDashboard Boolean              @default(true)
+  isArchived         Boolean              @default(false)
+  userId             String
+  user               User                 @relation(fields: [userId], references: [id])
+  transactions       Transaction[]
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+
+  @@index([userId])
+  @@index([userId, isArchived])
+}
+
 model Transaction {
-  id                  String          @id @default(uuid())
-  type                TransactionType
-  amount              Decimal         @db.Decimal(10, 2)
-  date                DateTime
-  isPending           Boolean         @default(false)
-  description         String?
-  totalInstallments   Int?
-  currentInstallment  Int?
-  installmentGroupId  String?
-  categoryId          String
-  category            Category        @relation(fields: [categoryId], references: [id])
-  userId              String
-  user                User            @relation(fields: [userId], references: [id])
-  createdAt           DateTime        @default(now())
+  id                 String           @id @default(uuid())
+  type               TransactionType
+  amount             Decimal          @db.Decimal(10, 2)
+  date               DateTime
+  isPending          Boolean          @default(false)
+  description        String?
+  totalInstallments  Int?
+  currentInstallment Int?
+  installmentGroupId String?
+  categoryId         String
+  category           Category         @relation(fields: [categoryId], references: [id])
+  financialAccountId String
+  financialAccount   FinancialAccount @relation(fields: [financialAccountId], references: [id])
+  userId             String
+  user               User             @relation(fields: [userId], references: [id])
+  createdAt          DateTime         @default(now())
+
+  @@index([financialAccountId])
 }

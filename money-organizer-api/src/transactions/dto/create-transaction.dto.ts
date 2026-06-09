@@ -66,8 +66,17 @@ export class CreateTransactionDto {
         example: 'uuid-da-categoria-aqui',
     })
     @IsString()
-    @IsOptional()
+    @IsNotEmpty()
     categoryId: string;
+
+    @ApiProperty({
+        description: 'ID da conta financeira usada na transação',
+        example: 'uuid-da-conta-financeira',
+        required: false,
+    })
+    @IsString()
+    @IsOptional()
+    financialAccountId?: string;
 
     //Quando há Parcelas:
     @ApiProperty({

@@ -39,6 +39,35 @@ export class QueryTransactionsDto {
   categoryId?: string;
 
   @ApiProperty({
+    description: 'Filtrar por ID de conta financeira específica',
+    example: 'uuid-da-conta-financeira',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  financialAccountId?: string;
+
+  @ApiProperty({
+    description: 'Filtrar por múltiplas contas financeiras',
+    example: 'uuid-conta-1,uuid-conta-2',
+    required: false,
+  })
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (Array.isArray(value)) {
+      return value.flatMap((item) => String(item).split(',')).filter(Boolean);
+    }
+
+    if (typeof value === 'string') {
+      return value.split(',').filter(Boolean);
+    }
+
+    return undefined;
+  })
+  @IsString({ each: true })
+  financialAccountIds?: string[];
+
+  @ApiProperty({
     description: 'Filtrar por tipo de transação',
     enum: TransactionType,
     example: TransactionType.PIX,

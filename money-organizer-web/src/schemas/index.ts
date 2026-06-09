@@ -35,6 +35,7 @@ export const transactionSchema = z.object({
     amount: z.number().min(0.01, 'O valor deve ser maior que zero!'),
     date: z.string().min(1, 'a Data é obrigatória!'),
     categoryId: z.string().min(1, 'a Categoria é obrigatória!'),
+    financialAccountId: z.string().min(1, 'A conta é obrigatória!'),
     isPending: z.boolean(),
     description: z.string().optional()
 })
@@ -51,6 +52,7 @@ export const updateTransactionSchema = z.object({
   amount: z.number().min(0.01, 'Valor deve ser maior que zero'),
   date: z.string().min(1, 'Data é obrigatória').optional(),
   categoryId: z.string().min(1, 'Categoria é obrigatória').optional(),
+  financialAccountId: z.string().min(1, 'Conta é obrigatória').optional(),
   isPending: z.boolean().optional(),
   description: z.string().optional(),
 })
@@ -60,8 +62,20 @@ export const installmentSchema = z.object({
     totalInstallments: z.number().min(2, 'Mínimo de 2 parcelas!'), //credito a vista tem que ser tratado parecido com debito
     firstInstallmentDate: z.string().min(1, 'a Data da primeira parcela é obrigatória!'),
     categoryId: z.string().min(1, 'A Categoria é obrigatória!'),
+    financialAccountId: z.string().min(1, 'A conta é obrigatória!'),
     description: z.string().optional(),
     isPending: z.boolean().optional(),
+})
+
+export const financialAccountSchema = z.object({
+    name: z.string().min(1, 'O nome é obrigatório!'),
+    type: z.enum(['BANK_ACCOUNT', 'CASH_WALLET', 'OTHER']),
+    institutionName: z.string().optional(),
+    icon: z.string().optional(),
+    color: z.string().optional(),
+    initialBalance: z.number().min(0, 'O saldo inicial não pode ser negativo'),
+    includeInDashboard: z.boolean(),
+    isArchived: z.boolean().optional(),
 })
 
 export type LoginFormData = z.infer<typeof loginSchema>
@@ -69,3 +83,4 @@ export type RegisterFormData = z.infer<typeof registerSchema>
 export type TransactionFormData = z.infer<typeof transactionSchema>
 export type UpdateTransactionFormData = z.infer<typeof updateTransactionSchema>
 export type InstallmentFormData = z.infer<typeof installmentSchema>
+export type FinancialAccountFormData = z.infer<typeof financialAccountSchema>

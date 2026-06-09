@@ -26,11 +26,11 @@ export default function ConfirmModal({
 
     return (
         <div
-            className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-sm"
+            className="fixed inset-0 z-50 flex items-center justify-center px-4 backdrop-blur-sm"
             style={{ backgroundColor: 'rgba(0,0,0,0.6)' }}
         >
             <div
-                className="glass-heavy shadow-xl p-6 w-full max-w-sm"
+                className="glass-heavy w-full max-w-sm p-5 shadow-xl sm:p-6"
                 style={{
                     backgroundColor: 'var(--color-bg-modal)',
                     color: 'var(--color-text)',
@@ -49,10 +49,10 @@ export default function ConfirmModal({
                     {message}
                 </p>
 
-                <div className="flex justify-end gap-3">
+                <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
                     <button
                         onClick={onCancel}
-                        className="px-4 py-2 rounded-lg text-sm font-medium"
+                        className="w-full px-4 py-2 rounded-lg text-sm font-medium sm:w-auto"
                         style={{
                             backgroundColor: 'var(--color-bg)',
                             border: '1px solid var(--color-border)',
@@ -65,7 +65,7 @@ export default function ConfirmModal({
                     {secondaryAction && (
                         <button
                             onClick={secondaryAction.onClick}
-                            className="px-4 py-2 rounded-lg text-sm font-medium text-white"
+                            className="w-full px-4 py-2 rounded-lg text-sm font-medium text-white sm:w-auto"
                             style={{ backgroundColor: '#f97316' }}
                         >
                             {secondaryAction.label}
@@ -74,7 +74,7 @@ export default function ConfirmModal({
 
                     <button
                         onClick={onConfirm}
-                        className="px-4 py-2 rounded-lg text-sm font-medium text-white"
+                        className="w-full px-4 py-2 rounded-lg text-sm font-medium text-white sm:w-auto"
                         style={{ backgroundColor: '#ef4444' }}
                     >
                         {confirmLabel}

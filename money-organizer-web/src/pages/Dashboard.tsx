@@ -1,9 +1,11 @@
 import { Layout } from '../components/Layout'
 import { useState, useEffect, type ChangeEvent } from 'react'
-import { getMonthlyBalance, getEvolution, getTotalsByCategory, getTransactions } from '../api/transactions'
-import { formatCurrency, formatDate, formatMonth } from '../utils'
+import { getMonthlyBalance, getEvolution, getTransactions } from '../api/transactions'
+import { getFinancialAccounts } from '../api/financialAccounts'
+import { buildAccountIdsParam, formatCurrency, formatDate, formatMonth } from '../utils'
 import { ChartTooltip } from '../components/ChartTooltip'
-import type { MonthlyBalance, EvolutionEntry, CategoryTotal, Transaction, TransactionType } from '../types'
+import { AccountFilter } from '../components/AccountFilter'
+import type { FinancialAccount, MonthlyBalance, EvolutionEntry, Transaction, TransactionType } from '../types'
 import {
   ResponsiveContainer,
   AreaChart,
@@ -128,6 +130,33 @@ function getDominantExpenseCategory(transactions: Transaction[]) {
   return Array.from(totals.values()).sort((a, b) => b.total - a.total)[0]
 }
 
+function getExpenseCategoryChartData(transactions: Transaction[]) {
+  const totals = new Map<string, {
+    name: string
+    icon?: string
+    total: number
+  }>()
+
+  transactions.filter(isExpenseTransaction).forEach((transaction) => {
+    const current = totals.get(transaction.categoryId) ?? {
+      name: transaction.category.name,
+      icon: transaction.category.icon,
+      total: 0,
+    }
+
+    current.total += getTransactionAmount(transaction)
+    totals.set(transaction.categoryId, current)
+  })
+
+  return Array.from(totals.values())
+    .filter((category) => category.total > 0)
+    .sort((a, b) => b.total - a.total)
+    .map((category) => ({
+      name: `${category.icon ?? ''} ${category.name}`,
+      value: category.total,
+    }))
+}
+
 function TransactionRanking({
   title,
   icon: Icon,
@@ -144,7 +173,7 @@ function TransactionRanking({
   emptyMessage: string
 }) {
   return (
-    <div className="glass rounded-2xl p-6"
+    <div className="glass rounded-2xl p-5 sm:p-6"
       style={{ backgroundColor: 'var(--color-bg-card)', border: '1px solid var(--color-border)' }}>
       <div className="flex items-center gap-2 mb-4">
         <Icon size={18} style={{ color: amountColor }} />
@@ -186,29 +215,49 @@ export function Dashboard() {
   const [isLoading, setIsLoading] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [selectedMonth, setSelectedMonth] = useState(getCurrentMonth)
-  const [categories, setCategories] = useState<CategoryTotal[]>([])
   const [evolution, setEvolution] = useState<EvolutionEntry[]>([])
   const [balance, setBalance] = useState<MonthlyBalance | null>(null)
   const [transactions, setTransactions] = useState<Transaction[]>([])
+  const [financialAccounts, setFinancialAccounts] = useState<FinancialAccount[]>([])
+  const [selectedAccountIds, setSelectedAccountIds] = useState<string[]>([])
+
+  useEffect(() => {
+    getFinancialAccounts()
+      .then((res) => {
+        const accountIds = res.data.map((account) => account.id)
+
+        setFinancialAccounts(res.data)
+        setSelectedAccountIds((currentIds) => {
+          if (currentIds.length === 0) {
+            return accountIds
+          }
+
+          const validIds = currentIds.filter((id) => accountIds.includes(id))
+
+          return validIds.length > 0 ? validIds : accountIds
+        })
+      })
+  }, [])
+
+  const accountIdsParam = buildAccountIdsParam(selectedAccountIds, financialAccounts.length)
 
   useEffect(() => {
     let isActive = true
     const monthRange = getMonthRange(selectedMonth)
     const monthTransactionFilters = getMonthTransactionFilters(selectedMonth)
     const evolutionRange = getEvolutionRange(selectedMonth)
+    const accountFilters = accountIdsParam ? { financialAccountIds: accountIdsParam } : {}
 
     Promise.all([
-      getMonthlyBalance({ month: monthRange.month }),
-      getEvolution(evolutionRange),
-      getTotalsByCategory(monthTransactionFilters),
-      getTransactions(monthTransactionFilters),
+      getMonthlyBalance({ month: monthRange.month, ...accountFilters }),
+      getEvolution({ ...evolutionRange, ...accountFilters }),
+      getTransactions({ ...monthTransactionFilters, ...accountFilters }),
     ])
-      .then(([balanceRes, evolutionRes, categoriesRes, transactionsRes]) => {
+      .then(([balanceRes, evolutionRes, transactionsRes]) => {
         if (!isActive) return
 
         setBalance(balanceRes.data)
         setEvolution(evolutionRes.data)
-        setCategories(categoriesRes.data)
         setTransactions(transactionsRes.data)
       })
       .finally(() => {
@@ -221,7 +270,7 @@ export function Dashboard() {
     return () => {
       isActive = false
     }
-  }, [selectedMonth])
+  }, [accountIdsParam, selectedMonth])
 
   if (isLoading) {
     return (
@@ -343,12 +392,7 @@ export function Dashboard() {
     '#8b5cf6', '#ec4899', '#14b8a6', '#f97316',
   ]
 
-  const pieData = categories
-    .filter((c) => parseFloat(String(c.totalAmount)) > 0)
-    .map((c) => ({
-      name: `${c.categoryIcon ?? ''} ${c.categoryName}`,
-      value: parseFloat(String(c.totalAmount)),
-    }))
+  const pieData = getExpenseCategoryChartData(transactions)
 
   const pieTotal = pieData.reduce((sum, item) => sum + item.value, 0)
 
@@ -361,65 +405,73 @@ export function Dashboard() {
           <p className="mt-1" style={{ color: 'var(--color-text-muted)' }}>Visão geral das suas finanças</p>
         </div>
 
-        <div
-          className="glass grid w-full grid-cols-2 items-center gap-2 rounded-2xl p-2 sm:w-fit sm:grid-cols-[2.5rem_14rem_2.5rem]"
-          style={{ backgroundColor: 'var(--color-bg-card)', border: '1px solid var(--color-border)' }}
-        >
-          <button
-            type="button"
-            onClick={goToPreviousMonth}
-            disabled={isRefreshing}
-            aria-label="Mês anterior"
-            title="Mês anterior"
-            className="app-icon-control flex h-10 w-10 items-center justify-center rounded-xl justify-self-start sm:justify-self-auto"
-          >
-            <ChevronLeft size={18} />
-          </button>
-
-          <label htmlFor="dashboard-month" className="sr-only">
-            Mês do dashboard
-          </label>
+        <div className="grid gap-4 xl:grid-cols-[auto_minmax(0,1fr)] xl:items-start">
           <div
-            className="app-control-shell order-first col-span-2 flex h-10 min-w-0 items-center gap-2 rounded-xl px-3 sm:order-none sm:col-span-1"
+            className="glass grid w-full grid-cols-[20%_45%_20%] items-center justify-between rounded-2xl p-2 sm:w-fit sm:grid-cols-[2.5rem_14rem_2.5rem] sm:gap-2"
+            style={{ backgroundColor: 'var(--color-bg-card)', border: '1px solid var(--color-border)' }}
           >
-            <Calendar size={16} className="hidden shrink-0 sm:block" style={{ color: 'var(--color-text-muted)' }} />
-            <input
-              id="dashboard-month"
-              type="month"
-              value={selectedMonth}
-              onChange={handleMonthChange}
+            <button
+              type="button"
+              onClick={goToPreviousMonth}
               disabled={isRefreshing}
-              aria-label={`Mês selecionado: ${selectedMonthLabel}`}
-              className="min-w-0 flex-1 bg-transparent text-sm font-medium outline-none disabled:cursor-not-allowed"
-              style={{ color: 'var(--color-text)' }}
-            />
+              aria-label="Mês anterior"
+              title="Mês anterior"
+              className="app-icon-control flex h-10 w-full items-center justify-center rounded-xl sm:w-10"
+            >
+              <ChevronLeft size={18} />
+            </button>
+
+            <label htmlFor="dashboard-month" className="sr-only">
+              Mês do dashboard
+            </label>
+            <div
+              className="app-control-shell flex h-10 min-w-0 items-center gap-2 rounded-xl px-2 sm:px-3"
+            >
+              <Calendar size={16} className="hidden shrink-0 sm:block" style={{ color: 'var(--color-text-muted)' }} />
+              <input
+                id="dashboard-month"
+                type="month"
+                value={selectedMonth}
+                onChange={handleMonthChange}
+                disabled={isRefreshing}
+                aria-label={`Mês selecionado: ${selectedMonthLabel}`}
+                className="min-w-0 flex-1 bg-transparent text-sm font-medium outline-none disabled:cursor-not-allowed"
+                style={{ color: 'var(--color-text)' }}
+              />
+            </div>
+
+            <button
+              type="button"
+              onClick={goToNextMonth}
+              disabled={isRefreshing}
+              aria-label="Próximo mês"
+              title="Próximo mês"
+              className="app-icon-control flex h-10 w-full items-center justify-center rounded-xl sm:w-10"
+            >
+              <ChevronRight size={18} />
+            </button>
           </div>
 
-          <button
-            type="button"
-            onClick={goToNextMonth}
-            disabled={isRefreshing}
-            aria-label="Próximo mês"
-            title="Próximo mês"
-            className="app-icon-control flex h-10 w-10 items-center justify-center rounded-xl justify-self-end sm:justify-self-auto"
-          >
-            <ChevronRight size={18} />
-          </button>
+          <AccountFilter
+            accounts={financialAccounts}
+            selectedAccountIds={selectedAccountIds}
+            onChange={setSelectedAccountIds}
+          />
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
           {cards.map((card) => (
             <div
               key={card.label}
-              className="glass rounded-2xl p-6 flex items-center gap-4"
+              className="glass flex items-center gap-4 rounded-2xl p-5 sm:p-6"
               style={{ backgroundColor: 'var(--color-bg-card)', border: '1px solid var(--color-border)' }}
             >
-              <div className="p-3 rounded-xl" style={{ backgroundColor: card.bg }}>
+              <div className="shrink-0 rounded-xl p-3" style={{ backgroundColor: card.bg }}>
                 <card.icon size={22} style={{ color: card.color }} />
               </div>
-              <div>
+              <div className="min-w-0">
                 <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>{card.label}</p>
-                <p className="text-xl font-bold" style={{ color: card.color }}>{card.value}</p>
+                <p className="break-words text-lg font-bold leading-tight sm:text-xl" style={{ color: card.color }}>{card.value}</p>
               </div>
             </div>
           ))}
@@ -444,7 +496,7 @@ export function Dashboard() {
             emptyMessage="Nenhuma receita registrada"
           />
 
-          <div className="glass rounded-2xl p-6"
+          <div className="glass rounded-2xl p-5 sm:p-6"
             style={{ backgroundColor: 'var(--color-bg-card)', border: '1px solid var(--color-border)' }}>
             <h2 className="text-lg font-semibold mb-4" style={{ color: 'var(--color-text)' }}>
               Sinais do mês
@@ -479,7 +531,7 @@ export function Dashboard() {
           </div>
         </div>
 
-        <div className="glass rounded-2xl p-6"
+        <div className="glass rounded-2xl p-5 sm:p-6"
           style={{ backgroundColor: 'var(--color-bg-card)', border: '1px solid var(--color-border)' }}>
           <h2 className="text-lg font-semibold mb-6" style={{ color: 'var(--color-text)' }}>
             Evolução dos últimos 6 meses
@@ -529,7 +581,7 @@ export function Dashboard() {
           )}
         </div>
 
-        <div className="glass rounded-2xl p-6"
+        <div className="glass rounded-2xl p-5 sm:p-6"
           style={{ backgroundColor: 'var(--color-bg-card)', border: '1px solid var(--color-border)' }}>
           <h2 className="text-lg font-semibold mb-6" style={{ color: 'var(--color-text)' }}>
             Gastos por categoria

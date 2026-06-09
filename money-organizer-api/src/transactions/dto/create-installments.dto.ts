@@ -6,7 +6,8 @@
     IsInt,
     Min,
     IsNumber,
-    ValidateIf
+    ValidateIf,
+    IsBoolean,
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
@@ -60,6 +61,15 @@ export class CreateInstallmentsDto {
   categoryId: string;
 
   @ApiProperty({
+    description: 'ID da conta financeira usada no parcelamento',
+    example: 'uuid-da-conta-financeira',
+    required: false,
+  })
+  @IsString()
+  @IsOptional()
+  financialAccountId?: string;
+
+  @ApiProperty({
     description: 'Descrição do parcelamento',
     example: 'Notebook Dell Inspiron',
     required: false,
@@ -74,5 +84,6 @@ export class CreateInstallmentsDto {
     required: false,
   })
   @IsOptional()
+  @IsBoolean()
   isPending?: boolean;
 }

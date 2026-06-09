@@ -91,6 +91,7 @@ async function bootstrap() {
       .addTag('users', 'Gerenciamento de Usuários')
       .addTag('auth', 'Autenticação e Autorização')
       .addTag('categories', 'Gerenciamento dos gastos por Categoria')
+      .addTag('financial-accounts', 'Gerenciamento de contas financeiras')
       .addTag('transactions', 'Gerenciamento de todas as transações')
       .addBearerAuth(
           {
