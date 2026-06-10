@@ -292,7 +292,7 @@ export function Reports() {
                     </div>
                     <div className="glass rounded-2xl p-5"
                         style={{ backgroundColor: 'var(--color-bg-card)', border: '1px solid var(--color-border)' }}>
-                        <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>Mes de maior aperto</p>
+                        <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>Mês de maior aperto</p>
                         <p className="text-xl font-bold mt-1" style={{ color: 'var(--color-expense)' }}>
                             {worstMonth ? `${formatMonth(worstMonth.month)} - ${formatCurrency(Number(worstMonth.balance))}` : 'Sem dados'}
                         </p>
@@ -326,7 +326,7 @@ export function Reports() {
                                                     {category.categoryIcon} {category.categoryName}
                                                 </p>
                                                 <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
-                                                    {category.transactionCount} transacoes - {percentage.toFixed(1)}% dos gastos listados
+                                                    {category.transactionCount} transações - {percentage.toFixed(1)}% dos gastos listados
                                                 </p>
                                             </div>
                                             <span className="text-sm font-semibold text-red-500 whitespace-nowrap">

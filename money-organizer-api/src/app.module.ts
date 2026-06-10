@@ -9,6 +9,7 @@ import { AuthModule } from './auth/auth.module';
 import { CategoriesModule } from './categories/categories.module';
 import { TransactionsModule } from './transactions/transactions.module';
 import { FinancialAccountsModule } from './financial-accounts/financial-accounts.module';
+import { TransfersModule } from './transfers/transfers.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { FinancialAccountsModule } from './financial-accounts/financial-accounts
     CategoriesModule,
     FinancialAccountsModule,
     TransactionsModule,
+    TransfersModule,
   ],
   controllers: [AppController],
   providers: [AppService, PrismaService],

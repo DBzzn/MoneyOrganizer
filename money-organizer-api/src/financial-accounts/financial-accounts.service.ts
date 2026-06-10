@@ -42,6 +42,25 @@ function startOfTomorrow(): Date {
 export class FinancialAccountsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  private async confirmOverduePendingMovements(userId: string) {
+    const overdueWhere = {
+      userId,
+      isPending: true,
+      date: { lt: startOfToday() },
+    };
+
+    await Promise.all([
+      this.prisma.transaction.updateMany({
+        where: overdueWhere,
+        data: { isPending: false },
+      }),
+      this.prisma.transfer.updateMany({
+        where: overdueWhere,
+        data: { isPending: false },
+      }),
+    ]);
+  }
+
   private async withCurrentBalances<T extends FinancialAccountSummary>(
     userId: string,
     accounts: T[],
@@ -50,23 +69,55 @@ export class FinancialAccountsService {
       return [];
     }
 
+    await this.confirmOverduePendingMovements(userId);
+
     const accountIds = accounts.map((account) => account.id);
     const today = startOfToday();
-    const transactionTotals = await this.prisma.transaction.groupBy({
-      by: ['financialAccountId', 'type'],
-      where: {
-        userId,
-        financialAccountId: { in: accountIds },
-        date: { lt: startOfTomorrow() },
-        OR: [
-          { isPending: false },
-          { date: { lt: today } },
-        ],
-      },
-      _sum: {
-        amount: true,
-      },
-    });
+    const effectiveMovementWhere = {
+      userId,
+      date: { lt: startOfTomorrow() },
+      OR: [
+        { isPending: false },
+        { date: { lt: today } },
+      ],
+    };
+
+    const [
+      transactionTotals,
+      outgoingTransferTotals,
+      incomingTransferTotals,
+    ] = await Promise.all([
+      this.prisma.transaction.groupBy({
+        by: ['financialAccountId', 'type'],
+        where: {
+          ...effectiveMovementWhere,
+          financialAccountId: { in: accountIds },
+        },
+        _sum: {
+          amount: true,
+        },
+      }),
+      this.prisma.transfer.groupBy({
+        by: ['fromAccountId'],
+        where: {
+          ...effectiveMovementWhere,
+          fromAccountId: { in: accountIds },
+        },
+        _sum: {
+          amount: true,
+        },
+      }),
+      this.prisma.transfer.groupBy({
+        by: ['toAccountId'],
+        where: {
+          ...effectiveMovementWhere,
+          toAccountId: { in: accountIds },
+        },
+        _sum: {
+          amount: true,
+        },
+      }),
+    ]);
 
     const totalsByAccount = transactionTotals.reduce((totals, item) => {
       const accountId = item.financialAccountId;
@@ -83,10 +134,30 @@ export class FinancialAccountsService {
       return totals;
     }, new Map<string, { income: number; expenses: number }>());
 
+    const outgoingTransfersByAccount = new Map(
+      outgoingTransferTotals.map((item) => [
+        item.fromAccountId,
+        Number(item._sum.amount ?? 0),
+      ]),
+    );
+
+    const incomingTransfersByAccount = new Map(
+      incomingTransferTotals.map((item) => [
+        item.toAccountId,
+        Number(item._sum.amount ?? 0),
+      ]),
+    );
+
     return accounts.map((account) => {
       const totals = totalsByAccount.get(account.id) ?? { income: 0, expenses: 0 };
+      const incomingTransfers = incomingTransfersByAccount.get(account.id) ?? 0;
+      const outgoingTransfers = outgoingTransfersByAccount.get(account.id) ?? 0;
       const currentBalance =
-        Number(account.initialBalance) + totals.income - totals.expenses;
+        Number(account.initialBalance) +
+        totals.income -
+        totals.expenses +
+        incomingTransfers -
+        outgoingTransfers;
 
       return {
         ...account,

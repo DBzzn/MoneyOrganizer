@@ -10,6 +10,7 @@ import { Register } from './pages/Register'
 import { Dashboard } from './pages/Dashboard'
 import { Categories } from './pages/Categories'
 import { Transactions } from './pages/Transactions'
+import { Transfers } from './pages/Transfers'
 import { Reports } from './pages/Reports'
 import { FinancialAccounts } from './pages/FinancialAccounts'
 
@@ -42,6 +43,12 @@ export default function App() {
                     <Route path="/transactions" element={
                         <PrivateRoute>
                             <Transactions />
+                        </PrivateRoute>
+                    }
+                    />
+                    <Route path="/transfers" element={
+                        <PrivateRoute>
+                            <Transfers />
                         </PrivateRoute>
                     }
                     />

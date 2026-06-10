@@ -22,16 +22,20 @@ model User {
   categories        Category[]
   transactions      Transaction[]
   financialAccounts FinancialAccount[]
+  transfers         Transfer[]
 }
 
 model Category {
   id           String        @id @default(uuid())
   name         String
   icon         String?
+  isArchived   Boolean       @default(false)
   userId       String
   user         User          @relation(fields: [userId], references: [id])
   transactions Transaction[]
   createdAt    DateTime      @default(now())
+
+  @@index([userId, isArchived])
 }
 
 enum TransactionType {
@@ -62,6 +66,8 @@ model FinancialAccount {
   userId             String
   user               User                 @relation(fields: [userId], references: [id])
   transactions       Transaction[]
+  outgoingTransfers  Transfer[]           @relation("OutgoingTransfers")
+  incomingTransfers  Transfer[]           @relation("IncomingTransfers")
   createdAt          DateTime             @default(now())
   updatedAt          DateTime             @updatedAt
 
@@ -88,4 +94,24 @@ model Transaction {
   createdAt          DateTime         @default(now())
 
   @@index([financialAccountId])
+}
+
+model Transfer {
+  id            String           @id @default(uuid())
+  amount        Decimal          @db.Decimal(10, 2)
+  date          DateTime
+  isPending     Boolean          @default(false)
+  description   String?
+  fromAccountId String
+  fromAccount   FinancialAccount @relation("OutgoingTransfers", fields: [fromAccountId], references: [id])
+  toAccountId   String
+  toAccount     FinancialAccount @relation("IncomingTransfers", fields: [toAccountId], references: [id])
+  userId        String
+  user          User             @relation(fields: [userId], references: [id])
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  @@index([userId])
+  @@index([fromAccountId])
+  @@index([toAccountId])
 }

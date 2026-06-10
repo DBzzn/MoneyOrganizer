@@ -63,8 +63,8 @@ export class CategoriesController {
     }
 
 
-    @ApiOperation({ summary: 'Remover categoria' })
-    @ApiResponse({ status: 200, description: 'Categoria removida com sucesso' })
+    @ApiOperation({ summary: 'Remover ou arquivar categoria' })
+    @ApiResponse({ status: 200, description: 'Categoria removida ou arquivada com sucesso' })
     @ApiResponse({ status: 401, description: 'Não autenticado' })
     @ApiResponse({ status: 404, description: 'Categoria não encontrada ou não pertence ao usuário' })
     @Delete(':id')

@@ -1,9 +1,10 @@
-﻿import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { IsBoolean, IsOptional, IsString } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+
 export class UpdateCategoryDto {
   @ApiProperty({
     description: 'Nome da categoria',
-    example: 'Educação Online',
+    example: 'Educacao Online',
     required: false,
   })
   @IsString()
@@ -11,11 +12,20 @@ export class UpdateCategoryDto {
   name?: string;
 
   @ApiProperty({
-    description: 'Ícone da categoria (emoji)',
+    description: 'Icone da categoria',
     example: '🎓',
     required: false,
   })
   @IsString()
   @IsOptional()
   icon?: string;
+
+  @ApiProperty({
+    description: 'Indica se a categoria esta arquivada',
+    example: false,
+    required: false,
+  })
+  @IsBoolean()
+  @IsOptional()
+  isArchived?: boolean;
 }

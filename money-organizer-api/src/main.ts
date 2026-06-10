@@ -93,6 +93,7 @@ async function bootstrap() {
       .addTag('categories', 'Gerenciamento dos gastos por Categoria')
       .addTag('financial-accounts', 'Gerenciamento de contas financeiras')
       .addTag('transactions', 'Gerenciamento de todas as transações')
+      .addTag('transfers', 'Gerenciamento de transferências entre contas')
       .addBearerAuth(
           {
               type: 'http',

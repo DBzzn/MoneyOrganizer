@@ -78,9 +78,22 @@ export const financialAccountSchema = z.object({
     isArchived: z.boolean().optional(),
 })
 
+export const transferSchema = z.object({
+    amount: z.number().min(0.01, 'O valor deve ser maior que zero!'),
+    date: z.string().min(1, 'A data é obrigatória!'),
+    fromAccountId: z.string().min(1, 'A conta de origem é obrigatória!'),
+    toAccountId: z.string().min(1, 'A conta de destino é obrigatória!'),
+    isPending: z.boolean(),
+    description: z.string().optional(),
+}).refine((data) => data.fromAccountId !== data.toAccountId, {
+    message: 'A conta de origem deve ser diferente da conta de destino.',
+    path: ['toAccountId'],
+})
+
 export type LoginFormData = z.infer<typeof loginSchema>
 export type RegisterFormData = z.infer<typeof registerSchema>
 export type TransactionFormData = z.infer<typeof transactionSchema>
 export type UpdateTransactionFormData = z.infer<typeof updateTransactionSchema>
 export type InstallmentFormData = z.infer<typeof installmentSchema>
 export type FinancialAccountFormData = z.infer<typeof financialAccountSchema>
+export type TransferFormData = z.infer<typeof transferSchema>

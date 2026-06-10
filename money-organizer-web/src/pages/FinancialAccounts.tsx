@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { toast } from 'react-hot-toast'
-import { Archive, Check, Pencil, Plus, RotateCcw, WalletCards, X } from 'lucide-react'
+import { AlertTriangle, Archive, Check, Pencil, Plus, RotateCcw, WalletCards, X } from 'lucide-react'
 import { Layout } from '../components/Layout'
 import ConfirmModal from '../components/ConfirmModal'
 import {
@@ -52,6 +52,10 @@ export function FinancialAccounts() {
         isOpen: boolean
         accountId: string | null
     }>({ isOpen: false, accountId: null })
+    const [initialBalanceConfirm, setInitialBalanceConfirm] = useState<{
+        isOpen: boolean
+        payload: ReturnType<typeof sanitizeAccountPayload> | null
+    }>({ isOpen: false, payload: null })
 
     const {
         register,
@@ -93,12 +97,11 @@ export function FinancialAccounts() {
     const handleClose = () => {
         setShowForm(false)
         setEditing(null)
+        setInitialBalanceConfirm({ isOpen: false, payload: null })
         reset(DEFAULT_FORM_VALUES)
     }
 
-    const onSubmit = async (data: FinancialAccountFormData) => {
-        const payload = sanitizeAccountPayload(data)
-
+    const saveAccount = async (payload: ReturnType<typeof sanitizeAccountPayload>) => {
         try {
             if (editing) {
                 const res = await updateFinancialAccount(editing.id, payload)
@@ -115,6 +118,27 @@ export function FinancialAccounts() {
         } catch {
             toast.error('Erro ao salvar a conta financeira!')
         }
+    }
+
+    const onSubmit = async (data: FinancialAccountFormData) => {
+        const payload = sanitizeAccountPayload(data)
+        const initialBalanceChanged =
+            editing && Number(data.initialBalance) !== Number(editing.initialBalance)
+
+        if (initialBalanceChanged) {
+            setInitialBalanceConfirm({ isOpen: true, payload })
+            return
+        }
+
+        await saveAccount(payload)
+    }
+
+    const handleConfirmInitialBalanceChange = async () => {
+        if (!initialBalanceConfirm.payload) return
+
+        const payload = initialBalanceConfirm.payload
+        setInitialBalanceConfirm({ isOpen: false, payload: null })
+        await saveAccount(payload)
     }
 
     const handleArchive = async () => {
@@ -229,6 +253,14 @@ export function FinancialAccounts() {
                                 {errors.initialBalance && (
                                     <p className="mt-1 text-sm text-red-500">{errors.initialBalance.message}</p>
                                 )}
+                                {editing && (
+                                    <div className="mt-2 flex gap-2 rounded-lg border border-yellow-300 bg-yellow-50 px-3 py-2 text-xs leading-5 text-yellow-800">
+                                        <AlertTriangle size={15} className="mt-0.5 shrink-0" />
+                                        <span>
+                                            Alterar o saldo inicial reescreve a base histórica desta conta. Use isso só se o saldo de abertura estava errado; para corrigir diferença real, o ideal futuramente será conciliação ou ajuste de saldo.
+                                        </span>
+                                    </div>
+                                )}
                             </div>
 
                             <div>
@@ -251,11 +283,11 @@ export function FinancialAccounts() {
                                 />
                             </div>
 
-                            <label className="flex items-center gap-2 sm:col-span-2" style={{ color: 'var(--color-text)' }}>
+                            <label className="app-checkbox-row sm:col-span-2">
                                 <input
                                     {...register('includeInDashboard')}
                                     type="checkbox"
-                                    className="h-4 w-4 rounded"
+                                    className="app-checkbox"
                                 />
                                 <span className="text-sm">Incluir no dashboard</span>
                             </label>
@@ -376,6 +408,13 @@ export function FinancialAccounts() {
                 onConfirm={handleArchive}
                 onCancel={() => setConfirmModal({ isOpen: false, accountId: null })}
                 confirmLabel="Arquivar"
+            />
+            <ConfirmModal
+                isOpen={initialBalanceConfirm.isOpen}
+                message="Tem certeza que deseja alterar o saldo inicial? Isso reescreve a base histórica da conta e recalcula o saldo atual. Não há desfazer automático para essa alteração."
+                onConfirm={handleConfirmInitialBalanceChange}
+                onCancel={() => setInitialBalanceConfirm({ isOpen: false, payload: null })}
+                confirmLabel="Alterar saldo inicial"
             />
         </Layout>
     )

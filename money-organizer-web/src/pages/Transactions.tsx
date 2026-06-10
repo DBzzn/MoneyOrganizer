@@ -199,6 +199,12 @@ export function Transactions() {
             !account.isArchived || account.id === editingTransaction.financialAccountId
         )
         : activeFinancialAccounts
+    const activeCategories = categories.filter((category) => !category.isArchived)
+    const editableCategories = editingTransaction
+        ? categories.filter((category) =>
+            !category.isArchived || category.id === editingTransaction.categoryId
+        )
+        : activeCategories
 
     const buildTransactionFilters = useCallback(() => {
         const range = monthToRange(currentMonth)
@@ -515,7 +521,7 @@ export function Transactions() {
                             type="search"
                             value={searchInput}
                             onChange={(e) => setSearchInput(e.target.value)}
-                            placeholder="Buscar por descricao no mes selecionado"
+                            placeholder="Buscar por descrição no mês selecionado"
                             className="app-control app-control-leading-icon w-full"
                         />
                     </div>
@@ -594,7 +600,7 @@ export function Transactions() {
                                     className="app-control w-full"
                                 >
                                     <option value="">Selecione...</option>
-                                    {categories.map((cat) => (
+                                    {activeCategories.map((cat) => (
                                         <option key={cat.id} value={cat.id}>{cat.icon} {cat.name}</option>
                                     ))}
                                 </select>
@@ -630,17 +636,17 @@ export function Transactions() {
                                 />
                             </div>
 
-                            <div className="flex items-center gap-2 sm:pt-6">
+                            <label className="app-checkbox-row h-fit sm:mt-6">
                                 <input
                                     {...transactionForm.register('isPending')}
                                     type="checkbox" id="isPending"
-                                    className="w-4 h-4 rounded"
+                                    className="app-checkbox"
                                     onChange={(e) => transactionForm.setValue('isPending', e.target.checked)}
                                 />
-                                <label htmlFor="isPending" className="text-sm" style={{ color: 'var(--color-text)' }}>
+                                <span className="text-sm">
                                     Transação pendente
-                                </label>
-                            </div>
+                                </span>
+                            </label>
 
                             <div className="sm:col-span-2 flex justify-end">
                                 <button
@@ -712,7 +718,7 @@ export function Transactions() {
                                     className="app-control app-control-purple w-full"
                                 >
                                     <option value="">Selecione...</option>
-                                    {categories.map((cat) => (
+                                    {activeCategories.map((cat) => (
                                         <option key={cat.id} value={cat.id}>{cat.icon} {cat.name}</option>
                                     ))}
                                 </select>
@@ -822,8 +828,10 @@ export function Transactions() {
                                     {...updateForm.register('categoryId')}
                                     className="app-control w-full"
                                 >
-                                    {categories.map((cat) => (
-                                        <option key={cat.id} value={cat.id}>{cat.icon} {cat.name}</option>
+                                    {editableCategories.map((cat) => (
+                                        <option key={cat.id} value={cat.id}>
+                                            {cat.icon} {cat.name}{cat.isArchived ? ' (arquivada)' : ''}
+                                        </option>
                                     ))}
                                 </select>
                             </div>
@@ -854,17 +862,17 @@ export function Transactions() {
                                 />
                             </div>
 
-                            <div className="flex items-center gap-2 sm:pt-6">
+                            <label className="app-checkbox-row h-fit sm:mt-6">
                                 <input
                                     {...updateForm.register('isPending')}
                                     type="checkbox" id="isPendingEdit"
-                                    className="w-4 h-4 rounded"
+                                    className="app-checkbox"
                                     onChange={(e) => updateForm.setValue('isPending', e.target.checked)}
                                 />
-                                <label htmlFor="isPendingEdit" className="text-sm" style={{ color: 'var(--color-text)' }}>
+                                <span className="text-sm">
                                     Transação pendente
-                                </label>
-                            </div>
+                                </span>
+                            </label>
 
                             {editingTransaction.type === 'CREDIT_INSTALLMENT' && (
                                 <div className="sm:col-span-2 bg-yellow-50 border border-yellow-200 rounded-lg px-4 py-3">
@@ -914,7 +922,7 @@ export function Transactions() {
                                                 {t.description ?? 'Sem descrição'}
                                             </p>
                                             <p className="mt-1 text-xs" style={{ color: 'var(--color-text-muted)' }}>
-                                                {formatDate(t.date)} · {t.category.icon} {t.category.name} · {t.financialAccount?.icon ? `${t.financialAccount.icon} ` : ''}{t.financialAccount?.name ?? 'Conta não encontrada'}
+                                                {formatDate(t.date)} · {t.category.icon} {t.category.name}{t.category.isArchived ? ' (arquivada)' : ''} · {t.financialAccount?.icon ? `${t.financialAccount.icon} ` : ''}{t.financialAccount?.name ?? 'Conta não encontrada'}
                                             </p>
                                         </div>
                                         <span className={`shrink-0 text-right text-sm font-semibold ${t.type === 'INCOME' ? 'text-green-600' : 'text-red-500'}`}>
@@ -969,7 +977,7 @@ export function Transactions() {
                                             <SortHeader label="Data" sort="date" activeSort={sortKey} onSort={handleSort} />
                                         </th>
                                         <th className="text-left px-6 py-3">
-                                            <SortHeader label="Descricao" sort="description" activeSort={sortKey} onSort={handleSort} />
+                                            <SortHeader label="Descrição" sort="description" activeSort={sortKey} onSort={handleSort} />
                                         </th>
                                         <th className="text-left px-6 py-3">
                                             <SortHeader label="Categoria" sort="category" activeSort={sortKey} onSort={handleSort} />
@@ -1015,7 +1023,7 @@ export function Transactions() {
                                                 </div>
                                             </td>
                                             <td className="px-6 py-4 text-sm" style={{ color: 'var(--color-text-muted)' }}>
-                                                {t.category.icon} {t.category.name}
+                                                {t.category.icon} {t.category.name}{t.category.isArchived ? ' (arquivada)' : ''}
                                             </td>
                                             <td className="px-6 py-4 text-sm" style={{ color: 'var(--color-text-muted)' }}>
                                                 {t.financialAccount?.icon ? `${t.financialAccount.icon} ` : ''}{t.financialAccount?.name ?? 'Conta não encontrada'}

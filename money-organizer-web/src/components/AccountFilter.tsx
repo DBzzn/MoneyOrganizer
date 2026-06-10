@@ -75,10 +75,9 @@ export function AccountFilter({
                         return (
                             <label
                                 key={account.id}
-                                className="flex min-w-0 items-center gap-2 rounded-lg px-3 py-2 text-sm"
+                                className="app-checkbox-row min-w-0 text-sm"
                                 style={{
                                     backgroundColor: isSelected ? 'var(--color-bg)' : 'transparent',
-                                    border: '1px solid var(--color-border-soft)',
                                     color: 'var(--color-text)',
                                 }}
                             >
@@ -87,7 +86,7 @@ export function AccountFilter({
                                     checked={isSelected}
                                     disabled={isOnlySelected}
                                     onChange={() => handleToggleAccount(account.id)}
-                                    className="h-4 w-4 shrink-0 rounded"
+                                    className="app-checkbox"
                                 />
                                 <span className="min-w-0 truncate">
                                     {account.icon ? `${account.icon} ` : ''}{account.name}

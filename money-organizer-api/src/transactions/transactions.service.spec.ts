@@ -12,6 +12,7 @@ describe('TransactionsService', () => {
       deleteMany: jest.Mock;
       create: jest.Mock;
       groupBy: jest.Mock;
+      updateMany: jest.Mock;
     };
     category: {
       findMany: jest.Mock;
@@ -31,6 +32,7 @@ describe('TransactionsService', () => {
         deleteMany: jest.fn(),
         create: jest.fn(),
         groupBy: jest.fn(),
+        updateMany: jest.fn(),
       },
       category: {
         findMany: jest.fn(),
@@ -130,6 +132,22 @@ describe('TransactionsService', () => {
   });
 
   describe('findAll', () => {
+    it('confirms overdue pending transactions before listing', async () => {
+      prisma.transaction.updateMany.mockResolvedValue({ count: 1 });
+      prisma.transaction.findMany.mockResolvedValue([]);
+
+      await expect(service.findAll('user-1', {})).resolves.toEqual([]);
+
+      expect(prisma.transaction.updateMany).toHaveBeenCalledWith({
+        where: {
+          userId: 'user-1',
+          isPending: true,
+          date: { lt: expect.any(Date) },
+        },
+        data: { isPending: false },
+      });
+    });
+
     it('filters by multiple financial accounts only after validating ownership', async () => {
       prisma.financialAccount.findMany.mockResolvedValue([
         { id: 'account-1' },

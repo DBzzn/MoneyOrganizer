@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { BadRequestException } from '@nestjs/common';
+import { NotFoundException } from '@nestjs/common';
 import { CategoriesService } from './categories.service';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -7,7 +7,8 @@ describe('CategoriesService', () => {
   let service: CategoriesService;
   let prisma: {
     category: {
-      findUnique: jest.Mock;
+      findFirst: jest.Mock;
+      update: jest.Mock;
       delete: jest.Mock;
     };
     transaction: {
@@ -18,7 +19,8 @@ describe('CategoriesService', () => {
   beforeEach(async () => {
     prisma = {
       category: {
-        findUnique: jest.fn(),
+        findFirst: jest.fn(),
+        update: jest.fn(),
         delete: jest.fn(),
       },
       transaction: {
@@ -43,13 +45,25 @@ describe('CategoriesService', () => {
     expect(service).toBeDefined();
   });
 
-  it('blocks deletion when the category has linked transactions', async () => {
-    prisma.category.findUnique.mockResolvedValue({ id: 'category-1' });
-    prisma.transaction.count.mockResolvedValue(2);
+  it('archives a category when it has linked transactions', async () => {
+    const archivedCategory = {
+      id: 'category-1',
+      name: 'Alimentacao',
+      icon: '🍔',
+      isArchived: true,
+      createdAt: new Date(),
+    };
 
-    await expect(service.remove('user-1', 'category-1')).rejects.toThrow(
-      BadRequestException,
-    );
+    prisma.category.findFirst.mockResolvedValue({ id: 'category-1' });
+    prisma.transaction.count.mockResolvedValue(2);
+    prisma.category.update.mockResolvedValue(archivedCategory);
+
+    await expect(service.remove('user-1', 'category-1')).resolves.toEqual({
+      message: 'Categoria arquivada para preservar transações existentes.',
+      archived: true,
+      deleted: false,
+      category: archivedCategory,
+    });
 
     expect(prisma.transaction.count).toHaveBeenCalledWith({
       where: {
@@ -57,6 +71,39 @@ describe('CategoriesService', () => {
         userId: 'user-1',
       },
     });
+    expect(prisma.category.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'category-1', userId: 'user-1' },
+        data: { isArchived: true },
+      }),
+    );
+    expect(prisma.category.delete).not.toHaveBeenCalled();
+  });
+
+  it('deletes a category without linked transactions', async () => {
+    prisma.category.findFirst.mockResolvedValue({ id: 'category-1' });
+    prisma.transaction.count.mockResolvedValue(0);
+    prisma.category.delete.mockResolvedValue({ id: 'category-1' });
+
+    await expect(service.remove('user-1', 'category-1')).resolves.toEqual({
+      message: 'Categoria removida com sucesso!',
+      archived: false,
+      deleted: true,
+    });
+
+    expect(prisma.category.delete).toHaveBeenCalledWith({
+      where: { id: 'category-1', userId: 'user-1' },
+    });
+  });
+
+  it('does not archive a category from another user', async () => {
+    prisma.category.findFirst.mockResolvedValue(null);
+
+    await expect(service.remove('user-1', 'category-1')).rejects.toThrow(
+      NotFoundException,
+    );
+
+    expect(prisma.category.update).not.toHaveBeenCalled();
     expect(prisma.category.delete).not.toHaveBeenCalled();
   });
 });

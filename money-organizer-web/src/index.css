@@ -13,6 +13,10 @@
     --color-text-muted: #334155;
     --color-border: rgba(71, 85, 105, 0.42);
     --color-border-soft: rgba(71, 85, 105, 0.24);
+    --color-bg-muted-card: rgba(226, 232, 240, 0.78);
+    --color-bg-muted-card-hover: rgba(226, 232, 240, 0.95);
+    --color-muted-border: rgba(100, 116, 139, 0.35);
+    --color-muted-text: #475569;
     --color-brand: #2563eb;
     --color-input-bg: rgba(255, 255, 255, 0.96);
     --color-input-border: rgba(71, 85, 105, 0.50);
@@ -41,6 +45,10 @@
         --color-text-muted: #94a3b8;
         --color-border: rgba(255, 255, 255, 0.12);
         --color-border-soft: rgba(255, 255, 255, 0.06);
+        --color-bg-muted-card: rgba(148, 163, 184, 0.10);
+        --color-bg-muted-card-hover: rgba(148, 163, 184, 0.16);
+        --color-muted-border: rgba(148, 163, 184, 0.20);
+        --color-muted-text: #94a3b8;
         --color-brand: #7dd3fc;
         --color-input-bg: rgba(255, 255, 255, 0.07);
         --color-input-border: rgba(255, 255, 255, 0.15);
@@ -190,6 +198,81 @@ html,
 .app-icon-control:disabled {
     cursor: not-allowed;
     opacity: 0.5;
+}
+
+.app-checkbox-row {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.625rem;
+    border-radius: 0.75rem;
+    border: 1px solid var(--color-border-soft);
+    background-color: var(--color-bg-input);
+    color: var(--color-text);
+    padding: 0.625rem 0.75rem;
+    transition: border-color 0.2s ease, background-color 0.2s ease, opacity 0.2s ease;
+}
+
+.app-checkbox-row:hover {
+    border-color: var(--color-input-border);
+}
+
+.app-checkbox-row:has(.app-checkbox:disabled) {
+    opacity: 0.65;
+}
+
+.app-checkbox {
+    appearance: none;
+    -webkit-appearance: none;
+    display: inline-grid;
+    place-content: center;
+    width: 1.05rem;
+    height: 1.05rem;
+    flex-shrink: 0;
+    cursor: pointer;
+    border-radius: 0.35rem;
+    border: 1.5px solid var(--color-input-border);
+    background-color: var(--color-input-bg);
+    color: white;
+    transition: background-color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.app-checkbox::before {
+    content: "";
+    width: 0.58rem;
+    height: 0.58rem;
+    transform: scale(0);
+    transition: transform 0.12s ease;
+    background-color: currentColor;
+    clip-path: polygon(14% 44%, 0 59%, 41% 100%, 100% 18%, 84% 4%, 38% 70%);
+}
+
+.app-checkbox:checked {
+    background-color: var(--color-brand);
+    border-color: var(--color-brand);
+}
+
+.app-checkbox:checked::before {
+    transform: scale(1);
+}
+
+.app-checkbox:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.35);
+}
+
+.app-checkbox:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+}
+
+.app-archived-card {
+    background-color: var(--color-bg-muted-card);
+    border: 1px solid var(--color-muted-border);
+    color: var(--color-muted-text);
+}
+
+.app-archived-card:hover {
+    background-color: var(--color-bg-muted-card-hover);
 }
 
 .app-popover {

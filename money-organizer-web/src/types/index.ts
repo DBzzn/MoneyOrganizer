@@ -9,6 +9,7 @@ export interface Category {
     id: string
     name: string
     icon?: string
+    isArchived: boolean
     createdAt: string
 }
 
@@ -55,6 +56,20 @@ export interface Transaction {
     financialAccountId: string
     financialAccount: FinancialAccount
     createdAt: string
+}
+
+export interface Transfer {
+    id: string
+    amount: number
+    date: string
+    isPending: boolean
+    description?: string
+    fromAccountId: string
+    fromAccount: FinancialAccount
+    toAccountId: string
+    toAccount: FinancialAccount
+    createdAt: string
+    updatedAt: string
 }
 
 export interface MonthlyBalance {

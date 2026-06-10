@@ -67,6 +67,17 @@ interface FinancialAccountFilterInput {
 export class TransactionsService {
     constructor(private readonly prisma: PrismaService) { }
 
+    private async confirmOverduePendingTransactions(userId: string) {
+        await this.prisma.transaction.updateMany({
+            where: {
+                userId,
+                isPending: true,
+                date: { lt: startOfToday() },
+            },
+            data: { isPending: false },
+        });
+    }
+
     private async getOrCreateDefaultFinancialAccountId(userId: string): Promise<string> {
         const existingAccount = await this.prisma.financialAccount.findFirst({
             where: {
@@ -118,6 +129,25 @@ export class TransactionsService {
         return account.id;
     }
 
+    private async ensureCategoryAvailable(
+        userId: string,
+        categoryId: string,
+        currentCategoryId?: string,
+    ) {
+        const category = await this.prisma.category.findFirst({
+            where: {
+                id: categoryId,
+                userId,
+                ...(categoryId === currentCategoryId ? {} : { isArchived: false }),
+            },
+            select: { id: true },
+        });
+
+        if (!category) {
+            throw new BadRequestException('Categoria não encontrada ou arquivada!');
+        }
+    }
+
     private async getFinancialAccountIdsFilter(
         userId: string,
         filters?: FinancialAccountFilterInput,
@@ -151,16 +181,7 @@ export class TransactionsService {
     }
 
     async create(userId: string, dto: CreateTransactionDto) {
-        const category = await this.prisma.category.findFirst({
-            where: {
-                id: dto.categoryId,
-                userId: userId,
-            }
-        });
-
-        if (!category) {
-            throw new BadRequestException('Categoria não encontrada!');
-        }
+        await this.ensureCategoryAvailable(userId, dto.categoryId);
 
         const financialAccountId = await this.resolveFinancialAccountId(
             userId,
@@ -217,6 +238,7 @@ export class TransactionsService {
                         id: true,
                         name: true,
                         icon: true,
+                        isArchived: true,
                     }
                 },
                 financialAccount: {
@@ -232,6 +254,8 @@ export class TransactionsService {
     async findAll(userId: string, filters: QueryTransactionsDto)
 
     {
+        await this.confirmOverduePendingTransactions(userId);
+
         const where: any = { userId }
 
         if (filters.startDate) {
@@ -294,6 +318,7 @@ export class TransactionsService {
                         id: true,
                         name: true,
                         icon: true,
+                        isArchived: true,
                     }
                 },
                 financialAccount: {
@@ -310,6 +335,8 @@ export class TransactionsService {
     }
 
     async getTotalsByCategory(userId: string, filters?: QueryTransactionsDto) {
+        await this.confirmOverduePendingTransactions(userId);
+
         const where: any = { userId };
 
         if (filters?.startDate) {
@@ -382,6 +409,8 @@ export class TransactionsService {
     }
 
     async findOne(userId: string, transactionId: string) {
+        await this.confirmOverduePendingTransactions(userId);
+
         const transaction = await this.prisma.transaction.findFirst({
             where: {
                 id: transactionId,
@@ -404,6 +433,7 @@ export class TransactionsService {
                         id: true,
                         name: true,
                         icon: true,
+                        isArchived: true,
                     },
                 },
                 financialAccount: {
@@ -426,15 +456,23 @@ export class TransactionsService {
         dto: UpdateTransactionDto
     ) {
         if (dto.categoryId) {
-            const category = await this.prisma.category.findFirst({
+            const transaction = await this.prisma.transaction.findFirst({
                 where: {
-                    id: dto.categoryId,
-                    userId: userId,
-                }
+                    id: transactionId,
+                    userId,
+                },
+                select: { categoryId: true },
             });
-            if (!category) {
-                throw new BadRequestException('Categoria não encontrada!');
+
+            if (!transaction) {
+                throw new NotFoundException('Transação não encontrada!');
             }
+
+            await this.ensureCategoryAvailable(
+                userId,
+                dto.categoryId,
+                transaction.categoryId,
+            );
         }
 
         if (dto.financialAccountId) {
@@ -477,6 +515,7 @@ export class TransactionsService {
                             id: true,
                             name: true,
                             icon: true,
+                            isArchived: true,
                         }
                     },
                     financialAccount: {
@@ -547,16 +586,7 @@ export class TransactionsService {
             throw new BadRequestException('Forneça pelo menos o valor total ou o valor da parcela!');
         }
 
-        const category = await this.prisma.category.findFirst({
-            where: {
-                id: dto.categoryId,
-                userId,
-            }
-        });
-
-        if (!category) {
-            throw new BadRequestException('Categoria não encontrada!');
-        }
+        await this.ensureCategoryAvailable(userId, dto.categoryId);
 
         const financialAccountId = await this.resolveFinancialAccountId(
             userId,
@@ -646,6 +676,8 @@ export class TransactionsService {
     }
 
     async getMonthlyBalance(userId: string, filters: ReportFiltersDto) {
+        await this.confirmOverduePendingTransactions(userId);
+
         const month = filters.month || new Date().toISOString().slice(0, 7); // formato YYYY-MM
         const [year, monthNum] = month.split('-');
         const startDate = new Date(parseInt(year), parseInt(monthNum) - 1, 1);
@@ -705,6 +737,8 @@ export class TransactionsService {
     }
 
     async getEvolution(userId: string, filters: ReportFiltersDto) {
+        await this.confirmOverduePendingTransactions(userId);
+
         const endMonth = filters.endMonth || new Date().toISOString().slice(0, 7)
 
         let startMonth: string;
@@ -793,6 +827,8 @@ export class TransactionsService {
     }
 
     async getProjection(userId: string, filters: ReportFiltersDto) {
+        await this.confirmOverduePendingTransactions(userId);
+
         const startMonth = filters.startMonth || new Date().toISOString().slice(0, 7);
 
         let endMonth: string;
