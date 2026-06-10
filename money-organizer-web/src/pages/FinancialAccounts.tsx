@@ -1,22 +1,31 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { toast } from 'react-hot-toast'
-import { AlertTriangle, Archive, Check, Pencil, Plus, RotateCcw, WalletCards, X } from 'lucide-react'
+import { AlertTriangle, Archive, Check, Pencil, Plus, RotateCcw, Scale, Trash2, WalletCards, X } from 'lucide-react'
 import { Layout } from '../components/Layout'
 import ConfirmModal from '../components/ConfirmModal'
+import {
+    createBalanceAdjustment,
+    deleteBalanceAdjustment,
+    getBalanceAdjustments,
+} from '../api/balanceAdjustments'
 import {
     archiveFinancialAccount,
     createFinancialAccount,
     getFinancialAccounts,
     updateFinancialAccount,
 } from '../api/financialAccounts'
-import type { FinancialAccount, FinancialAccountType } from '../types'
+import type { BalanceAdjustment, FinancialAccount, FinancialAccountType } from '../types'
 import {
+    balanceAdjustmentSchema,
+    type BalanceAdjustmentFormData,
     financialAccountSchema,
     type FinancialAccountFormData,
 } from '../schemas'
-import { formatCurrency } from '../utils'
+import { formatCurrency, formatDate } from '../utils'
+import { StoredIcon, StoredIconPicker } from '../components/StoredIcon'
+import { formatStoredIconPrefix } from '../components/storedIconRegistry'
 
 const ACCOUNT_TYPE_LABELS: Record<FinancialAccountType, string> = {
     BANK_ACCOUNT: 'Conta bancária',
@@ -34,6 +43,21 @@ const DEFAULT_FORM_VALUES: FinancialAccountFormData = {
     includeInDashboard: true,
 }
 
+function getTodayInputDate(): string {
+    const now = new Date()
+    const y = now.getFullYear()
+    const m = String(now.getMonth() + 1).padStart(2, '0')
+    const d = String(now.getDate()).padStart(2, '0')
+    return `${y}-${m}-${d}`
+}
+
+const DEFAULT_ADJUSTMENT_FORM_VALUES: BalanceAdjustmentFormData = {
+    amount: 0,
+    date: getTodayInputDate(),
+    financialAccountId: '',
+    reason: '',
+}
+
 function sanitizeAccountPayload(data: FinancialAccountFormData) {
     return {
         ...data,
@@ -43,15 +67,25 @@ function sanitizeAccountPayload(data: FinancialAccountFormData) {
     }
 }
 
+function accountLabel(account: FinancialAccount): string {
+    return `${formatStoredIconPrefix(account.icon)}${account.name}${account.isArchived ? ' (arquivada)' : ''}`
+}
+
 export function FinancialAccounts() {
     const [accounts, setAccounts] = useState<FinancialAccount[]>([])
+    const [adjustments, setAdjustments] = useState<BalanceAdjustment[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [showForm, setShowForm] = useState(false)
+    const [showAdjustmentForm, setShowAdjustmentForm] = useState(false)
     const [editing, setEditing] = useState<FinancialAccount | null>(null)
     const [confirmModal, setConfirmModal] = useState<{
         isOpen: boolean
         accountId: string | null
     }>({ isOpen: false, accountId: null })
+    const [adjustmentConfirmModal, setAdjustmentConfirmModal] = useState<{
+        isOpen: boolean
+        adjustmentId: string | null
+    }>({ isOpen: false, adjustmentId: null })
     const [initialBalanceConfirm, setInitialBalanceConfirm] = useState<{
         isOpen: boolean
         payload: ReturnType<typeof sanitizeAccountPayload> | null
@@ -61,17 +95,53 @@ export function FinancialAccounts() {
         register,
         handleSubmit,
         reset,
+        setValue,
+        watch,
         formState: { errors, isSubmitting },
     } = useForm<FinancialAccountFormData>({
         resolver: zodResolver(financialAccountSchema),
         defaultValues: DEFAULT_FORM_VALUES,
     })
 
-    useEffect(() => {
-        getFinancialAccounts()
-            .then((res) => setAccounts(res.data))
-            .finally(() => setIsLoading(false))
+    const selectedAccountIcon = watch('icon') ?? ''
+
+    const adjustmentForm = useForm<BalanceAdjustmentFormData>({
+        resolver: zodResolver(balanceAdjustmentSchema),
+        defaultValues: DEFAULT_ADJUSTMENT_FORM_VALUES,
+    })
+
+    const activeAccounts = accounts.filter((account) => !account.isArchived)
+
+    const loadData = useCallback(async () => {
+        const [accountsRes, adjustmentsRes] = await Promise.all([
+            getFinancialAccounts(),
+            getBalanceAdjustments(),
+        ])
+
+        setAccounts(accountsRes.data)
+        setAdjustments(adjustmentsRes.data)
     }, [])
+
+    useEffect(() => {
+        let isActive = true
+
+        setIsLoading(true)
+        loadData()
+            .catch(() => {
+                if (isActive) {
+                    toast.error('Erro ao carregar contas financeiras!')
+                }
+            })
+            .finally(() => {
+                if (isActive) {
+                    setIsLoading(false)
+                }
+            })
+
+        return () => {
+            isActive = false
+        }
+    }, [loadData])
 
     const handleOpenCreate = () => {
         setEditing(null)
@@ -99,6 +169,50 @@ export function FinancialAccounts() {
         setEditing(null)
         setInitialBalanceConfirm({ isOpen: false, payload: null })
         reset(DEFAULT_FORM_VALUES)
+    }
+
+    const handleOpenAdjustment = () => {
+        const firstActiveAccount = activeAccounts[0]
+
+        adjustmentForm.reset({
+            ...DEFAULT_ADJUSTMENT_FORM_VALUES,
+            date: getTodayInputDate(),
+            financialAccountId: firstActiveAccount?.id ?? '',
+        })
+        setShowAdjustmentForm(true)
+    }
+
+    const handleCloseAdjustment = () => {
+        setShowAdjustmentForm(false)
+        adjustmentForm.reset(DEFAULT_ADJUSTMENT_FORM_VALUES)
+    }
+
+    const handleSubmitAdjustment = async (data: BalanceAdjustmentFormData) => {
+        try {
+            await createBalanceAdjustment({
+                ...data,
+                reason: data.reason.trim(),
+            })
+            await loadData()
+            handleCloseAdjustment()
+            toast.success('Ajuste de saldo criado!')
+        } catch {
+            toast.error('Erro ao salvar o ajuste de saldo!')
+        }
+    }
+
+    const handleDeleteAdjustment = async () => {
+        if (!adjustmentConfirmModal.adjustmentId) return
+
+        try {
+            await deleteBalanceAdjustment(adjustmentConfirmModal.adjustmentId)
+            await loadData()
+            toast.success('Ajuste removido com sucesso!')
+        } catch {
+            toast.error('Erro ao remover o ajuste de saldo!')
+        } finally {
+            setAdjustmentConfirmModal({ isOpen: false, adjustmentId: null })
+        }
     }
 
     const saveAccount = async (payload: ReturnType<typeof sanitizeAccountPayload>) => {
@@ -181,14 +295,25 @@ export function FinancialAccounts() {
                         <h1 className="text-2xl font-bold" style={{ color: 'var(--color-text)' }}>Contas</h1>
                         <p className="mt-1" style={{ color: 'var(--color-text-muted)' }}>Organize bancos, carteiras e origens do dinheiro</p>
                     </div>
-                    <button
-                        type="button"
-                        onClick={handleOpenCreate}
-                        className="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-blue-700 sm:w-auto"
-                    >
-                        <Plus size={16} />
-                        Nova conta
-                    </button>
+                    <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+                        <button
+                            type="button"
+                            onClick={handleOpenAdjustment}
+                            disabled={activeAccounts.length === 0}
+                            className="flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-emerald-300 sm:w-auto"
+                        >
+                            <Scale size={16} />
+                            Novo ajuste
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handleOpenCreate}
+                            className="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-blue-700 sm:w-auto"
+                        >
+                            <Plus size={16} />
+                            Nova conta
+                        </button>
+                    </div>
                 </div>
 
                 {showForm && (
@@ -265,12 +390,11 @@ export function FinancialAccounts() {
 
                             <div>
                                 <label className="mb-1 block text-sm font-medium" style={{ color: 'var(--color-text)' }}>Ícone</label>
-                                <input
-                                    {...register('icon')}
-                                    type="text"
-                                    placeholder="🏦"
-                                    maxLength={8}
-                                    className="app-control w-full"
+                                <input type="hidden" {...register('icon')} />
+                                <StoredIconPicker
+                                    value={selectedAccountIcon}
+                                    onChange={(value) => setValue('icon', value, { shouldDirty: true, shouldValidate: true })}
+                                    fallback={WalletCards}
                                 />
                             </div>
 
@@ -306,6 +430,101 @@ export function FinancialAccounts() {
                     </div>
                 )}
 
+                {showAdjustmentForm && (
+                    <div
+                        className="glass rounded-2xl p-5 sm:p-6"
+                        style={{ backgroundColor: 'var(--color-bg-card)', border: '1px solid var(--color-border)' }}
+                    >
+                        <div className="mb-4 flex items-center justify-between">
+                            <h2 className="text-lg font-semibold" style={{ color: 'var(--color-text)' }}>
+                                Novo ajuste de saldo
+                            </h2>
+                            <button
+                                type="button"
+                                onClick={handleCloseAdjustment}
+                                className="transition"
+                                style={{ color: 'var(--color-text-muted)' }}
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        <form onSubmit={adjustmentForm.handleSubmit(handleSubmitAdjustment)} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                            <div>
+                                <label className="mb-1 block text-sm font-medium" style={{ color: 'var(--color-text)' }}>Conta</label>
+                                <select {...adjustmentForm.register('financialAccountId')} className="app-control w-full">
+                                    <option value="">Selecione...</option>
+                                    {activeAccounts.map((account) => (
+                                        <option key={account.id} value={account.id}>
+                                            {accountLabel(account)}
+                                        </option>
+                                    ))}
+                                </select>
+                                {adjustmentForm.formState.errors.financialAccountId && (
+                                    <p className="mt-1 text-sm text-red-500">{adjustmentForm.formState.errors.financialAccountId.message}</p>
+                                )}
+                            </div>
+
+                            <div>
+                                <label className="mb-1 block text-sm font-medium" style={{ color: 'var(--color-text)' }}>Data</label>
+                                <input
+                                    {...adjustmentForm.register('date')}
+                                    type="date"
+                                    className="app-control w-full"
+                                />
+                                {adjustmentForm.formState.errors.date && (
+                                    <p className="mt-1 text-sm text-red-500">{adjustmentForm.formState.errors.date.message}</p>
+                                )}
+                            </div>
+
+                            <div>
+                                <label className="mb-1 block text-sm font-medium" style={{ color: 'var(--color-text)' }}>Valor do ajuste</label>
+                                <input
+                                    {...adjustmentForm.register('amount', { valueAsNumber: true })}
+                                    type="number"
+                                    step="0.01"
+                                    className="app-control w-full"
+                                />
+                                {adjustmentForm.formState.errors.amount && (
+                                    <p className="mt-1 text-sm text-red-500">{adjustmentForm.formState.errors.amount.message}</p>
+                                )}
+                            </div>
+
+                            <div>
+                                <label className="mb-1 block text-sm font-medium" style={{ color: 'var(--color-text)' }}>Motivo</label>
+                                <input
+                                    {...adjustmentForm.register('reason')}
+                                    type="text"
+                                    maxLength={240}
+                                    className="app-control w-full"
+                                    placeholder="Ex: Conferencia com banco"
+                                />
+                                {adjustmentForm.formState.errors.reason && (
+                                    <p className="mt-1 text-sm text-red-500">{adjustmentForm.formState.errors.reason.message}</p>
+                                )}
+                            </div>
+
+                            <div className="flex gap-2 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs leading-5 text-emerald-800 sm:col-span-2">
+                                <AlertTriangle size={15} className="mt-0.5 shrink-0" />
+                                <span>
+                                    Use valor positivo para aumentar o saldo calculado e negativo para reduzir. Este registro nao entra como receita ou despesa.
+                                </span>
+                            </div>
+
+                            <div className="flex justify-end sm:col-span-2">
+                                <button
+                                    type="submit"
+                                    disabled={adjustmentForm.formState.isSubmitting}
+                                    className="flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-600 px-6 py-2.5 text-sm font-medium text-white transition hover:bg-emerald-700 disabled:bg-emerald-300 sm:w-auto"
+                                >
+                                    <Check size={16} />
+                                    {adjustmentForm.formState.isSubmitting ? 'Salvando...' : 'Salvar ajuste'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                )}
+
                 {isLoading ? (
                     <div className="flex h-48 items-center justify-center">
                         <p style={{ color: 'var(--color-text-muted)' }}>Carregando...</p>
@@ -330,7 +549,7 @@ export function FinancialAccounts() {
                                                 className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-xl"
                                                 style={{ backgroundColor: account.color ?? 'var(--color-bg)' }}
                                             >
-                                                {account.icon || <WalletCards size={20} />}
+                                                <StoredIcon value={account.icon} fallback={WalletCards} size={20} />
                                             </span>
                                             <div className="min-w-0">
                                                 <h2 className="break-words font-semibold leading-5" style={{ color: 'var(--color-text)' }}>
@@ -400,6 +619,118 @@ export function FinancialAccounts() {
                         ))}
                     </div>
                 )}
+
+                <div
+                    className="glass rounded-2xl p-5 sm:p-6"
+                    style={{ backgroundColor: 'var(--color-bg-card)', border: '1px solid var(--color-border)' }}
+                >
+                    <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                            <h2 className="text-lg font-semibold" style={{ color: 'var(--color-text)' }}>Ajustes recentes</h2>
+                            <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
+                                Conciliacoes manuais que alteram o saldo das contas
+                            </p>
+                        </div>
+                    </div>
+
+                    {isLoading ? (
+                        <p style={{ color: 'var(--color-text-muted)' }}>Carregando...</p>
+                    ) : adjustments.length === 0 ? (
+                        <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>Nenhum ajuste de saldo registrado</p>
+                    ) : (
+                        <>
+                            <div className="space-y-3 md:hidden">
+                                {adjustments.map((adjustment) => {
+                                    const amount = Number(adjustment.amount)
+
+                                    return (
+                                        <div
+                                            key={adjustment.id}
+                                            className="rounded-xl border p-3"
+                                            style={{ borderColor: 'var(--color-border)' }}
+                                        >
+                                            <div className="flex items-start justify-between gap-3">
+                                                <div className="min-w-0">
+                                                    <p className="break-words text-sm font-semibold" style={{ color: 'var(--color-text)' }}>
+                                                        {adjustment.reason}
+                                                    </p>
+                                                    <p className="mt-1 text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                                                        {accountLabel(adjustment.financialAccount)} - {formatDate(adjustment.date)}
+                                                    </p>
+                                                </div>
+                                                <span
+                                                    className="shrink-0 text-sm font-semibold"
+                                                    style={{ color: amount < 0 ? '#f87171' : '#16a34a' }}
+                                                >
+                                                    {formatCurrency(amount)}
+                                                </span>
+                                            </div>
+                                            <div className="mt-3 flex justify-end">
+                                                <button
+                                                    type="button"
+                                                    aria-label="Remover ajuste"
+                                                    onClick={() => setAdjustmentConfirmModal({ isOpen: true, adjustmentId: adjustment.id })}
+                                                    className="app-icon-control rounded-lg p-2"
+                                                >
+                                                    <Trash2 size={15} />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )
+                                })}
+                            </div>
+
+                            <div className="hidden overflow-x-auto md:block">
+                                <table className="w-full min-w-[720px]">
+                                    <thead>
+                                        <tr style={{ borderBottom: '1px solid var(--color-border)', backgroundColor: 'var(--color-bg)' }}>
+                                            <th className="px-4 py-3 text-left text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>Data</th>
+                                            <th className="px-4 py-3 text-left text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>Conta</th>
+                                            <th className="px-4 py-3 text-left text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>Motivo</th>
+                                            <th className="px-4 py-3 text-right text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>Valor</th>
+                                            <th className="px-4 py-3"></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {adjustments.map((adjustment) => {
+                                            const amount = Number(adjustment.amount)
+
+                                            return (
+                                                <tr key={adjustment.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                                                    <td className="whitespace-nowrap px-4 py-3 text-sm" style={{ color: 'var(--color-text-muted)' }}>
+                                                        {formatDate(adjustment.date)}
+                                                    </td>
+                                                    <td className="px-4 py-3 text-sm" style={{ color: 'var(--color-text)' }}>
+                                                        {accountLabel(adjustment.financialAccount)}
+                                                    </td>
+                                                    <td className="px-4 py-3 text-sm" style={{ color: 'var(--color-text-muted)' }}>
+                                                        {adjustment.reason}
+                                                    </td>
+                                                    <td
+                                                        className="whitespace-nowrap px-4 py-3 text-right text-sm font-semibold"
+                                                        style={{ color: amount < 0 ? '#f87171' : '#16a34a' }}
+                                                    >
+                                                        {formatCurrency(amount)}
+                                                    </td>
+                                                    <td className="px-4 py-3 text-right">
+                                                        <button
+                                                            type="button"
+                                                            aria-label="Remover ajuste"
+                                                            onClick={() => setAdjustmentConfirmModal({ isOpen: true, adjustmentId: adjustment.id })}
+                                                            className="app-icon-control rounded-lg p-2"
+                                                        >
+                                                            <Trash2 size={15} />
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            )
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </>
+                    )}
+                </div>
             </div>
 
             <ConfirmModal
@@ -415,6 +746,13 @@ export function FinancialAccounts() {
                 onConfirm={handleConfirmInitialBalanceChange}
                 onCancel={() => setInitialBalanceConfirm({ isOpen: false, payload: null })}
                 confirmLabel="Alterar saldo inicial"
+            />
+            <ConfirmModal
+                isOpen={adjustmentConfirmModal.isOpen}
+                message="Remover este ajuste recalcula o saldo da conta vinculada. Deseja continuar?"
+                onConfirm={handleDeleteAdjustment}
+                onCancel={() => setAdjustmentConfirmModal({ isOpen: false, adjustmentId: null })}
+                confirmLabel="Remover ajuste"
             />
         </Layout>
     )

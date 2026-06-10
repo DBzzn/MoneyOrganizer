@@ -86,6 +86,7 @@ export class FinancialAccountsService {
       transactionTotals,
       outgoingTransferTotals,
       incomingTransferTotals,
+      adjustmentTotals,
     ] = await Promise.all([
       this.prisma.transaction.groupBy({
         by: ['financialAccountId', 'type'],
@@ -112,6 +113,17 @@ export class FinancialAccountsService {
         where: {
           ...effectiveMovementWhere,
           toAccountId: { in: accountIds },
+        },
+        _sum: {
+          amount: true,
+        },
+      }),
+      this.prisma.balanceAdjustment.groupBy({
+        by: ['financialAccountId'],
+        where: {
+          userId,
+          financialAccountId: { in: accountIds },
+          date: { lt: startOfTomorrow() },
         },
         _sum: {
           amount: true,
@@ -148,16 +160,25 @@ export class FinancialAccountsService {
       ]),
     );
 
+    const adjustmentsByAccount = new Map(
+      adjustmentTotals.map((item) => [
+        item.financialAccountId,
+        Number(item._sum.amount ?? 0),
+      ]),
+    );
+
     return accounts.map((account) => {
       const totals = totalsByAccount.get(account.id) ?? { income: 0, expenses: 0 };
       const incomingTransfers = incomingTransfersByAccount.get(account.id) ?? 0;
       const outgoingTransfers = outgoingTransfersByAccount.get(account.id) ?? 0;
+      const adjustments = adjustmentsByAccount.get(account.id) ?? 0;
       const currentBalance =
         Number(account.initialBalance) +
         totals.income -
         totals.expenses +
         incomingTransfers -
-        outgoingTransfers;
+        outgoingTransfers +
+        adjustments;
 
       return {
         ...account,

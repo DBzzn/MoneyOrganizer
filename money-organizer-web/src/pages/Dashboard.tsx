@@ -5,6 +5,7 @@ import { getFinancialAccounts } from '../api/financialAccounts'
 import { buildAccountIdsParam, formatCurrency, formatDate, formatMonth } from '../utils'
 import { ChartTooltip } from '../components/ChartTooltip'
 import { AccountFilter } from '../components/AccountFilter'
+import { formatStoredIconPrefix } from '../components/storedIconRegistry'
 import type { FinancialAccount, MonthlyBalance, EvolutionEntry, Transaction, TransactionType } from '../types'
 import {
   ResponsiveContainer,
@@ -152,7 +153,7 @@ function getExpenseCategoryChartData(transactions: Transaction[]) {
     .filter((category) => category.total > 0)
     .sort((a, b) => b.total - a.total)
     .map((category) => ({
-      name: `${category.icon ?? ''} ${category.name}`,
+      name: `${formatStoredIconPrefix(category.icon)}${category.name}`,
       value: category.total,
     }))
 }
@@ -197,7 +198,7 @@ function TransactionRanking({
                   {transaction.description ?? 'Sem descrição'}
                 </p>
                 <p className="mt-1 truncate text-xs" style={{ color: 'var(--color-text-muted)' }}>
-                  {formatDate(transaction.date)} · {transaction.category.icon} {transaction.category.name}
+                  {formatDate(transaction.date)} · {formatStoredIconPrefix(transaction.category.icon)}{transaction.category.name}
                 </p>
               </div>
               <p className="whitespace-nowrap text-sm font-semibold" style={{ color: amountColor }}>
@@ -324,7 +325,7 @@ export function Dashboard() {
       label: 'Categoria dominante',
       value: dominantExpenseCategory ? formatCurrency(dominantExpenseCategory.total) : 'Sem gastos',
       description: dominantExpenseCategory
-        ? `${dominantExpenseCategory.icon ?? ''} ${dominantExpenseCategory.name} é a maior categoria de gastos do mês.`
+        ? `${formatStoredIconPrefix(dominantExpenseCategory.icon)}${dominantExpenseCategory.name} é a maior categoria de gastos do mês.`
         : 'Nenhuma despesa registrada no mês atual.',
       icon: Tag,
       color: dominantExpenseCategory ? '#8b5cf6' : 'var(--color-text-muted)',

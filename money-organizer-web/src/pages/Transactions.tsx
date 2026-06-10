@@ -24,6 +24,7 @@ import {
 import { formatCurrency, formatDate, transactionTypeLabel } from '../utils'
 import { Plus, Trash2, X, CreditCard, Pencil, Search, ArrowUpDown } from 'lucide-react'
 import ConfirmModal from '../components/ConfirmModal'
+import { formatStoredIconPrefix } from '../components/storedIconRegistry'
 
 type FormMode = 'transaction' | 'installment' | 'edit' | null
 type SortKey = 'date' | 'description' | 'category' | 'account' | 'type' | 'amount'
@@ -533,7 +534,7 @@ export function Transactions() {
                         <option value="all">Todas as contas</option>
                         {financialAccounts.map((account) => (
                             <option key={account.id} value={account.id}>
-                                {account.icon ? `${account.icon} ` : ''}{account.name}{account.isArchived ? ' (arquivada)' : ''}
+                                {formatStoredIconPrefix(account.icon)}{account.name}{account.isArchived ? ' (arquivada)' : ''}
                             </option>
                         ))}
                     </select>
@@ -601,7 +602,7 @@ export function Transactions() {
                                 >
                                     <option value="">Selecione...</option>
                                     {activeCategories.map((cat) => (
-                                        <option key={cat.id} value={cat.id}>{cat.icon} {cat.name}</option>
+                                        <option key={cat.id} value={cat.id}>{formatStoredIconPrefix(cat.icon)}{cat.name}</option>
                                     ))}
                                 </select>
                                 {transactionForm.formState.errors.categoryId && (
@@ -618,7 +619,7 @@ export function Transactions() {
                                     <option value="">Selecione...</option>
                                     {activeFinancialAccounts.map((account) => (
                                         <option key={account.id} value={account.id}>
-                                            {account.icon ? `${account.icon} ` : ''}{account.name}
+                                            {formatStoredIconPrefix(account.icon)}{account.name}
                                         </option>
                                     ))}
                                 </select>
@@ -719,7 +720,7 @@ export function Transactions() {
                                 >
                                     <option value="">Selecione...</option>
                                     {activeCategories.map((cat) => (
-                                        <option key={cat.id} value={cat.id}>{cat.icon} {cat.name}</option>
+                                        <option key={cat.id} value={cat.id}>{formatStoredIconPrefix(cat.icon)}{cat.name}</option>
                                     ))}
                                 </select>
                                 {installmentForm.formState.errors.categoryId && (
@@ -736,7 +737,7 @@ export function Transactions() {
                                     <option value="">Selecione...</option>
                                     {activeFinancialAccounts.map((account) => (
                                         <option key={account.id} value={account.id}>
-                                            {account.icon ? `${account.icon} ` : ''}{account.name}
+                                            {formatStoredIconPrefix(account.icon)}{account.name}
                                         </option>
                                     ))}
                                 </select>
@@ -830,7 +831,7 @@ export function Transactions() {
                                 >
                                     {editableCategories.map((cat) => (
                                         <option key={cat.id} value={cat.id}>
-                                            {cat.icon} {cat.name}{cat.isArchived ? ' (arquivada)' : ''}
+                                            {formatStoredIconPrefix(cat.icon)}{cat.name}{cat.isArchived ? ' (arquivada)' : ''}
                                         </option>
                                     ))}
                                 </select>
@@ -844,7 +845,7 @@ export function Transactions() {
                                 >
                                     {editableFinancialAccounts.map((account) => (
                                         <option key={account.id} value={account.id}>
-                                            {account.icon ? `${account.icon} ` : ''}{account.name}{account.isArchived ? ' (arquivada)' : ''}
+                                            {formatStoredIconPrefix(account.icon)}{account.name}{account.isArchived ? ' (arquivada)' : ''}
                                         </option>
                                     ))}
                                 </select>
@@ -922,7 +923,7 @@ export function Transactions() {
                                                 {t.description ?? 'Sem descrição'}
                                             </p>
                                             <p className="mt-1 text-xs" style={{ color: 'var(--color-text-muted)' }}>
-                                                {formatDate(t.date)} · {t.category.icon} {t.category.name}{t.category.isArchived ? ' (arquivada)' : ''} · {t.financialAccount?.icon ? `${t.financialAccount.icon} ` : ''}{t.financialAccount?.name ?? 'Conta não encontrada'}
+                                                {formatDate(t.date)} · {formatStoredIconPrefix(t.category.icon)}{t.category.name}{t.category.isArchived ? ' (arquivada)' : ''} · {formatStoredIconPrefix(t.financialAccount?.icon)}{t.financialAccount?.name ?? 'Conta não encontrada'}
                                             </p>
                                         </div>
                                         <span className={`shrink-0 text-right text-sm font-semibold ${t.type === 'INCOME' ? 'text-green-600' : 'text-red-500'}`}>
@@ -1023,10 +1024,10 @@ export function Transactions() {
                                                 </div>
                                             </td>
                                             <td className="px-6 py-4 text-sm" style={{ color: 'var(--color-text-muted)' }}>
-                                                {t.category.icon} {t.category.name}{t.category.isArchived ? ' (arquivada)' : ''}
+                                                {formatStoredIconPrefix(t.category.icon)}{t.category.name}{t.category.isArchived ? ' (arquivada)' : ''}
                                             </td>
                                             <td className="px-6 py-4 text-sm" style={{ color: 'var(--color-text-muted)' }}>
-                                                {t.financialAccount?.icon ? `${t.financialAccount.icon} ` : ''}{t.financialAccount?.name ?? 'Conta não encontrada'}
+                                                {formatStoredIconPrefix(t.financialAccount?.icon)}{t.financialAccount?.name ?? 'Conta não encontrada'}
                                             </td>
                                             <td className="px-6 py-4">
                                                 <span className={`whitespace-nowrap text-xs font-medium px-2.5 py-1 rounded-full ${typeColor[t.type]}`}>

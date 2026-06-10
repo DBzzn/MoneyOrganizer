@@ -43,12 +43,12 @@ export class CreateFinancialAccountDto {
   institutionName?: string;
 
   @ApiProperty({
-    description: 'Ícone visual da conta',
-    example: '🏦',
+    description: 'Icone visual da conta, como emoji ou chave lucide:*',
+    example: 'lucide:landmark',
     required: false,
   })
   @IsString()
-  @MaxLength(8)
+  @MaxLength(64)
   @IsOptional()
   icon?: string;
 

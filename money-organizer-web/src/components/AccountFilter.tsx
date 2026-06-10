@@ -1,5 +1,6 @@
-import { CheckSquare, SlidersHorizontal } from 'lucide-react'
+import { CheckSquare, SlidersHorizontal, WalletCards } from 'lucide-react'
 import type { FinancialAccount } from '../types'
+import { StoredIcon } from './StoredIcon'
 
 interface AccountFilterProps {
     accounts: FinancialAccount[]
@@ -88,9 +89,12 @@ export function AccountFilter({
                                     onChange={() => handleToggleAccount(account.id)}
                                     className="app-checkbox"
                                 />
-                                <span className="min-w-0 truncate">
-                                    {account.icon ? `${account.icon} ` : ''}{account.name}
-                                    {account.isArchived ? ' (arquivada)' : ''}
+                                <span className="flex min-w-0 items-center gap-2">
+                                    <StoredIcon value={account.icon} fallback={WalletCards} size={15} className="shrink-0" />
+                                    <span className="min-w-0 truncate">
+                                        {account.name}
+                                        {account.isArchived ? ' (arquivada)' : ''}
+                                    </span>
                                 </span>
                             </label>
                         )

@@ -21,6 +21,9 @@ describe('FinancialAccountsService', () => {
       groupBy: jest.Mock;
       updateMany: jest.Mock;
     };
+    balanceAdjustment: {
+      groupBy: jest.Mock;
+    };
   };
 
   beforeEach(async () => {
@@ -38,6 +41,9 @@ describe('FinancialAccountsService', () => {
       transfer: {
         groupBy: jest.fn(),
         updateMany: jest.fn(),
+      },
+      balanceAdjustment: {
+        groupBy: jest.fn(),
       },
     };
 
@@ -75,6 +81,7 @@ describe('FinancialAccountsService', () => {
     prisma.financialAccount.create.mockResolvedValue(createdAccount);
     prisma.transaction.groupBy.mockResolvedValue([]);
     prisma.transfer.groupBy.mockResolvedValue([]);
+    prisma.balanceAdjustment.groupBy.mockResolvedValue([]);
 
     await expect(
       service.create('user-1', {
@@ -100,7 +107,7 @@ describe('FinancialAccountsService', () => {
     );
   });
 
-  it('returns current balances calculated from initial balance, transactions and transfers', async () => {
+  it('returns current balances calculated from initial balance, transactions, transfers and adjustments', async () => {
     const accounts = [
       {
         id: 'account-1',
@@ -143,11 +150,17 @@ describe('FinancialAccountsService', () => {
           _sum: { amount: new Prisma.Decimal(5) },
         },
       ]);
+    prisma.balanceAdjustment.groupBy.mockResolvedValue([
+      {
+        financialAccountId: 'account-1',
+        _sum: { amount: new Prisma.Decimal(12.75) },
+      },
+    ]);
 
     await expect(service.findAll('user-1')).resolves.toEqual([
       {
         ...accounts[0],
-        currentBalance: '150.25',
+        currentBalance: '163.00',
       },
     ]);
 
@@ -191,6 +204,17 @@ describe('FinancialAccountsService', () => {
           { isPending: false },
           { date: { lt: expect.any(Date) } },
         ],
+      }),
+      _sum: {
+        amount: true,
+      },
+    });
+    expect(prisma.balanceAdjustment.groupBy).toHaveBeenCalledWith({
+      by: ['financialAccountId'],
+      where: expect.objectContaining({
+        userId: 'user-1',
+        financialAccountId: { in: ['account-1'] },
+        date: { lt: expect.any(Date) },
       }),
       _sum: {
         amount: true,

@@ -72,6 +72,17 @@ export interface Transfer {
     updatedAt: string
 }
 
+export interface BalanceAdjustment {
+    id: string
+    amount: number
+    date: string
+    reason: string
+    financialAccountId: string
+    financialAccount: FinancialAccount
+    createdAt: string
+    updatedAt: string
+}
+
 export interface MonthlyBalance {
     month: string
     income: number

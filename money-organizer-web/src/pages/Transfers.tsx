@@ -24,6 +24,7 @@ import {
 import { transferSchema, type TransferFormData } from '../schemas'
 import type { FinancialAccount, Transfer } from '../types'
 import { formatCurrency, formatDate } from '../utils'
+import { formatStoredIconPrefix } from '../components/storedIconRegistry'
 
 type FormMode = 'create' | 'edit' | null
 type QuickFilter = 'all' | 'pending' | 'confirmed'
@@ -86,7 +87,7 @@ function getQuickFilterCount(transfers: Transfer[], filter: QuickFilter): number
 }
 
 function accountLabel(account: FinancialAccount): string {
-    return `${account.icon ? `${account.icon} ` : ''}${account.name}${account.isArchived ? ' (arquivada)' : ''}`
+    return `${formatStoredIconPrefix(account.icon)}${account.name}${account.isArchived ? ' (arquivada)' : ''}`
 }
 
 export function Transfers() {

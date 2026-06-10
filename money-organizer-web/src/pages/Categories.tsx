@@ -11,17 +11,17 @@ import {
     updateCategory,
     deleteCategory,
 } from '../api/categories'
-import { ChevronDown, FolderArchive, Plus, Pencil, Trash2, X, Check, RotateCcw } from 'lucide-react'
+import { ChevronDown, FolderArchive, Plus, Pencil, Trash2, X, Check, RotateCcw, SmilePlus } from 'lucide-react'
 import ConfirmModal from '../components/ConfirmModal'
 import { getTotalsByCategory } from '../api/transactions'
 import type { Category, CategoryTotal, TransactionType } from '../types'
-import { SmilePlus } from 'lucide-react'
 import { formatCurrency } from '../utils'
+import { StoredIcon, StoredIconPicker } from '../components/StoredIcon'
 
 
 const categorySchema = z.object({
     name: z.string().min(1, 'O Nome é obrigatório!'),
-    icon: z.string().optional(),
+    icon: z.string().max(64, 'Icone muito longo').optional(),
 })
 
 type CategoryFormData = z.infer<typeof categorySchema>
@@ -82,10 +82,13 @@ export function Categories() {
         handleSubmit,
         reset,
         setValue,
+        watch,
         formState: { errors, isSubmitting },
     } = useForm<CategoryFormData>({
         resolver: zodResolver(categorySchema),
     })
+
+    const selectedIcon = watch('icon') ?? ''
 
     useEffect(() => {
         const range = getCurrentMonthRange()
@@ -232,7 +235,18 @@ export function Categories() {
                         </div>
 
                         <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4 sm:flex-row sm:items-start">
-                            <div className="relative w-full sm:w-32">
+                            <div className="w-full sm:w-72">
+                                <label className="block text-sm font-medium mb-1" style={{ color: 'var(--color-text)' }}>
+                                    Icone
+                                </label>
+                                <StoredIconPicker
+                                    value={selectedIcon}
+                                    onChange={(value) => setValue('icon', value, { shouldDirty: true, shouldValidate: true })}
+                                    fallback={FolderArchive}
+                                />
+                            </div>
+
+                            <div className="hidden">
                                 <label className="block text-sm font-medium mb-1" style={{ color: 'var(--color-text)' }}>
                                     Ícone
                                 </label>
@@ -361,7 +375,9 @@ export function Categories() {
                                 style={{ backgroundColor: 'var(--color-bg-card)', border: '1px solid var(--color-border)' }}
                             >
                                 <div className="flex min-w-0 items-center gap-3">
-                                    <span className="shrink-0 text-2xl">{category.icon ?? '📁'}</span>
+                                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-2xl" style={{ backgroundColor: 'var(--color-bg)' }}>
+                                        <StoredIcon value={category.icon} fallback={FolderArchive} size={20} />
+                                    </span>
                                     <div className="min-w-0">
                                         <div className="flex flex-wrap items-center gap-2">
                                             <span className="block break-words font-medium leading-5" style={{ color: 'var(--color-text)' }}>
@@ -467,7 +483,9 @@ export function Categories() {
                                             className="app-archived-card flex items-center justify-between gap-3 rounded-2xl p-5"
                                         >
                                             <div className="flex min-w-0 items-center gap-3">
-                                                <span className="shrink-0 text-2xl grayscale opacity-70">{category.icon ?? '📁'}</span>
+                                                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-2xl grayscale opacity-70" style={{ backgroundColor: 'var(--color-bg-card)' }}>
+                                                    <StoredIcon value={category.icon} fallback={FolderArchive} size={20} />
+                                                </span>
                                                 <div className="min-w-0">
                                                     <div className="flex flex-wrap items-center gap-2">
                                                         <span className="block break-words font-medium leading-5">

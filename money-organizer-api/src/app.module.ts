@@ -10,6 +10,7 @@ import { CategoriesModule } from './categories/categories.module';
 import { TransactionsModule } from './transactions/transactions.module';
 import { FinancialAccountsModule } from './financial-accounts/financial-accounts.module';
 import { TransfersModule } from './transfers/transfers.module';
+import { BalanceAdjustmentsModule } from './balance-adjustments/balance-adjustments.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { TransfersModule } from './transfers/transfers.module';
     FinancialAccountsModule,
     TransactionsModule,
     TransfersModule,
+    BalanceAdjustmentsModule,
   ],
   controllers: [AppController],
   providers: [AppService, PrismaService],

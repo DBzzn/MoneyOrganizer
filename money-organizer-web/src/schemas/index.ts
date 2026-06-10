@@ -71,7 +71,7 @@ export const financialAccountSchema = z.object({
     name: z.string().min(1, 'O nome é obrigatório!'),
     type: z.enum(['BANK_ACCOUNT', 'CASH_WALLET', 'OTHER']),
     institutionName: z.string().optional(),
-    icon: z.string().optional(),
+    icon: z.string().max(64, 'Icone muito longo').optional(),
     color: z.string().optional(),
     initialBalance: z.number().min(0, 'O saldo inicial não pode ser negativo'),
     includeInDashboard: z.boolean(),
@@ -90,6 +90,13 @@ export const transferSchema = z.object({
     path: ['toAccountId'],
 })
 
+export const balanceAdjustmentSchema = z.object({
+    amount: z.number().refine((value) => value !== 0, 'O ajuste nao pode ser zero'),
+    date: z.string().min(1, 'A data e obrigatoria!'),
+    financialAccountId: z.string().min(1, 'A conta e obrigatoria!'),
+    reason: z.string().trim().min(1, 'O motivo e obrigatorio!').max(240, 'Use ate 240 caracteres'),
+})
+
 export type LoginFormData = z.infer<typeof loginSchema>
 export type RegisterFormData = z.infer<typeof registerSchema>
 export type TransactionFormData = z.infer<typeof transactionSchema>
@@ -97,3 +104,4 @@ export type UpdateTransactionFormData = z.infer<typeof updateTransactionSchema>
 export type InstallmentFormData = z.infer<typeof installmentSchema>
 export type FinancialAccountFormData = z.infer<typeof financialAccountSchema>
 export type TransferFormData = z.infer<typeof transferSchema>
+export type BalanceAdjustmentFormData = z.infer<typeof balanceAdjustmentSchema>

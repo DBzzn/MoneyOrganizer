@@ -5,6 +5,7 @@ import { getFinancialAccounts } from '../api/financialAccounts'
 import { buildAccountIdsParam, formatCurrency, formatMonth } from '../utils'
 import { ChartTooltip } from '../components/ChartTooltip'
 import { AccountFilter } from '../components/AccountFilter'
+import { formatStoredIconPrefix } from '../components/storedIconRegistry'
 import type { FinancialAccount, MonthlyBalance, EvolutionEntry, ProjectionEntry, CategoryTotal, TransactionType } from '../types'
 import {
     ResponsiveContainer,
@@ -323,7 +324,7 @@ export function Reports() {
                                         <div className="flex items-center justify-between gap-3">
                                             <div className="min-w-0">
                                                 <p className="text-sm font-medium truncate" style={{ color: 'var(--color-text)' }}>
-                                                    {category.categoryIcon} {category.categoryName}
+                                                    {formatStoredIconPrefix(category.categoryIcon)}{category.categoryName}
                                                 </p>
                                                 <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
                                                     {category.transactionCount} transações - {percentage.toFixed(1)}% dos gastos listados
