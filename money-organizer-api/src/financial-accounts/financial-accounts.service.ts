@@ -46,6 +46,8 @@ type AccountLedgerItem = {
   description: string | null;
   amount: string;
   signedAmount: string;
+  balanceAfter: string;
+  affectsCurrentBalance: boolean;
   isPending: boolean;
   transactionType?: TransactionType;
   category?: {
@@ -61,6 +63,11 @@ type AccountLedgerItem = {
     color: string | null;
     isArchived: boolean;
   };
+};
+
+type AccountLedgerItemInternal = Omit<AccountLedgerItem, 'balanceAfter'> & {
+  signedAmountCents: number;
+  balanceAfter?: string;
 };
 
 function removeUndefined<T extends object>(obj: T): Partial<T> {
@@ -89,8 +96,50 @@ function endOfLocalDate(dateStr: string): Date {
   return new Date(year, month - 1, day, 23, 59, 59, 999);
 }
 
-function toFixedAmount(value: Prisma.Decimal | number): string {
-  return Number(value).toFixed(2);
+function toCents(value: Prisma.Decimal | number | string): number {
+  return new Prisma.Decimal(value).mul(100).toDecimalPlaces(0).toNumber();
+}
+
+function centsToFixed(cents: number): string {
+  return new Prisma.Decimal(cents).div(100).toFixed(2);
+}
+
+function toFixedAmount(value: Prisma.Decimal | number | string): string {
+  return centsToFixed(toCents(value));
+}
+
+function minDate(left: Date, right: Date): Date {
+  return left.getTime() < right.getTime() ? left : right;
+}
+
+function getEffectiveDateLimit(beforeDate?: Date): Date {
+  return beforeDate ? minDate(beforeDate, startOfTomorrow()) : startOfTomorrow();
+}
+
+function buildEffectivePendingMovementWhere(userId: string, beforeDate?: Date) {
+  const today = startOfToday();
+
+  return {
+    userId,
+    date: { lt: getEffectiveDateLimit(beforeDate) },
+    OR: [
+      { isPending: false },
+      { date: { lt: today } },
+    ],
+  };
+}
+
+function affectsCurrentPendingBalance(date: Date, isPending: boolean): boolean {
+  const today = startOfToday();
+
+  return (
+    date.getTime() < startOfTomorrow().getTime() &&
+    (!isPending || date.getTime() < today.getTime())
+  );
+}
+
+function affectsCurrentAdjustmentBalance(date: Date): boolean {
+  return date.getTime() < startOfTomorrow().getTime();
 }
 
 function buildLedgerDateFilter(filters: QueryAccountLedgerDto) {
@@ -141,15 +190,7 @@ export class FinancialAccountsService {
     await this.confirmOverduePendingMovements(userId);
 
     const accountIds = accounts.map((account) => account.id);
-    const today = startOfToday();
-    const effectiveMovementWhere = {
-      userId,
-      date: { lt: startOfTomorrow() },
-      OR: [
-        { isPending: false },
-        { date: { lt: today } },
-      ],
-    };
+    const effectiveMovementWhere = buildEffectivePendingMovementWhere(userId);
 
     const [
       transactionTotals,
@@ -203,12 +244,12 @@ export class FinancialAccountsService {
     const totalsByAccount = transactionTotals.reduce((totals, item) => {
       const accountId = item.financialAccountId;
       const current = totals.get(accountId) ?? { income: 0, expenses: 0 };
-      const amount = Number(item._sum.amount ?? 0);
+      const amountCents = toCents(item._sum.amount ?? 0);
 
       if (item.type === TransactionType.INCOME) {
-        current.income += amount;
+        current.income += amountCents;
       } else {
-        current.expenses += amount;
+        current.expenses += amountCents;
       }
 
       totals.set(accountId, current);
@@ -218,21 +259,21 @@ export class FinancialAccountsService {
     const outgoingTransfersByAccount = new Map(
       outgoingTransferTotals.map((item) => [
         item.fromAccountId,
-        Number(item._sum.amount ?? 0),
+        toCents(item._sum.amount ?? 0),
       ]),
     );
 
     const incomingTransfersByAccount = new Map(
       incomingTransferTotals.map((item) => [
         item.toAccountId,
-        Number(item._sum.amount ?? 0),
+        toCents(item._sum.amount ?? 0),
       ]),
     );
 
     const adjustmentsByAccount = new Map(
       adjustmentTotals.map((item) => [
         item.financialAccountId,
-        Number(item._sum.amount ?? 0),
+        toCents(item._sum.amount ?? 0),
       ]),
     );
 
@@ -241,8 +282,8 @@ export class FinancialAccountsService {
       const incomingTransfers = incomingTransfersByAccount.get(account.id) ?? 0;
       const outgoingTransfers = outgoingTransfersByAccount.get(account.id) ?? 0;
       const adjustments = adjustmentsByAccount.get(account.id) ?? 0;
-      const currentBalance =
-        Number(account.initialBalance) +
+      const currentBalanceCents =
+        toCents(account.initialBalance) +
         totals.income -
         totals.expenses +
         incomingTransfers -
@@ -251,7 +292,7 @@ export class FinancialAccountsService {
 
       return {
         ...account,
-        currentBalance: currentBalance.toFixed(2),
+        currentBalance: centsToFixed(currentBalanceCents),
       };
     });
   }
@@ -308,6 +349,96 @@ export class FinancialAccountsService {
     return this.withCurrentBalance(userId, account);
   }
 
+  private async getEffectiveBalanceCents(
+    userId: string,
+    account: FinancialAccountSummary,
+    accountId: string,
+    beforeDate?: Date,
+  ) {
+    const effectiveMovementWhere = buildEffectivePendingMovementWhere(
+      userId,
+      beforeDate,
+    );
+    const adjustmentDateLimit = getEffectiveDateLimit(beforeDate);
+
+    const [
+      transactionTotals,
+      outgoingTransferTotals,
+      incomingTransferTotals,
+      adjustmentTotals,
+    ] = await Promise.all([
+      this.prisma.transaction.groupBy({
+        by: ['type'],
+        where: {
+          ...effectiveMovementWhere,
+          financialAccountId: accountId,
+        },
+        _sum: {
+          amount: true,
+        },
+      }),
+      this.prisma.transfer.groupBy({
+        by: ['fromAccountId'],
+        where: {
+          ...effectiveMovementWhere,
+          fromAccountId: accountId,
+        },
+        _sum: {
+          amount: true,
+        },
+      }),
+      this.prisma.transfer.groupBy({
+        by: ['toAccountId'],
+        where: {
+          ...effectiveMovementWhere,
+          toAccountId: accountId,
+        },
+        _sum: {
+          amount: true,
+        },
+      }),
+      this.prisma.balanceAdjustment.groupBy({
+        by: ['financialAccountId'],
+        where: {
+          userId,
+          financialAccountId: accountId,
+          date: { lt: adjustmentDateLimit },
+        },
+        _sum: {
+          amount: true,
+        },
+      }),
+    ]);
+
+    const transactionBalanceCents = transactionTotals.reduce((total, item) => {
+      const amountCents = toCents(item._sum.amount ?? 0);
+
+      return item.type === TransactionType.INCOME
+        ? total + amountCents
+        : total - amountCents;
+    }, 0);
+    const outgoingTransfersCents = outgoingTransferTotals.reduce(
+      (total, item) => total + toCents(item._sum.amount ?? 0),
+      0,
+    );
+    const incomingTransfersCents = incomingTransferTotals.reduce(
+      (total, item) => total + toCents(item._sum.amount ?? 0),
+      0,
+    );
+    const adjustmentsCents = adjustmentTotals.reduce(
+      (total, item) => total + toCents(item._sum.amount ?? 0),
+      0,
+    );
+
+    return (
+      toCents(account.initialBalance) +
+      transactionBalanceCents +
+      incomingTransfersCents -
+      outgoingTransfersCents +
+      adjustmentsCents
+    );
+  }
+
   async getLedger(
     userId: string,
     accountId: string,
@@ -326,10 +457,27 @@ export class FinancialAccountsService {
 
     const dateFilter = buildLedgerDateFilter(filters);
     const dateWhere = dateFilter ? { date: dateFilter } : {};
+    const ledgerStartDate = filters.startDate
+      ? toLocalDate(filters.startDate)
+      : undefined;
 
-    const [accountWithBalance, transactions, transfers, adjustments] =
+    const [
+      accountWithBalance,
+      openingBalanceCents,
+      transactions,
+      transfers,
+      adjustments,
+    ] =
       await Promise.all([
         this.withCurrentBalance(userId, account),
+        ledgerStartDate
+          ? this.getEffectiveBalanceCents(
+              userId,
+              account,
+              accountId,
+              ledgerStartDate,
+            )
+          : Promise.resolve(toCents(account.initialBalance)),
         this.prisma.transaction.findMany({
           where: {
             userId,
@@ -406,9 +554,10 @@ export class FinancialAccountsService {
         }),
       ]);
 
-    const transactionItems: AccountLedgerItem[] = transactions.map((transaction) => {
+    const transactionItems: AccountLedgerItemInternal[] = transactions.map((transaction) => {
       const isIncome = transaction.type === TransactionType.INCOME;
-      const amount = Number(transaction.amount);
+      const amountCents = toCents(transaction.amount);
+      const signedAmountCents = isIncome ? amountCents : -amountCents;
       const title = transaction.description?.trim() || transaction.category.name;
 
       return {
@@ -420,18 +569,24 @@ export class FinancialAccountsService {
         createdAt: transaction.createdAt,
         title,
         description: transaction.category.name,
-        amount: toFixedAmount(transaction.amount),
-        signedAmount: toFixedAmount(isIncome ? amount : -amount),
+        amount: centsToFixed(amountCents),
+        signedAmount: centsToFixed(signedAmountCents),
+        signedAmountCents,
+        affectsCurrentBalance: affectsCurrentPendingBalance(
+          transaction.date,
+          transaction.isPending,
+        ),
         isPending: transaction.isPending,
         transactionType: transaction.type,
         category: transaction.category,
       };
     });
 
-    const transferItems: AccountLedgerItem[] = transfers.map((transfer) => {
+    const transferItems: AccountLedgerItemInternal[] = transfers.map((transfer) => {
       const isIncoming = transfer.toAccountId === accountId;
       const relatedAccount = isIncoming ? transfer.fromAccount : transfer.toAccount;
-      const amount = Number(transfer.amount);
+      const amountCents = toCents(transfer.amount);
+      const signedAmountCents = isIncoming ? amountCents : -amountCents;
 
       return {
         id: `transfer:${transfer.id}:${isIncoming ? 'in' : 'out'}`,
@@ -444,26 +599,37 @@ export class FinancialAccountsService {
           ? `Transferencia recebida de ${relatedAccount.name}`
           : `Transferencia enviada para ${relatedAccount.name}`,
         description: transfer.description ?? null,
-        amount: toFixedAmount(transfer.amount),
-        signedAmount: toFixedAmount(isIncoming ? amount : -amount),
+        amount: centsToFixed(amountCents),
+        signedAmount: centsToFixed(signedAmountCents),
+        signedAmountCents,
+        affectsCurrentBalance: affectsCurrentPendingBalance(
+          transfer.date,
+          transfer.isPending,
+        ),
         isPending: transfer.isPending,
         relatedAccount,
       };
     });
 
-    const adjustmentItems: AccountLedgerItem[] = adjustments.map((adjustment) => ({
-      id: `balance-adjustment:${adjustment.id}`,
-      sourceId: adjustment.id,
-      sourceType: 'BALANCE_ADJUSTMENT',
-      movementType: 'BALANCE_ADJUSTMENT',
-      date: adjustment.date,
-      createdAt: adjustment.createdAt,
-      title: adjustment.reason,
-      description: null,
-      amount: toFixedAmount(adjustment.amount),
-      signedAmount: toFixedAmount(adjustment.amount),
-      isPending: false,
-    }));
+    const adjustmentItems: AccountLedgerItemInternal[] = adjustments.map((adjustment) => {
+      const signedAmountCents = toCents(adjustment.amount);
+
+      return {
+        id: `balance-adjustment:${adjustment.id}`,
+        sourceId: adjustment.id,
+        sourceType: 'BALANCE_ADJUSTMENT',
+        movementType: 'BALANCE_ADJUSTMENT',
+        date: adjustment.date,
+        createdAt: adjustment.createdAt,
+        title: adjustment.reason,
+        description: null,
+        amount: centsToFixed(signedAmountCents),
+        signedAmount: centsToFixed(signedAmountCents),
+        signedAmountCents,
+        affectsCurrentBalance: affectsCurrentAdjustmentBalance(adjustment.date),
+        isPending: false,
+      };
+    });
 
     const items = [
       ...transactionItems,
@@ -475,39 +641,70 @@ export class FinancialAccountsService {
       return b.createdAt.getTime() - a.createdAt.getTime();
     });
 
+    const chronologicalItems = [...items].sort((a, b) => {
+      const dateDiff = a.date.getTime() - b.date.getTime();
+      if (dateDiff !== 0) return dateDiff;
+      return a.createdAt.getTime() - b.createdAt.getTime();
+    });
+
+    let runningBalanceCents = openingBalanceCents;
+    for (const item of chronologicalItems) {
+      if (item.affectsCurrentBalance) {
+        runningBalanceCents += item.signedAmountCents;
+      }
+
+      item.balanceAfter = centsToFixed(runningBalanceCents);
+    }
+
+    const closingBalanceCents = runningBalanceCents;
+
     const totals = items.reduce(
       (acc, item) => {
-        const signedAmount = Number(item.signedAmount);
-        acc.netChange += signedAmount;
+        const signedAmountCents = item.signedAmountCents;
+        acc.netChangeCents += signedAmountCents;
+
+        if (item.affectsCurrentBalance) {
+          acc.effectiveNetChangeCents += signedAmountCents;
+        }
 
         if (item.isPending) {
           acc.pendingCount += 1;
         }
 
         if (item.movementType === 'TRANSACTION_INCOME') {
-          acc.income += signedAmount;
+          acc.incomeCents += signedAmountCents;
         } else if (item.movementType === 'TRANSACTION_EXPENSE') {
-          acc.expenses += Math.abs(signedAmount);
+          acc.expensesCents += Math.abs(signedAmountCents);
         } else if (item.movementType === 'TRANSFER_IN') {
-          acc.incomingTransfers += signedAmount;
+          acc.incomingTransfersCents += signedAmountCents;
         } else if (item.movementType === 'TRANSFER_OUT') {
-          acc.outgoingTransfers += Math.abs(signedAmount);
+          acc.outgoingTransfersCents += Math.abs(signedAmountCents);
         } else if (item.movementType === 'BALANCE_ADJUSTMENT') {
-          acc.adjustments += signedAmount;
+          acc.adjustmentsCents += signedAmountCents;
         }
 
         return acc;
       },
       {
-        income: 0,
-        expenses: 0,
-        incomingTransfers: 0,
-        outgoingTransfers: 0,
-        adjustments: 0,
-        netChange: 0,
+        incomeCents: 0,
+        expensesCents: 0,
+        incomingTransfersCents: 0,
+        outgoingTransfersCents: 0,
+        adjustmentsCents: 0,
+        netChangeCents: 0,
+        effectiveNetChangeCents: 0,
         pendingCount: 0,
       },
     );
+
+    const responseItems: AccountLedgerItem[] = items.map((item) => {
+      const { signedAmountCents, balanceAfter, ...responseItem } = item;
+
+      return {
+        ...responseItem,
+        balanceAfter: balanceAfter ?? centsToFixed(openingBalanceCents),
+      };
+    });
 
     return {
       account: accountWithBalance,
@@ -515,16 +712,19 @@ export class FinancialAccountsService {
         startDate: filters.startDate ?? null,
         endDate: filters.endDate ?? null,
       },
+      openingBalance: centsToFixed(openingBalanceCents),
+      closingBalance: centsToFixed(closingBalanceCents),
       totals: {
-        income: totals.income.toFixed(2),
-        expenses: totals.expenses.toFixed(2),
-        incomingTransfers: totals.incomingTransfers.toFixed(2),
-        outgoingTransfers: totals.outgoingTransfers.toFixed(2),
-        adjustments: totals.adjustments.toFixed(2),
-        netChange: totals.netChange.toFixed(2),
+        income: centsToFixed(totals.incomeCents),
+        expenses: centsToFixed(totals.expensesCents),
+        incomingTransfers: centsToFixed(totals.incomingTransfersCents),
+        outgoingTransfers: centsToFixed(totals.outgoingTransfersCents),
+        adjustments: centsToFixed(totals.adjustmentsCents),
+        netChange: centsToFixed(totals.netChangeCents),
+        effectiveNetChange: centsToFixed(totals.effectiveNetChangeCents),
         pendingCount: totals.pendingCount,
       },
-      items,
+      items: responseItems,
     };
   }
 

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
+import { useSearchParams } from 'react-router-dom'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { toast } from 'react-hot-toast'
 import {
@@ -18,6 +19,7 @@ import { getFinancialAccounts } from '../api/financialAccounts'
 import {
     createTransfer,
     deleteTransfer,
+    getTransfer,
     getTransfers,
     updateTransfer,
 } from '../api/transfers'
@@ -91,6 +93,7 @@ function accountLabel(account: FinancialAccount): string {
 }
 
 export function Transfers() {
+    const [searchParams, setSearchParams] = useSearchParams()
     const [transfers, setTransfers] = useState<Transfer[]>([])
     const [financialAccounts, setFinancialAccounts] = useState<FinancialAccount[]>([])
     const [isLoading, setIsLoading] = useState(true)
@@ -99,6 +102,7 @@ export function Transfers() {
     const [currentMonth, setCurrentMonth] = useState(getCurrentMonth)
     const [accountFilter, setAccountFilter] = useState('all')
     const [quickFilter, setQuickFilter] = useState<QuickFilter>('all')
+    const editTransferId = searchParams.get('edit')
     const [confirmModal, setConfirmModal] = useState<{
         isOpen: boolean
         transferId: string | null
@@ -173,6 +177,42 @@ export function Transfers() {
             isActive = false
         }
     }, [loadData])
+
+    useEffect(() => {
+        if (!editTransferId || financialAccounts.length === 0) return
+
+        let isActive = true
+
+        getTransfer(editTransferId)
+            .then((res) => {
+                if (!isActive) return
+
+                setCurrentMonth(toInputDate(res.data.date).slice(0, 7))
+                setEditingTransfer(res.data)
+                form.reset({
+                    amount: Number(res.data.amount),
+                    date: toInputDate(res.data.date),
+                    fromAccountId: res.data.fromAccountId,
+                    toAccountId: res.data.toAccountId,
+                    isPending: res.data.isPending,
+                    description: res.data.description ?? '',
+                })
+                setFormMode('edit')
+
+                const nextParams = new URLSearchParams(searchParams)
+                nextParams.delete('edit')
+                setSearchParams(nextParams, { replace: true })
+            })
+            .catch(() => {
+                if (isActive) {
+                    toast.error('Erro ao abrir a transferencia pelo extrato.')
+                }
+            })
+
+        return () => {
+            isActive = false
+        }
+    }, [editTransferId, financialAccounts.length, form, searchParams, setSearchParams])
 
     const handleClose = () => {
         setFormMode(null)

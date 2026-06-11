@@ -101,6 +101,8 @@ export interface AccountLedgerItem {
     description?: string | null
     amount: number
     signedAmount: number
+    balanceAfter: number
+    affectsCurrentBalance: boolean
     isPending: boolean
     transactionType?: TransactionType
     category?: Pick<Category, 'id' | 'name' | 'icon' | 'isArchived'>
@@ -113,6 +115,8 @@ export interface AccountLedgerResponse {
         startDate?: string | null
         endDate?: string | null
     }
+    openingBalance: number
+    closingBalance: number
     totals: {
         income: number
         expenses: number
@@ -120,6 +124,7 @@ export interface AccountLedgerResponse {
         outgoingTransfers: number
         adjustments: number
         netChange: number
+        effectiveNetChange: number
         pendingCount: number
     }
     items: AccountLedgerItem[]

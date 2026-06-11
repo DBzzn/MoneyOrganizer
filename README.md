@@ -49,7 +49,14 @@ The project currently follows a modular monolith backend with a separate fronten
 - User registration and login
 - Protected authenticated routes
 - Category CRUD
+- Archivable categories that remain available for historical transactions
+- Financial account CRUD with current balance calculation
+- Account-aware transaction flows
+- Transfers between financial accounts
+- Balance adjustments for manual reconciliation
+- Unified account ledger with transactions, transfers, adjustments, running balances, and item actions
 - Default categories created when a user registers
+- Default initial financial account created when a user registers
 - Transaction CRUD
 - Transaction types: income, debit, credit, installment credit, pix, and cash
 - Installment creation with multiple generated transactions
@@ -62,6 +69,8 @@ The project currently follows a modular monolith backend with a separate fronten
 - Dashboard with income, expenses, balance, evolution, and expenses by category
 - Dashboard with top expenses, top income, and monthly signals
 - Reports with monthly balance, evolution, projection, rankings, and period summary
+- Account filters on dashboard and reports
+- Lucide-based icon picker with legacy emoji fallback
 - Light/dark theme using CSS variables
 - Global themed controls, selectors, and popovers
 - Swagger/OpenAPI available at `/api`
@@ -69,12 +78,10 @@ The project currently follows a modular monolith backend with a separate fronten
 
 ### In Progress / Next Improvements
 
-- Real mobile responsiveness
-- Layout fixes for Samsung S21 Ultra and similar devices
-- Mobile sidebar/navigation
-- Mobile adjustments for selectors, charts, tables, modals, and forms
-- Month-over-month comparison on the Dashboard
-- Better handling when deleting categories linked to transactions
+- Dashboard views that explain where money is now across accounts
+- Reports that separate account position from monthly income/expense flow
+- Reminders, due dates, notes, and future operational finance entities
+- Import/export workflows such as CSV or OFX before considering Open Finance
 - Future improvements for recurrence, goals, budgets, and exports
 
 ---
@@ -121,7 +128,10 @@ The project currently follows a modular monolith backend with a separate fronten
   - auth
   - users
   - categories
+  - financial-accounts
   - transactions
+  - transfers
+  - balance-adjustments
   - prisma
 - DTOs validated with `ValidationPipe`
 - Prisma access centralized through `PrismaService`
@@ -136,6 +146,8 @@ The project currently follows a modular monolith backend with a separate fronten
 - Ownership failures return 404 to avoid leaking resource existence
 - Monetary values use `Decimal`, never `Float`
 - Installment creation uses Prisma transactions to preserve atomicity
+- Transfers and balance adjustments affect account balances without polluting income/expense reports
+- Account ledger running balances use effective movements so future pending items do not alter current balance
 
 ### Frontend
 
@@ -284,7 +296,18 @@ VITE_API_URL=http://localhost:3000
 | GET | `/categories` | Lists the user's categories | Yes |
 | POST | `/categories` | Creates a category | Yes |
 | PATCH | `/categories/:id` | Updates a category | Yes |
-| DELETE | `/categories/:id` | Deletes a category | Yes |
+| DELETE | `/categories/:id` | Deletes or archives a category | Yes |
+
+### Financial Accounts
+
+| Method | Endpoint | Description | Auth |
+|---|---|---|---|
+| GET | `/financial-accounts` | Lists accounts with current balances | Yes |
+| POST | `/financial-accounts` | Creates a financial account | Yes |
+| GET | `/financial-accounts/:id` | Finds a financial account by ID | Yes |
+| GET | `/financial-accounts/:id/ledger` | Returns the unified account ledger with running balances | Yes |
+| PATCH | `/financial-accounts/:id` | Updates a financial account | Yes |
+| DELETE | `/financial-accounts/:id` | Archives a financial account | Yes |
 
 ### Transactions
 
@@ -301,6 +324,25 @@ VITE_API_URL=http://localhost:3000
 | GET | `/transactions/totals/monthly-balance` | Monthly balance | Yes |
 | GET | `/transactions/reports/evolution` | Period evolution | Yes |
 | GET | `/transactions/reports/projection` | Future projection | Yes |
+
+### Transfers
+
+| Method | Endpoint | Description | Auth |
+|---|---|---|---|
+| GET | `/transfers` | Lists transfers with filters | Yes |
+| POST | `/transfers` | Creates a transfer between accounts | Yes |
+| GET | `/transfers/:id` | Finds a transfer by ID | Yes |
+| PATCH | `/transfers/:id` | Updates a transfer | Yes |
+| DELETE | `/transfers/:id` | Deletes a transfer | Yes |
+
+### Balance Adjustments
+
+| Method | Endpoint | Description | Auth |
+|---|---|---|---|
+| GET | `/balance-adjustments` | Lists balance adjustments with filters | Yes |
+| POST | `/balance-adjustments` | Creates a balance adjustment | Yes |
+| PATCH | `/balance-adjustments/:id` | Updates adjustment amount, date, and reason | Yes |
+| DELETE | `/balance-adjustments/:id` | Deletes a balance adjustment | Yes |
 
 Interactive documentation:
 
@@ -347,6 +389,11 @@ When testing through Tailscale, if the user opens the app using the machine IP, 
 - [x] Dashboard month selector
 - [x] Top expenses, top income, and monthly signals
 - [x] Reports and projections
+- [x] Financial accounts with current balance calculation
+- [x] Account-aware transactions, dashboard, and reports
+- [x] Transfers between financial accounts
+- [x] Balance adjustments for manual reconciliation
+- [x] Unified account ledger with running balances and item actions
 - [x] Light/dark theme
 - [x] Transaction search and quick filters
 - [x] Unified single/bulk delete
@@ -355,18 +402,17 @@ When testing through Tailscale, if the user opens the app using the machine IP, 
 
 ### In Progress
 
-- [ ] Mobile responsiveness audit
-- [ ] Mobile fixes for Samsung S21 Ultra and similar screens
-- [ ] Mobile sidebar/navigation
-- [ ] Mobile layouts for Dashboard, Transactions, Categories, and Reports
-- [ ] Mobile charts, selectors, modals, and forms
+- [ ] Dashboard cash-position view across financial accounts
+- [ ] Reports that separate account position from income/expense flow
+- [ ] First-class reminders, due dates, and finance notes
+- [ ] Mobile responsiveness follow-up for account-heavy workflows
 
 ### Next Steps
 
+- [ ] CSV/OFX import before Open Finance
+- [ ] Audit and soft delete strategy for real usage
 - [ ] Month-over-month comparison on the Dashboard
-- [ ] Better handling for deleting categories linked to transactions
 - [ ] Textual insights in Reports
-- [ ] Highlight negative future months in projections
 - [ ] Category budgets
 - [ ] Financial goals
 - [ ] Automatic recurring transactions
@@ -377,9 +423,9 @@ When testing through Tailscale, if the user opens the app using the machine IP, 
 
 ## Current Status
 
-The project is under active development. The main foundation is functional, including backend, frontend, local database, authentication, transactions, categories, dashboard, and reports.
+The project is under active development. The main foundation is functional, including backend, frontend, local database, authentication, transactions, categories, financial accounts, transfers, balance adjustments, dashboard, reports, and a unified account ledger.
 
-The immediate focus is improving mobile responsiveness, because real testing through Tailscale on a Samsung S21 Ultra showed that the interface is usable but visually broken in several places.
+The immediate product focus is financial reliability: the app should clearly explain where money is now, how each account balance changed, and which future operational items still need attention. Open Finance remains outside the immediate scope; CSV/OFX import is a better near-term integration step.
 
 ---
 

@@ -6,6 +6,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateBalanceAdjustmentDto } from './dto/create-balance-adjustment.dto';
 import { QueryBalanceAdjustmentsDto } from './dto/query-balance-adjustments.dto';
+import { UpdateBalanceAdjustmentDto } from './dto/update-balance-adjustment.dto';
 import { Prisma } from '../../generated/prisma/client';
 
 const FINANCIAL_ACCOUNT_SUMMARY_SELECT = {
@@ -39,6 +40,12 @@ function toLocalDate(dateStr: string): Date {
 function endOfLocalDate(dateStr: string): Date {
   const [year, month, day] = dateStr.split('-').map(Number);
   return new Date(year, month - 1, day, 23, 59, 59, 999);
+}
+
+function removeUndefined<T extends object>(obj: T): Partial<T> {
+  return Object.fromEntries(
+    Object.entries(obj).filter(([, value]) => value !== undefined),
+  ) as Partial<T>;
 }
 
 @Injectable()
@@ -132,6 +139,40 @@ export class BalanceAdjustmentsService {
       select: BALANCE_ADJUSTMENT_SELECT,
       orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
     });
+  }
+
+  async update(
+    userId: string,
+    adjustmentId: string,
+    dto: UpdateBalanceAdjustmentDto,
+  ) {
+    if (dto.amount !== undefined) {
+      this.ensureNonZeroAmount(dto.amount);
+    }
+
+    const data = removeUndefined({
+      amount:
+        dto.amount !== undefined ? new Prisma.Decimal(dto.amount) : undefined,
+      date: dto.date !== undefined ? toLocalDate(dto.date) : undefined,
+      reason:
+        dto.reason !== undefined ? this.sanitizeReason(dto.reason) : undefined,
+    });
+
+    try {
+      return await this.prisma.balanceAdjustment.update({
+        where: {
+          id: adjustmentId,
+          userId,
+        },
+        data,
+        select: BALANCE_ADJUSTMENT_SELECT,
+      });
+    } catch (error: any) {
+      if (error?.code === 'P2025') {
+        throw new NotFoundException('Ajuste de saldo nao encontrado.');
+      }
+      throw error;
+    }
   }
 
   async remove(userId: string, adjustmentId: string) {

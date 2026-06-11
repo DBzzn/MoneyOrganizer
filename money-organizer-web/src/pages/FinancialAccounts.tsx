@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { toast } from 'react-hot-toast'
 import { AlertTriangle, Archive, ArrowDownLeft, ArrowUpRight, Check, Pencil, Plus, Repeat2, RotateCcw, Scale, Trash2, WalletCards, X } from 'lucide-react'
@@ -9,6 +10,7 @@ import {
     createBalanceAdjustment,
     deleteBalanceAdjustment,
     getBalanceAdjustments,
+    updateBalanceAdjustment,
 } from '../api/balanceAdjustments'
 import {
     archiveFinancialAccount,
@@ -101,6 +103,24 @@ function ledgerItemDetail(item: AccountLedgerItem): string {
     return 'Conciliacao manual'
 }
 
+function ledgerStatusLabel(item: AccountLedgerItem): string {
+    if (!item.affectsCurrentBalance) {
+        return item.isPending ? 'Pendente futura' : 'Futuro'
+    }
+
+    return item.isPending ? 'Pendente' : 'Confirmado'
+}
+
+function ledgerStatusClass(item: AccountLedgerItem): string {
+    if (!item.affectsCurrentBalance) {
+        return 'bg-blue-100 text-blue-700'
+    }
+
+    return item.isPending
+        ? 'bg-yellow-100 text-yellow-800'
+        : 'bg-green-100 text-green-700'
+}
+
 function LedgerMovementIcon({ item }: { item: AccountLedgerItem }) {
     if (item.movementType === 'TRANSACTION_INCOME' || item.movementType === 'TRANSFER_IN') {
         return <ArrowDownLeft size={17} />
@@ -118,6 +138,8 @@ function LedgerMovementIcon({ item }: { item: AccountLedgerItem }) {
 }
 
 export function FinancialAccounts() {
+    const navigate = useNavigate()
+    const [searchParams, setSearchParams] = useSearchParams()
     const [accounts, setAccounts] = useState<FinancialAccount[]>([])
     const [adjustments, setAdjustments] = useState<BalanceAdjustment[]>([])
     const [ledger, setLedger] = useState<AccountLedgerResponse | null>(null)
@@ -126,6 +148,7 @@ export function FinancialAccounts() {
     const [showForm, setShowForm] = useState(false)
     const [showAdjustmentForm, setShowAdjustmentForm] = useState(false)
     const [editing, setEditing] = useState<FinancialAccount | null>(null)
+    const [editingAdjustment, setEditingAdjustment] = useState<BalanceAdjustment | null>(null)
     const [ledgerAccountId, setLedgerAccountId] = useState('')
     const [ledgerStartDate, setLedgerStartDate] = useState('')
     const [ledgerEndDate, setLedgerEndDate] = useState('')
@@ -142,6 +165,7 @@ export function FinancialAccounts() {
         isOpen: boolean
         payload: ReturnType<typeof sanitizeAccountPayload> | null
     }>({ isOpen: false, payload: null })
+    const adjustmentDeepLinkId = searchParams.get('adjustment')
 
     const {
         register,
@@ -163,9 +187,15 @@ export function FinancialAccounts() {
     })
 
     const activeAccounts = accounts.filter((account) => !account.isArchived)
+    const adjustmentAccountOptions = editingAdjustment
+        ? accounts.filter((account) =>
+            !account.isArchived || account.id === editingAdjustment.financialAccountId
+        )
+        : activeAccounts
     const selectedLedgerAccount = accounts.find((account) => account.id === ledgerAccountId)
+    const ledgerAccount = ledger?.account ?? selectedLedgerAccount
     const ledgerItems = ledger?.items ?? []
-    const ledgerNetChange = Number(ledger?.totals.netChange ?? 0)
+    const ledgerEffectiveNetChange = Number(ledger?.totals.effectiveNetChange ?? ledger?.totals.netChange ?? 0)
 
     const loadData = useCallback(async () => {
         const [accountsRes, adjustmentsRes] = await Promise.all([
@@ -280,6 +310,7 @@ export function FinancialAccounts() {
     const handleOpenAdjustment = () => {
         const firstActiveAccount = activeAccounts[0]
 
+        setEditingAdjustment(null)
         adjustmentForm.reset({
             ...DEFAULT_ADJUSTMENT_FORM_VALUES,
             date: getTodayInputDate(),
@@ -288,21 +319,63 @@ export function FinancialAccounts() {
         setShowAdjustmentForm(true)
     }
 
+    const handleOpenEditAdjustment = useCallback((adjustment: BalanceAdjustment) => {
+        setEditingAdjustment(adjustment)
+        adjustmentForm.reset({
+            amount: Number(adjustment.amount),
+            date: adjustment.date.slice(0, 10),
+            financialAccountId: adjustment.financialAccountId,
+            reason: adjustment.reason,
+        })
+        setLedgerAccountId(adjustment.financialAccountId)
+        setShowAdjustmentForm(true)
+    }, [adjustmentForm])
+
+    const handleOpenLedgerItem = (item: AccountLedgerItem) => {
+        if (item.sourceType === 'TRANSACTION') {
+            navigate(`/transactions?edit=${item.sourceId}`)
+            return
+        }
+
+        if (item.sourceType === 'TRANSFER') {
+            navigate(`/transfers?edit=${item.sourceId}`)
+            return
+        }
+
+        const adjustment = adjustments.find((entry) => entry.id === item.sourceId)
+
+        if (!adjustment) {
+            toast.error('Ajuste nao encontrado na lista atual.')
+            return
+        }
+
+        handleOpenEditAdjustment(adjustment)
+    }
+
     const handleCloseAdjustment = () => {
         setShowAdjustmentForm(false)
+        setEditingAdjustment(null)
         adjustmentForm.reset(DEFAULT_ADJUSTMENT_FORM_VALUES)
     }
 
     const handleSubmitAdjustment = async (data: BalanceAdjustmentFormData) => {
         try {
-            await createBalanceAdjustment({
-                ...data,
-                reason: data.reason.trim(),
-            })
+            if (editingAdjustment) {
+                await updateBalanceAdjustment(editingAdjustment.id, {
+                    amount: data.amount,
+                    date: data.date,
+                    reason: data.reason.trim(),
+                })
+            } else {
+                await createBalanceAdjustment({
+                    ...data,
+                    reason: data.reason.trim(),
+                })
+            }
             await loadData()
             setLedgerReloadKey((current) => current + 1)
             handleCloseAdjustment()
-            toast.success('Ajuste de saldo criado!')
+            toast.success(editingAdjustment ? 'Ajuste atualizado!' : 'Ajuste de saldo criado!')
         } catch {
             toast.error('Erro ao salvar o ajuste de saldo!')
         }
@@ -399,6 +472,30 @@ export function FinancialAccounts() {
             toast.error('Erro ao reativar a conta!')
         }
     }
+
+    useEffect(() => {
+        if (!adjustmentDeepLinkId || isLoading) return
+
+        const adjustment = adjustments.find((entry) => entry.id === adjustmentDeepLinkId)
+        const nextParams = new URLSearchParams(searchParams)
+        nextParams.delete('adjustment')
+
+        if (!adjustment) {
+            toast.error('Ajuste nao encontrado para edicao.')
+            setSearchParams(nextParams, { replace: true })
+            return
+        }
+
+        handleOpenEditAdjustment(adjustment)
+        setSearchParams(nextParams, { replace: true })
+    }, [
+        adjustmentDeepLinkId,
+        adjustments,
+        handleOpenEditAdjustment,
+        isLoading,
+        searchParams,
+        setSearchParams,
+    ])
 
     return (
         <Layout>
@@ -550,7 +647,7 @@ export function FinancialAccounts() {
                     >
                         <div className="mb-4 flex items-center justify-between">
                             <h2 className="text-lg font-semibold" style={{ color: 'var(--color-text)' }}>
-                                Novo ajuste de saldo
+                                {editingAdjustment ? 'Editar ajuste de saldo' : 'Novo ajuste de saldo'}
                             </h2>
                             <button
                                 type="button"
@@ -565,9 +662,13 @@ export function FinancialAccounts() {
                         <form onSubmit={adjustmentForm.handleSubmit(handleSubmitAdjustment)} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                             <div>
                                 <label className="mb-1 block text-sm font-medium" style={{ color: 'var(--color-text)' }}>Conta</label>
-                                <select {...adjustmentForm.register('financialAccountId')} className="app-control w-full">
+                                <select
+                                    {...adjustmentForm.register('financialAccountId')}
+                                    disabled={!!editingAdjustment}
+                                    className="app-control w-full disabled:cursor-not-allowed disabled:opacity-70"
+                                >
                                     <option value="">Selecione...</option>
-                                    {activeAccounts.map((account) => (
+                                    {adjustmentAccountOptions.map((account) => (
                                         <option key={account.id} value={account.id}>
                                             {accountLabel(account)}
                                         </option>
@@ -631,7 +732,9 @@ export function FinancialAccounts() {
                                     className="flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-600 px-6 py-2.5 text-sm font-medium text-white transition hover:bg-emerald-700 disabled:bg-emerald-300 sm:w-auto"
                                 >
                                     <Check size={16} />
-                                    {adjustmentForm.formState.isSubmitting ? 'Salvando...' : 'Salvar ajuste'}
+                                    {adjustmentForm.formState.isSubmitting
+                                        ? 'Salvando...'
+                                        : editingAdjustment ? 'Salvar alteracoes' : 'Salvar ajuste'}
                                 </button>
                             </div>
                         </form>
@@ -793,29 +896,44 @@ export function FinancialAccounts() {
                         </div>
                     </div>
 
-                    <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-6">
                         <div className="rounded-xl border p-3" style={{ borderColor: 'var(--color-border)' }}>
                             <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Conta</p>
                             <p className="mt-1 truncate text-sm font-semibold" style={{ color: 'var(--color-text)' }}>
-                                {selectedLedgerAccount ? accountLabel(selectedLedgerAccount) : 'Nenhuma conta'}
+                                {ledgerAccount ? accountLabel(ledgerAccount) : 'Nenhuma conta'}
                             </p>
                         </div>
                         <div className="rounded-xl border p-3" style={{ borderColor: 'var(--color-border)' }}>
                             <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Saldo atual</p>
                             <p
                                 className="mt-1 text-sm font-semibold"
-                                style={{ color: selectedLedgerAccount && Number(selectedLedgerAccount.currentBalance) < 0 ? '#f87171' : 'var(--color-text)' }}
+                                style={{ color: ledgerAccount && Number(ledgerAccount.currentBalance) < 0 ? '#f87171' : 'var(--color-text)' }}
                             >
-                                {selectedLedgerAccount ? formatCurrency(selectedLedgerAccount.currentBalance) : '-'}
+                                {ledgerAccount ? formatCurrency(ledgerAccount.currentBalance) : '-'}
                             </p>
                         </div>
                         <div className="rounded-xl border p-3" style={{ borderColor: 'var(--color-border)' }}>
-                            <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Movimento liquido</p>
+                            <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Abertura</p>
+                            <p className="mt-1 text-sm font-semibold" style={{ color: 'var(--color-text)' }}>
+                                {ledger ? formatCurrency(ledger.openingBalance) : '-'}
+                            </p>
+                        </div>
+                        <div className="rounded-xl border p-3" style={{ borderColor: 'var(--color-border)' }}>
+                            <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Fechamento</p>
                             <p
                                 className="mt-1 text-sm font-semibold"
-                                style={{ color: ledgerNetChange < 0 ? '#f87171' : '#16a34a' }}
+                                style={{ color: ledger && Number(ledger.closingBalance) < 0 ? '#f87171' : 'var(--color-text)' }}
                             >
-                                {ledger ? formatCurrency(ledger.totals.netChange) : '-'}
+                                {ledger ? formatCurrency(ledger.closingBalance) : '-'}
+                            </p>
+                        </div>
+                        <div className="rounded-xl border p-3" style={{ borderColor: 'var(--color-border)' }}>
+                            <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Movimento efetivo</p>
+                            <p
+                                className="mt-1 text-sm font-semibold"
+                                style={{ color: ledgerEffectiveNetChange < 0 ? '#f87171' : '#16a34a' }}
+                            >
+                                {ledger ? formatCurrency(ledger.totals.effectiveNetChange) : '-'}
                             </p>
                         </div>
                         <div className="rounded-xl border p-3" style={{ borderColor: 'var(--color-border)' }}>
@@ -873,18 +991,31 @@ export function FinancialAccounts() {
                                                     {formatCurrency(signedAmount)}
                                                 </span>
                                             </div>
-                                            {item.isPending && (
-                                                <span className="mt-3 inline-flex rounded-full bg-yellow-100 px-2.5 py-1 text-xs font-medium text-yellow-800">
-                                                    Pendente
-                                                </span>
-                                            )}
+                                            <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                                                <div className="flex flex-wrap items-center gap-2">
+                                                    <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${ledgerStatusClass(item)}`}>
+                                                        {ledgerStatusLabel(item)}
+                                                    </span>
+                                                    <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                                                        Saldo: {formatCurrency(item.balanceAfter)}
+                                                    </span>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleOpenLedgerItem(item)}
+                                                    className="app-icon-control flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs"
+                                                >
+                                                    <Pencil size={14} />
+                                                    Abrir
+                                                </button>
+                                            </div>
                                         </div>
                                     )
                                 })}
                             </div>
 
                             <div className="hidden overflow-x-auto md:block">
-                                <table className="w-full min-w-[840px]">
+                                <table className="w-full min-w-[980px]">
                                     <thead>
                                         <tr style={{ borderBottom: '1px solid var(--color-border)', backgroundColor: 'var(--color-bg)' }}>
                                             <th className="px-4 py-3 text-left text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>Data</th>
@@ -892,6 +1023,8 @@ export function FinancialAccounts() {
                                             <th className="px-4 py-3 text-left text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>Detalhe</th>
                                             <th className="px-4 py-3 text-left text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>Status</th>
                                             <th className="px-4 py-3 text-right text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>Valor</th>
+                                            <th className="px-4 py-3 text-right text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>Saldo</th>
+                                            <th className="px-4 py-3"></th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -925,21 +1058,32 @@ export function FinancialAccounts() {
                                                         {ledgerItemDetail(item)}
                                                     </td>
                                                     <td className="px-4 py-3">
-                                                        {item.isPending ? (
-                                                            <span className="rounded-full bg-yellow-100 px-2.5 py-1 text-xs font-medium text-yellow-800">
-                                                                Pendente
-                                                            </span>
-                                                        ) : (
-                                                            <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
-                                                                Confirmado
-                                                            </span>
-                                                        )}
+                                                        <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${ledgerStatusClass(item)}`}>
+                                                            {ledgerStatusLabel(item)}
+                                                        </span>
                                                     </td>
                                                     <td
                                                         className="whitespace-nowrap px-4 py-3 text-right text-sm font-semibold"
                                                         style={{ color: signedAmount < 0 ? '#f87171' : '#16a34a' }}
                                                     >
                                                         {formatCurrency(signedAmount)}
+                                                    </td>
+                                                    <td
+                                                        className="whitespace-nowrap px-4 py-3 text-right text-sm font-semibold"
+                                                        style={{ color: Number(item.balanceAfter) < 0 ? '#f87171' : 'var(--color-text)' }}
+                                                    >
+                                                        {formatCurrency(item.balanceAfter)}
+                                                    </td>
+                                                    <td className="px-4 py-3 text-right">
+                                                        <button
+                                                            type="button"
+                                                            aria-label="Abrir movimento"
+                                                            title="Abrir movimento"
+                                                            onClick={() => handleOpenLedgerItem(item)}
+                                                            className="app-icon-control rounded-lg p-2"
+                                                        >
+                                                            <Pencil size={15} />
+                                                        </button>
                                                     </td>
                                                 </tr>
                                             )
@@ -996,7 +1140,15 @@ export function FinancialAccounts() {
                                                     {formatCurrency(amount)}
                                                 </span>
                                             </div>
-                                            <div className="mt-3 flex justify-end">
+                                            <div className="mt-3 flex justify-end gap-2">
+                                                <button
+                                                    type="button"
+                                                    aria-label="Editar ajuste"
+                                                    onClick={() => handleOpenEditAdjustment(adjustment)}
+                                                    className="app-icon-control rounded-lg p-2"
+                                                >
+                                                    <Pencil size={15} />
+                                                </button>
                                                 <button
                                                     type="button"
                                                     aria-label="Remover ajuste"
@@ -1044,6 +1196,14 @@ export function FinancialAccounts() {
                                                         {formatCurrency(amount)}
                                                     </td>
                                                     <td className="px-4 py-3 text-right">
+                                                        <button
+                                                            type="button"
+                                                            aria-label="Editar ajuste"
+                                                            onClick={() => handleOpenEditAdjustment(adjustment)}
+                                                            className="app-icon-control mr-1 rounded-lg p-2"
+                                                        >
+                                                            <Pencil size={15} />
+                                                        </button>
                                                         <button
                                                             type="button"
                                                             aria-label="Remover ajuste"

@@ -13,6 +13,7 @@ describe('BalanceAdjustmentsService', () => {
     balanceAdjustment: {
       create: jest.Mock;
       findMany: jest.Mock;
+      update: jest.Mock;
       delete: jest.Mock;
     };
   };
@@ -25,6 +26,7 @@ describe('BalanceAdjustmentsService', () => {
       balanceAdjustment: {
         create: jest.fn(),
         findMany: jest.fn(),
+        update: jest.fn(),
         delete: jest.fn(),
       },
     };
@@ -139,6 +141,58 @@ describe('BalanceAdjustmentsService', () => {
 
     await expect(
       service.remove('user-1', 'adjustment-1'),
+    ).rejects.toThrow(NotFoundException);
+  });
+
+  it('updates amount, date and reason without changing the linked account', async () => {
+    prisma.balanceAdjustment.update.mockResolvedValue({
+      id: 'adjustment-1',
+      amount: new Prisma.Decimal(25),
+      date: new Date(2026, 5, 11, 12),
+      reason: 'Conferencia final',
+      financialAccountId: 'account-1',
+    });
+
+    await service.update('user-1', 'adjustment-1', {
+      amount: 25,
+      date: '2026-06-11',
+      reason: '  Conferencia final  ',
+    });
+
+    expect(prisma.balanceAdjustment.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          id: 'adjustment-1',
+          userId: 'user-1',
+        },
+        data: expect.objectContaining({
+          amount: expect.any(Prisma.Decimal),
+          date: new Date(2026, 5, 11, 12),
+          reason: 'Conferencia final',
+        }),
+      }),
+    );
+    expect(prisma.balanceAdjustment.update.mock.calls[0][0].data).not.toHaveProperty(
+      'financialAccountId',
+    );
+  });
+
+  it('rejects invalid adjustment updates before writing', async () => {
+    await expect(
+      service.update('user-1', 'adjustment-1', { amount: 0 }),
+    ).rejects.toThrow(BadRequestException);
+    await expect(
+      service.update('user-1', 'adjustment-1', { reason: '   ' }),
+    ).rejects.toThrow(BadRequestException);
+
+    expect(prisma.balanceAdjustment.update).not.toHaveBeenCalled();
+  });
+
+  it('does not update an adjustment from another user', async () => {
+    prisma.balanceAdjustment.update.mockRejectedValue({ code: 'P2025' });
+
+    await expect(
+      service.update('user-1', 'adjustment-1', { reason: 'Conferencia' }),
     ).rejects.toThrow(NotFoundException);
   });
 });

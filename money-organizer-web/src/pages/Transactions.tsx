@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useForm } from 'react-hook-form'
+import { useSearchParams } from 'react-router-dom'
 import { toast } from 'react-hot-toast'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Layout } from '../components/Layout'
 import {
     getTransactions,
+    getTransaction,
     updateTransaction,
     deleteTransactions,
     createTransaction,
@@ -144,6 +146,7 @@ function formatMonthLabel(month: string): string {
 }
 
 export function Transactions() {
+    const [searchParams, setSearchParams] = useSearchParams()
     const [transactions, setTransactions] = useState<Transaction[]>([])
     const [categories, setCategories] = useState<Category[]>([])
     const [financialAccounts, setFinancialAccounts] = useState<FinancialAccount[]>([])
@@ -157,6 +160,7 @@ export function Transactions() {
     const [sortKey, setSortKey] = useState<SortKey>('date')
     const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
     const [quickFilter, setQuickFilter] = useState<QuickFilter>('all')
+    const editTransactionId = searchParams.get('edit')
     const [confirmModal, setConfirmModal] = useState<{
         isOpen: boolean
         message: string
@@ -251,6 +255,34 @@ export function Transactions() {
 
         return () => window.clearTimeout(timeoutId)
     }, [searchInput])
+
+    useEffect(() => {
+        if (!editTransactionId || categories.length === 0 || financialAccounts.length === 0) return
+
+        let isActive = true
+
+        getTransaction(editTransactionId)
+            .then((res) => {
+                if (!isActive) return
+
+                setCurrentMonth(toInputDate(res.data.date).slice(0, 7))
+                setEditingTransaction(res.data)
+                setFormMode('edit')
+
+                const nextParams = new URLSearchParams(searchParams)
+                nextParams.delete('edit')
+                setSearchParams(nextParams, { replace: true })
+            })
+            .catch(() => {
+                if (isActive) {
+                    toast.error('Erro ao abrir a transacao pelo extrato!')
+                }
+            })
+
+        return () => {
+            isActive = false
+        }
+    }, [editTransactionId, categories.length, financialAccounts.length, searchParams, setSearchParams])
 
     const handleClose = () => {
         const defaultAccountId = activeFinancialAccounts[0]?.id ?? ''

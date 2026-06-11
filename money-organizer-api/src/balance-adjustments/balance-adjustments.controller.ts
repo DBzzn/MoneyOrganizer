@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   Param,
+  Patch,
   Post,
   Query,
   Request,
@@ -20,6 +21,7 @@ import { Request as ExpressRequest } from 'express';
 import { BalanceAdjustmentsService } from './balance-adjustments.service';
 import { CreateBalanceAdjustmentDto } from './dto/create-balance-adjustment.dto';
 import { QueryBalanceAdjustmentsDto } from './dto/query-balance-adjustments.dto';
+import { UpdateBalanceAdjustmentDto } from './dto/update-balance-adjustment.dto';
 
 interface AuthenticatedRequest extends ExpressRequest {
   user: {
@@ -61,6 +63,24 @@ export class BalanceAdjustmentsController {
     @Query() filters: QueryBalanceAdjustmentsDto,
   ) {
     return this.balanceAdjustmentsService.findAll(req.user.id, filters);
+  }
+
+  @ApiOperation({ summary: 'Atualizar ajuste de saldo' })
+  @ApiResponse({ status: 200, description: 'Ajuste atualizado com sucesso' })
+  @ApiResponse({ status: 400, description: 'Dados invalidos' })
+  @ApiResponse({ status: 401, description: 'Nao autenticado' })
+  @ApiResponse({ status: 404, description: 'Ajuste nao encontrado' })
+  @Patch(':id')
+  update(
+    @Request() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Body() updateBalanceAdjustmentDto: UpdateBalanceAdjustmentDto,
+  ) {
+    return this.balanceAdjustmentsService.update(
+      req.user.id,
+      id,
+      updateBalanceAdjustmentDto,
+    );
   }
 
   @ApiOperation({ summary: 'Remover ajuste de saldo' })
