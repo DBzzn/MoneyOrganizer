@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { toast } from 'react-hot-toast'
-import { AlertTriangle, Archive, Check, Pencil, Plus, RotateCcw, Scale, Trash2, WalletCards, X } from 'lucide-react'
+import { AlertTriangle, Archive, ArrowDownLeft, ArrowUpRight, Check, Pencil, Plus, Repeat2, RotateCcw, Scale, Trash2, WalletCards, X } from 'lucide-react'
 import { Layout } from '../components/Layout'
 import ConfirmModal from '../components/ConfirmModal'
 import {
@@ -13,17 +13,18 @@ import {
 import {
     archiveFinancialAccount,
     createFinancialAccount,
+    getFinancialAccountLedger,
     getFinancialAccounts,
     updateFinancialAccount,
 } from '../api/financialAccounts'
-import type { BalanceAdjustment, FinancialAccount, FinancialAccountType } from '../types'
+import type { AccountLedgerItem, AccountLedgerResponse, BalanceAdjustment, FinancialAccount, FinancialAccountType } from '../types'
 import {
     balanceAdjustmentSchema,
     type BalanceAdjustmentFormData,
     financialAccountSchema,
     type FinancialAccountFormData,
 } from '../schemas'
-import { formatCurrency, formatDate } from '../utils'
+import { formatCurrency, formatDate, transactionTypeLabel } from '../utils'
 import { StoredIcon, StoredIconPicker } from '../components/StoredIcon'
 import { formatStoredIconPrefix } from '../components/storedIconRegistry'
 
@@ -67,17 +68,68 @@ function sanitizeAccountPayload(data: FinancialAccountFormData) {
     }
 }
 
-function accountLabel(account: FinancialAccount): string {
+function accountLabel(account: Pick<FinancialAccount, 'name' | 'icon' | 'isArchived'>): string {
     return `${formatStoredIconPrefix(account.icon)}${account.name}${account.isArchived ? ' (arquivada)' : ''}`
+}
+
+function ledgerMovementLabel(item: AccountLedgerItem): string {
+    const labels: Record<AccountLedgerItem['movementType'], string> = {
+        TRANSACTION_INCOME: 'Receita',
+        TRANSACTION_EXPENSE: 'Despesa',
+        TRANSFER_IN: 'Transferencia recebida',
+        TRANSFER_OUT: 'Transferencia enviada',
+        BALANCE_ADJUSTMENT: 'Ajuste de saldo',
+    }
+
+    return labels[item.movementType]
+}
+
+function ledgerItemDetail(item: AccountLedgerItem): string {
+    if (item.sourceType === 'TRANSACTION') {
+        const typeLabel = item.transactionType ? transactionTypeLabel(item.transactionType) : 'Transacao'
+        const categoryName = item.category?.name
+
+        return categoryName ? `${typeLabel} - ${categoryName}` : typeLabel
+    }
+
+    if (item.sourceType === 'TRANSFER') {
+        return item.relatedAccount
+            ? `Conta relacionada: ${accountLabel(item.relatedAccount)}`
+            : 'Transferencia entre contas'
+    }
+
+    return 'Conciliacao manual'
+}
+
+function LedgerMovementIcon({ item }: { item: AccountLedgerItem }) {
+    if (item.movementType === 'TRANSACTION_INCOME' || item.movementType === 'TRANSFER_IN') {
+        return <ArrowDownLeft size={17} />
+    }
+
+    if (item.movementType === 'TRANSFER_OUT') {
+        return <Repeat2 size={17} />
+    }
+
+    if (item.movementType === 'BALANCE_ADJUSTMENT') {
+        return <Scale size={17} />
+    }
+
+    return <ArrowUpRight size={17} />
 }
 
 export function FinancialAccounts() {
     const [accounts, setAccounts] = useState<FinancialAccount[]>([])
     const [adjustments, setAdjustments] = useState<BalanceAdjustment[]>([])
+    const [ledger, setLedger] = useState<AccountLedgerResponse | null>(null)
     const [isLoading, setIsLoading] = useState(true)
+    const [isLedgerLoading, setIsLedgerLoading] = useState(false)
     const [showForm, setShowForm] = useState(false)
     const [showAdjustmentForm, setShowAdjustmentForm] = useState(false)
     const [editing, setEditing] = useState<FinancialAccount | null>(null)
+    const [ledgerAccountId, setLedgerAccountId] = useState('')
+    const [ledgerStartDate, setLedgerStartDate] = useState('')
+    const [ledgerEndDate, setLedgerEndDate] = useState('')
+    const [ledgerReloadKey, setLedgerReloadKey] = useState(0)
     const [confirmModal, setConfirmModal] = useState<{
         isOpen: boolean
         accountId: string | null
@@ -111,6 +163,9 @@ export function FinancialAccounts() {
     })
 
     const activeAccounts = accounts.filter((account) => !account.isArchived)
+    const selectedLedgerAccount = accounts.find((account) => account.id === ledgerAccountId)
+    const ledgerItems = ledger?.items ?? []
+    const ledgerNetChange = Number(ledger?.totals.netChange ?? 0)
 
     const loadData = useCallback(async () => {
         const [accountsRes, adjustmentsRes] = await Promise.all([
@@ -142,6 +197,57 @@ export function FinancialAccounts() {
             isActive = false
         }
     }, [loadData])
+
+    useEffect(() => {
+        if (accounts.length === 0) {
+            setLedgerAccountId('')
+            setLedger(null)
+            return
+        }
+
+        setLedgerAccountId((currentId) => {
+            if (currentId && accounts.some((account) => account.id === currentId)) {
+                return currentId
+            }
+
+            return accounts[0].id
+        })
+    }, [accounts])
+
+    useEffect(() => {
+        if (!ledgerAccountId) {
+            setLedger(null)
+            return
+        }
+
+        let isActive = true
+
+        setIsLedgerLoading(true)
+        getFinancialAccountLedger(ledgerAccountId, {
+            startDate: ledgerStartDate || undefined,
+            endDate: ledgerEndDate || undefined,
+        })
+            .then((res) => {
+                if (isActive) {
+                    setLedger(res.data)
+                }
+            })
+            .catch(() => {
+                if (isActive) {
+                    toast.error('Erro ao carregar o extrato da conta!')
+                    setLedger(null)
+                }
+            })
+            .finally(() => {
+                if (isActive) {
+                    setIsLedgerLoading(false)
+                }
+            })
+
+        return () => {
+            isActive = false
+        }
+    }, [ledgerAccountId, ledgerStartDate, ledgerEndDate, ledgerReloadKey])
 
     const handleOpenCreate = () => {
         setEditing(null)
@@ -194,6 +300,7 @@ export function FinancialAccounts() {
                 reason: data.reason.trim(),
             })
             await loadData()
+            setLedgerReloadKey((current) => current + 1)
             handleCloseAdjustment()
             toast.success('Ajuste de saldo criado!')
         } catch {
@@ -207,6 +314,7 @@ export function FinancialAccounts() {
         try {
             await deleteBalanceAdjustment(adjustmentConfirmModal.adjustmentId)
             await loadData()
+            setLedgerReloadKey((current) => current + 1)
             toast.success('Ajuste removido com sucesso!')
         } catch {
             toast.error('Erro ao remover o ajuste de saldo!')
@@ -222,10 +330,13 @@ export function FinancialAccounts() {
                 setAccounts((prev) =>
                     prev.map((account) => account.id === editing.id ? res.data : account)
                 )
+                setLedgerReloadKey((current) => current + 1)
                 toast.success('Conta financeira atualizada!')
             } else {
                 const res = await createFinancialAccount(payload)
                 setAccounts((prev) => [...prev, res.data])
+                setLedgerAccountId(res.data.id)
+                setLedgerReloadKey((current) => current + 1)
                 toast.success('Conta financeira criada!')
             }
             handleClose()
@@ -267,6 +378,7 @@ export function FinancialAccounts() {
                         : account
                 )
             )
+            setLedgerReloadKey((current) => current + 1)
             toast.success('Conta arquivada com sucesso!')
         } catch {
             toast.error('Erro ao arquivar a conta!')
@@ -281,6 +393,7 @@ export function FinancialAccounts() {
             setAccounts((prev) =>
                 prev.map((item) => item.id === account.id ? res.data : item)
             )
+            setLedgerReloadKey((current) => current + 1)
             toast.success('Conta reativada!')
         } catch {
             toast.error('Erro ao reativar a conta!')
@@ -619,6 +732,224 @@ export function FinancialAccounts() {
                         ))}
                     </div>
                 )}
+
+                <div
+                    className="glass rounded-2xl p-5 sm:p-6"
+                    style={{ backgroundColor: 'var(--color-bg-card)', border: '1px solid var(--color-border)' }}
+                >
+                    <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+                        <div>
+                            <h2 className="text-lg font-semibold" style={{ color: 'var(--color-text)' }}>Extrato da conta</h2>
+                            <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
+                                Transacoes, transferencias e ajustes em ordem cronologica
+                            </p>
+                        </div>
+
+                        <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2 lg:w-auto lg:grid-cols-[220px_150px_150px_auto]">
+                            <select
+                                value={ledgerAccountId}
+                                onChange={(event) => setLedgerAccountId(event.target.value)}
+                                disabled={accounts.length === 0}
+                                className="app-control w-full text-sm"
+                            >
+                                {accounts.length === 0 ? (
+                                    <option value="">Sem contas</option>
+                                ) : (
+                                    accounts.map((account) => (
+                                        <option key={account.id} value={account.id}>
+                                            {accountLabel(account)}
+                                        </option>
+                                    ))
+                                )}
+                            </select>
+
+                            <input
+                                type="date"
+                                value={ledgerStartDate}
+                                onChange={(event) => setLedgerStartDate(event.target.value)}
+                                className="app-control w-full text-sm"
+                            />
+
+                            <input
+                                type="date"
+                                value={ledgerEndDate}
+                                onChange={(event) => setLedgerEndDate(event.target.value)}
+                                className="app-control w-full text-sm"
+                            />
+
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setLedgerStartDate('')
+                                    setLedgerEndDate('')
+                                }}
+                                disabled={!ledgerStartDate && !ledgerEndDate}
+                                className="app-icon-control flex h-11 items-center justify-center gap-2 rounded-lg px-3 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+                                title="Limpar periodo"
+                            >
+                                <X size={15} />
+                                <span className="lg:hidden xl:inline">Limpar</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                        <div className="rounded-xl border p-3" style={{ borderColor: 'var(--color-border)' }}>
+                            <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Conta</p>
+                            <p className="mt-1 truncate text-sm font-semibold" style={{ color: 'var(--color-text)' }}>
+                                {selectedLedgerAccount ? accountLabel(selectedLedgerAccount) : 'Nenhuma conta'}
+                            </p>
+                        </div>
+                        <div className="rounded-xl border p-3" style={{ borderColor: 'var(--color-border)' }}>
+                            <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Saldo atual</p>
+                            <p
+                                className="mt-1 text-sm font-semibold"
+                                style={{ color: selectedLedgerAccount && Number(selectedLedgerAccount.currentBalance) < 0 ? '#f87171' : 'var(--color-text)' }}
+                            >
+                                {selectedLedgerAccount ? formatCurrency(selectedLedgerAccount.currentBalance) : '-'}
+                            </p>
+                        </div>
+                        <div className="rounded-xl border p-3" style={{ borderColor: 'var(--color-border)' }}>
+                            <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Movimento liquido</p>
+                            <p
+                                className="mt-1 text-sm font-semibold"
+                                style={{ color: ledgerNetChange < 0 ? '#f87171' : '#16a34a' }}
+                            >
+                                {ledger ? formatCurrency(ledger.totals.netChange) : '-'}
+                            </p>
+                        </div>
+                        <div className="rounded-xl border p-3" style={{ borderColor: 'var(--color-border)' }}>
+                            <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Pendencias</p>
+                            <p className="mt-1 text-sm font-semibold" style={{ color: 'var(--color-text)' }}>
+                                {ledger ? ledger.totals.pendingCount : 0}
+                            </p>
+                        </div>
+                    </div>
+
+                    {isLedgerLoading ? (
+                        <div className="flex h-32 items-center justify-center">
+                            <p style={{ color: 'var(--color-text-muted)' }}>Carregando extrato...</p>
+                        </div>
+                    ) : ledgerItems.length === 0 ? (
+                        <div className="flex h-32 items-center justify-center rounded-xl border" style={{ borderColor: 'var(--color-border)' }}>
+                            <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>Nenhum movimento encontrado para esta conta</p>
+                        </div>
+                    ) : (
+                        <>
+                            <div className="space-y-3 md:hidden">
+                                {ledgerItems.map((item) => {
+                                    const signedAmount = Number(item.signedAmount)
+
+                                    return (
+                                        <div
+                                            key={item.id}
+                                            className="rounded-xl border p-3"
+                                            style={{ borderColor: 'var(--color-border)' }}
+                                        >
+                                            <div className="flex items-start justify-between gap-3">
+                                                <div className="flex min-w-0 gap-3">
+                                                    <span
+                                                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg"
+                                                        style={{ backgroundColor: 'var(--color-bg)', color: signedAmount < 0 ? '#f87171' : '#16a34a' }}
+                                                    >
+                                                        <LedgerMovementIcon item={item} />
+                                                    </span>
+                                                    <div className="min-w-0">
+                                                        <p className="break-words text-sm font-semibold" style={{ color: 'var(--color-text)' }}>
+                                                            {item.title}
+                                                        </p>
+                                                        <p className="mt-1 text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                                                            {ledgerMovementLabel(item)} - {formatDate(item.date)}
+                                                        </p>
+                                                        <p className="mt-1 break-words text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                                                            {ledgerItemDetail(item)}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                                <span
+                                                    className="shrink-0 text-sm font-semibold"
+                                                    style={{ color: signedAmount < 0 ? '#f87171' : '#16a34a' }}
+                                                >
+                                                    {formatCurrency(signedAmount)}
+                                                </span>
+                                            </div>
+                                            {item.isPending && (
+                                                <span className="mt-3 inline-flex rounded-full bg-yellow-100 px-2.5 py-1 text-xs font-medium text-yellow-800">
+                                                    Pendente
+                                                </span>
+                                            )}
+                                        </div>
+                                    )
+                                })}
+                            </div>
+
+                            <div className="hidden overflow-x-auto md:block">
+                                <table className="w-full min-w-[840px]">
+                                    <thead>
+                                        <tr style={{ borderBottom: '1px solid var(--color-border)', backgroundColor: 'var(--color-bg)' }}>
+                                            <th className="px-4 py-3 text-left text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>Data</th>
+                                            <th className="px-4 py-3 text-left text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>Movimento</th>
+                                            <th className="px-4 py-3 text-left text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>Detalhe</th>
+                                            <th className="px-4 py-3 text-left text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>Status</th>
+                                            <th className="px-4 py-3 text-right text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>Valor</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {ledgerItems.map((item) => {
+                                            const signedAmount = Number(item.signedAmount)
+
+                                            return (
+                                                <tr key={item.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                                                    <td className="whitespace-nowrap px-4 py-3 text-sm" style={{ color: 'var(--color-text-muted)' }}>
+                                                        {formatDate(item.date)}
+                                                    </td>
+                                                    <td className="px-4 py-3">
+                                                        <div className="flex min-w-0 items-center gap-3">
+                                                            <span
+                                                                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
+                                                                style={{ backgroundColor: 'var(--color-bg)', color: signedAmount < 0 ? '#f87171' : '#16a34a' }}
+                                                            >
+                                                                <LedgerMovementIcon item={item} />
+                                                            </span>
+                                                            <div className="min-w-0">
+                                                                <p className="truncate text-sm font-semibold" style={{ color: 'var(--color-text)' }}>
+                                                                    {item.title}
+                                                                </p>
+                                                                <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                                                                    {ledgerMovementLabel(item)}
+                                                                </p>
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-4 py-3 text-sm" style={{ color: 'var(--color-text-muted)' }}>
+                                                        {ledgerItemDetail(item)}
+                                                    </td>
+                                                    <td className="px-4 py-3">
+                                                        {item.isPending ? (
+                                                            <span className="rounded-full bg-yellow-100 px-2.5 py-1 text-xs font-medium text-yellow-800">
+                                                                Pendente
+                                                            </span>
+                                                        ) : (
+                                                            <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                                                                Confirmado
+                                                            </span>
+                                                        )}
+                                                    </td>
+                                                    <td
+                                                        className="whitespace-nowrap px-4 py-3 text-right text-sm font-semibold"
+                                                        style={{ color: signedAmount < 0 ? '#f87171' : '#16a34a' }}
+                                                    >
+                                                        {formatCurrency(signedAmount)}
+                                                    </td>
+                                                </tr>
+                                            )
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </>
+                    )}
+                </div>
 
                 <div
                     className="glass rounded-2xl p-5 sm:p-6"

@@ -15,14 +15,17 @@ describe('FinancialAccountsService', () => {
     };
     transaction: {
       groupBy: jest.Mock;
+      findMany: jest.Mock;
       updateMany: jest.Mock;
     };
     transfer: {
       groupBy: jest.Mock;
+      findMany: jest.Mock;
       updateMany: jest.Mock;
     };
     balanceAdjustment: {
       groupBy: jest.Mock;
+      findMany: jest.Mock;
     };
   };
 
@@ -36,14 +39,17 @@ describe('FinancialAccountsService', () => {
       },
       transaction: {
         groupBy: jest.fn(),
+        findMany: jest.fn(),
         updateMany: jest.fn(),
       },
       transfer: {
         groupBy: jest.fn(),
+        findMany: jest.fn(),
         updateMany: jest.fn(),
       },
       balanceAdjustment: {
         groupBy: jest.fn(),
+        findMany: jest.fn(),
       },
     };
 
@@ -220,6 +226,211 @@ describe('FinancialAccountsService', () => {
         amount: true,
       },
     });
+  });
+
+  it('returns a unified account ledger with signed movements', async () => {
+    const account = {
+      id: 'account-1',
+      name: 'Nubank',
+      type: FinancialAccountType.BANK_ACCOUNT,
+      institutionName: null,
+      icon: null,
+      color: null,
+      initialBalance: new Prisma.Decimal(0),
+      includeInDashboard: true,
+      isArchived: false,
+      createdAt: new Date('2026-06-01T10:00:00.000Z'),
+      updatedAt: new Date('2026-06-01T10:00:00.000Z'),
+    };
+
+    prisma.financialAccount.findFirst.mockResolvedValue(account);
+    prisma.transaction.groupBy.mockResolvedValue([
+      {
+        financialAccountId: 'account-1',
+        type: TransactionType.INCOME,
+        _sum: { amount: new Prisma.Decimal(100) },
+      },
+      {
+        financialAccountId: 'account-1',
+        type: TransactionType.DEBIT,
+        _sum: { amount: new Prisma.Decimal(25) },
+      },
+    ]);
+    prisma.transfer.groupBy
+      .mockResolvedValueOnce([
+        {
+          fromAccountId: 'account-1',
+          _sum: { amount: new Prisma.Decimal(10) },
+        },
+      ])
+      .mockResolvedValueOnce([]);
+    prisma.balanceAdjustment.groupBy.mockResolvedValue([
+      {
+        financialAccountId: 'account-1',
+        _sum: { amount: new Prisma.Decimal(5) },
+      },
+    ]);
+    prisma.transaction.findMany.mockResolvedValue([
+      {
+        id: 'transaction-income',
+        type: TransactionType.INCOME,
+        amount: new Prisma.Decimal(100),
+        date: new Date('2026-06-01T12:00:00.000Z'),
+        isPending: false,
+        description: 'Salario',
+        createdAt: new Date('2026-06-01T13:00:00.000Z'),
+        category: {
+          id: 'category-income',
+          name: 'Receitas',
+          icon: null,
+          isArchived: false,
+        },
+      },
+      {
+        id: 'transaction-expense',
+        type: TransactionType.DEBIT,
+        amount: new Prisma.Decimal(25),
+        date: new Date('2026-06-02T12:00:00.000Z'),
+        isPending: true,
+        description: null,
+        createdAt: new Date('2026-06-02T13:00:00.000Z'),
+        category: {
+          id: 'category-food',
+          name: 'Mercado',
+          icon: null,
+          isArchived: false,
+        },
+      },
+    ]);
+    prisma.transfer.findMany.mockResolvedValue([
+      {
+        id: 'transfer-1',
+        amount: new Prisma.Decimal(10),
+        date: new Date('2026-06-03T12:00:00.000Z'),
+        isPending: false,
+        description: 'Reserva',
+        fromAccountId: 'account-1',
+        toAccountId: 'account-2',
+        createdAt: new Date('2026-06-03T13:00:00.000Z'),
+        fromAccount: {
+          id: 'account-1',
+          name: 'Nubank',
+          icon: null,
+          color: null,
+          isArchived: false,
+        },
+        toAccount: {
+          id: 'account-2',
+          name: 'Poupanca',
+          icon: null,
+          color: null,
+          isArchived: false,
+        },
+      },
+    ]);
+    prisma.balanceAdjustment.findMany.mockResolvedValue([
+      {
+        id: 'adjustment-1',
+        amount: new Prisma.Decimal(5),
+        date: new Date('2026-06-04T12:00:00.000Z'),
+        reason: 'Conferencia',
+        createdAt: new Date('2026-06-04T13:00:00.000Z'),
+      },
+    ]);
+
+    await expect(
+      service.getLedger('user-1', 'account-1', {
+        startDate: '2026-06-01',
+        endDate: '2026-06-30',
+      }),
+    ).resolves.toMatchObject({
+      account: {
+        id: 'account-1',
+        currentBalance: '70.00',
+      },
+      filters: {
+        startDate: '2026-06-01',
+        endDate: '2026-06-30',
+      },
+      totals: {
+        income: '100.00',
+        expenses: '25.00',
+        incomingTransfers: '0.00',
+        outgoingTransfers: '10.00',
+        adjustments: '5.00',
+        netChange: '70.00',
+        pendingCount: 1,
+      },
+      items: [
+        expect.objectContaining({
+          sourceType: 'BALANCE_ADJUSTMENT',
+          movementType: 'BALANCE_ADJUSTMENT',
+          signedAmount: '5.00',
+        }),
+        expect.objectContaining({
+          sourceType: 'TRANSFER',
+          movementType: 'TRANSFER_OUT',
+          signedAmount: '-10.00',
+          relatedAccount: expect.objectContaining({ id: 'account-2' }),
+        }),
+        expect.objectContaining({
+          sourceType: 'TRANSACTION',
+          movementType: 'TRANSACTION_EXPENSE',
+          title: 'Mercado',
+          signedAmount: '-25.00',
+        }),
+        expect.objectContaining({
+          sourceType: 'TRANSACTION',
+          movementType: 'TRANSACTION_INCOME',
+          title: 'Salario',
+          signedAmount: '100.00',
+        }),
+      ],
+    });
+
+    expect(prisma.transaction.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          userId: 'user-1',
+          financialAccountId: 'account-1',
+          date: expect.objectContaining({
+            gte: expect.any(Date),
+            lte: expect.any(Date),
+          }),
+        }),
+      }),
+    );
+    expect(prisma.transfer.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          userId: 'user-1',
+          OR: [
+            { fromAccountId: 'account-1' },
+            { toAccountId: 'account-1' },
+          ],
+        }),
+      }),
+    );
+    expect(prisma.balanceAdjustment.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          userId: 'user-1',
+          financialAccountId: 'account-1',
+        }),
+      }),
+    );
+  });
+
+  it('does not return a ledger for an account from another user', async () => {
+    prisma.financialAccount.findFirst.mockResolvedValue(null);
+
+    await expect(
+      service.getLedger('user-1', 'account-2', {}),
+    ).rejects.toThrow(NotFoundException);
+
+    expect(prisma.transaction.findMany).not.toHaveBeenCalled();
+    expect(prisma.transfer.findMany).not.toHaveBeenCalled();
+    expect(prisma.balanceAdjustment.findMany).not.toHaveBeenCalled();
   });
 
   it('does not return an account from another user', async () => {

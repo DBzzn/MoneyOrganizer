@@ -83,6 +83,48 @@ export interface BalanceAdjustment {
     updatedAt: string
 }
 
+export type AccountLedgerMovementType =
+    | 'TRANSACTION_INCOME'
+    | 'TRANSACTION_EXPENSE'
+    | 'TRANSFER_IN'
+    | 'TRANSFER_OUT'
+    | 'BALANCE_ADJUSTMENT'
+
+export interface AccountLedgerItem {
+    id: string
+    sourceId: string
+    sourceType: 'TRANSACTION' | 'TRANSFER' | 'BALANCE_ADJUSTMENT'
+    movementType: AccountLedgerMovementType
+    date: string
+    createdAt: string
+    title: string
+    description?: string | null
+    amount: number
+    signedAmount: number
+    isPending: boolean
+    transactionType?: TransactionType
+    category?: Pick<Category, 'id' | 'name' | 'icon' | 'isArchived'>
+    relatedAccount?: Pick<FinancialAccount, 'id' | 'name' | 'icon' | 'color' | 'isArchived'>
+}
+
+export interface AccountLedgerResponse {
+    account: FinancialAccount
+    filters: {
+        startDate?: string | null
+        endDate?: string | null
+    }
+    totals: {
+        income: number
+        expenses: number
+        incomingTransfers: number
+        outgoingTransfers: number
+        adjustments: number
+        netChange: number
+        pendingCount: number
+    }
+    items: AccountLedgerItem[]
+}
+
 export interface MonthlyBalance {
     month: string
     income: number

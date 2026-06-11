@@ -1,5 +1,5 @@
 import api from './axios'
-import type { FinancialAccount, FinancialAccountType } from '../types'
+import type { AccountLedgerResponse, FinancialAccount, FinancialAccountType } from '../types'
 
 interface FinancialAccountPayload {
     name?: string
@@ -12,8 +12,16 @@ interface FinancialAccountPayload {
     isArchived?: boolean
 }
 
+interface AccountLedgerFilters {
+    startDate?: string
+    endDate?: string
+}
+
 export const getFinancialAccounts = () =>
     api.get<FinancialAccount[]>('/financial-accounts')
+
+export const getFinancialAccountLedger = (id: string, filters?: AccountLedgerFilters) =>
+    api.get<AccountLedgerResponse>(`/financial-accounts/${id}/ledger`, { params: filters })
 
 export const createFinancialAccount = (data: FinancialAccountPayload) =>
     api.post<FinancialAccount>('/financial-accounts', data)

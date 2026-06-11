@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   Request,
   UseGuards,
 } from '@nestjs/common';
@@ -15,6 +16,7 @@ import { Request as ExpressRequest } from 'express';
 import { FinancialAccountsService } from './financial-accounts.service';
 import { CreateFinancialAccountDto } from './dto/create-financial-account.dto';
 import { UpdateFinancialAccountDto } from './dto/update-financial-account.dto';
+import { QueryAccountLedgerDto } from './dto/query-account-ledger.dto';
 
 interface AuthenticatedRequest extends ExpressRequest {
   user: {
@@ -50,6 +52,19 @@ export class FinancialAccountsController {
   @Get()
   findAll(@Request() req: AuthenticatedRequest) {
     return this.financialAccountsService.findAll(req.user.id);
+  }
+
+  @ApiOperation({ summary: 'Listar extrato unificado de uma conta financeira' })
+  @ApiResponse({ status: 200, description: 'Extrato da conta retornado com sucesso' })
+  @ApiResponse({ status: 401, description: 'Nao autenticado' })
+  @ApiResponse({ status: 404, description: 'Conta financeira nao encontrada ou nao pertence ao usuario' })
+  @Get(':id/ledger')
+  getLedger(
+    @Request() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Query() filters: QueryAccountLedgerDto,
+  ) {
+    return this.financialAccountsService.getLedger(req.user.id, id, filters);
   }
 
   @ApiOperation({ summary: 'Buscar conta financeira específica por ID' })
