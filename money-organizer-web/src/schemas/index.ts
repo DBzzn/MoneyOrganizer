@@ -97,6 +97,16 @@ export const balanceAdjustmentSchema = z.object({
     reason: z.string().trim().min(1, 'O motivo e obrigatorio!').max(240, 'Use ate 240 caracteres'),
 })
 
+export const reminderSchema = z.object({
+    title: z.string().trim().min(1, 'O titulo e obrigatorio!').max(120, 'Use ate 120 caracteres'),
+    dueDate: z.string().min(1, 'A data de vencimento e obrigatoria!'),
+    amount: z.number().min(0.01, 'O valor deve ser maior que zero').nullable().optional(),
+    status: z.enum(['PENDING', 'DONE', 'CANCELED']),
+    note: z.string().max(500, 'Use ate 500 caracteres').nullable().optional(),
+    financialAccountId: z.string().nullable().optional(),
+    categoryId: z.string().nullable().optional(),
+})
+
 export type LoginFormData = z.infer<typeof loginSchema>
 export type RegisterFormData = z.infer<typeof registerSchema>
 export type TransactionFormData = z.infer<typeof transactionSchema>
@@ -105,3 +115,4 @@ export type InstallmentFormData = z.infer<typeof installmentSchema>
 export type FinancialAccountFormData = z.infer<typeof financialAccountSchema>
 export type TransferFormData = z.infer<typeof transferSchema>
 export type BalanceAdjustmentFormData = z.infer<typeof balanceAdjustmentSchema>
+export type ReminderFormData = z.infer<typeof reminderSchema>

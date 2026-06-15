@@ -1,11 +1,13 @@
 import { Layout } from '../components/Layout'
 import { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import { getMonthlyBalance, getEvolution, getProjection, getTotalsByCategory } from '../api/transactions'
 import { getFinancialAccounts } from '../api/financialAccounts'
 import { buildAccountIdsParam, formatCurrency, formatMonth } from '../utils'
 import { ChartTooltip } from '../components/ChartTooltip'
 import { AccountFilter } from '../components/AccountFilter'
 import { formatStoredIconPrefix } from '../components/storedIconRegistry'
+import { StoredIcon } from '../components/StoredIcon'
 import type { FinancialAccount, MonthlyBalance, EvolutionEntry, ProjectionEntry, CategoryTotal, TransactionType } from '../types'
 import {
     ResponsiveContainer,
@@ -19,7 +21,7 @@ import {
     Bar,
     Legend,
 } from 'recharts'
-import { TrendingUp, TrendingDown, Wallet, Clock, PiggyBank, Landmark } from 'lucide-react'
+import { Clock, ExternalLink, EyeOff, Landmark, PiggyBank, Scale, TrendingDown, TrendingUp, Wallet, WalletCards } from 'lucide-react'
 
 const EXPENSE_TYPES: TransactionType[] = ['CREDIT_CASH', 'CREDIT_INSTALLMENT', 'DEBIT', 'PIX', 'CASH']
 
@@ -50,6 +52,18 @@ function isValidMonth(month: string): boolean {
 
 function isSameOrBefore(startMonth: string, endMonth: string): boolean {
     return startMonth <= endMonth
+}
+
+function getAccountBalance(account: FinancialAccount): number {
+    return Number(account.currentBalance) || 0
+}
+
+function sortAccountsByCurrentBalance(accounts: FinancialAccount[]): FinancialAccount[] {
+    return [...accounts].sort((a, b) => {
+        const balanceDiff = getAccountBalance(b) - getAccountBalance(a)
+
+        return balanceDiff !== 0 ? balanceDiff : a.name.localeCompare(b.name)
+    })
 }
 
 function mergeCategoryTotals(groups: CategoryTotal[][]): CategoryTotal[] {
@@ -212,6 +226,49 @@ export function Reports() {
         null,
     )
     const categoryTotalAmount = categoryTotals.reduce((sum, item) => sum + Number(item.totalAmount), 0)
+    const selectedAccounts = financialAccounts.filter((account) => selectedAccountIds.includes(account.id))
+    const sortedSelectedAccounts = sortAccountsByCurrentBalance(selectedAccounts)
+    const currentCashBalance = selectedAccounts.reduce((total, account) => total + getAccountBalance(account), 0)
+    const activeAccountCount = financialAccounts.filter((account) => !account.isArchived).length
+    const hiddenDashboardAccountCount = financialAccounts.filter(
+        (account) => !account.isArchived && !account.includeInDashboard,
+    ).length
+    const negativeAccountCount = selectedAccounts.filter((account) => getAccountBalance(account) < 0).length
+
+    const accountPositionCards = [
+        {
+            label: 'Saldo atual selecionado',
+            value: formatCurrency(currentCashBalance),
+            detail: `${selectedAccounts.length} de ${financialAccounts.length} contas no relatório`,
+            icon: Wallet,
+            color: currentCashBalance < 0 ? 'var(--color-expense)' : 'var(--color-balance)',
+            bg: currentCashBalance < 0 ? 'var(--color-expense-bg)' : 'var(--color-balance-bg)',
+        },
+        {
+            label: 'Contas ativas',
+            value: activeAccountCount,
+            detail: 'Base disponível para filtros',
+            icon: Landmark,
+            color: 'var(--color-brand)',
+            bg: 'var(--color-balance-bg)',
+        },
+        {
+            label: 'Saldos negativos',
+            value: negativeAccountCount,
+            detail: negativeAccountCount === 0 ? 'Nenhuma selecionada abaixo de zero' : 'Auditar no extrato',
+            icon: Scale,
+            color: negativeAccountCount > 0 ? 'var(--color-expense)' : 'var(--color-income)',
+            bg: negativeAccountCount > 0 ? 'var(--color-expense-bg)' : 'var(--color-income-bg)',
+        },
+        {
+            label: 'Fora do dashboard',
+            value: hiddenDashboardAccountCount,
+            detail: hiddenDashboardAccountCount === 0 ? 'Todas as ativas participam' : 'Ainda podem entrar no relatório',
+            icon: EyeOff,
+            color: 'var(--color-text-muted)',
+            bg: 'var(--color-bg-muted-card)',
+        },
+    ]
 
     const projectionChartData = projection.map((p) => ({
         month: formatMonth(p.month),
@@ -235,25 +292,114 @@ export function Reports() {
                     title="Contas do relatório"
                 />
 
+                <section className="space-y-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                            <h2 className="text-lg font-semibold" style={{ color: 'var(--color-text)' }}>Posição atual por conta</h2>
+                            <p className="mt-1 text-sm" style={{ color: 'var(--color-text-muted)' }}>
+                                Saldos atuais das contas selecionadas, separados dos fluxos por período.
+                            </p>
+                        </div>
+                        <Link
+                            to="/accounts"
+                            className="app-icon-control inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-medium sm:w-auto"
+                        >
+                            <ExternalLink size={16} />
+                            Extratos
+                        </Link>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                        {accountPositionCards.map((card) => (
+                            <div
+                                key={card.label}
+                                className="glass flex min-h-[7rem] items-start gap-4 rounded-2xl p-5"
+                                style={{ backgroundColor: 'var(--color-bg-card)', border: '1px solid var(--color-border)' }}
+                            >
+                                <div className="shrink-0 rounded-xl p-3" style={{ backgroundColor: card.bg }}>
+                                    <card.icon size={21} style={{ color: card.color }} />
+                                </div>
+                                <div className="min-w-0">
+                                    <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>{card.label}</p>
+                                    <p className="break-words text-xl font-bold leading-tight" style={{ color: card.color }}>
+                                        {card.value}
+                                    </p>
+                                    <p className="mt-1 text-xs leading-5" style={{ color: 'var(--color-text-muted)' }}>
+                                        {card.detail}
+                                    </p>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+
+                    {sortedSelectedAccounts.length > 0 && (
+                        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
+                            {sortedSelectedAccounts.map((account) => {
+                                const accountBalance = getAccountBalance(account)
+                                const accountColor = accountBalance < 0 ? 'var(--color-expense)' : 'var(--color-text)'
+
+                                return (
+                                    <Link
+                                        key={account.id}
+                                        to={`/accounts?account=${account.id}`}
+                                        className="glass flex min-h-[7.5rem] min-w-0 items-center justify-between gap-4 rounded-2xl p-5 transition hover:opacity-90"
+                                        style={{ backgroundColor: 'var(--color-bg-card)', border: '1px solid var(--color-border)' }}
+                                    >
+                                        <div className="flex min-w-0 items-center gap-3">
+                                            <span
+                                                className="grid h-11 w-11 shrink-0 place-items-center rounded-xl"
+                                                style={{ backgroundColor: 'var(--color-bg)', color: account.color ?? 'var(--color-brand)' }}
+                                            >
+                                                <StoredIcon value={account.icon} fallback={WalletCards} size={21} />
+                                            </span>
+                                            <div className="min-w-0">
+                                                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                                                    <p className="truncate text-sm font-semibold" style={{ color: 'var(--color-text)' }}>
+                                                        {account.name}
+                                                    </p>
+                                                    {account.isArchived && (
+                                                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
+                                                            Arquivada
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <p className="mt-1 text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                                                    {account.institutionName || 'Sem instituição'}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <div className="shrink-0 text-right">
+                                            <p className="text-base font-bold leading-tight sm:text-lg" style={{ color: accountColor }}>
+                                                {formatCurrency(account.currentBalance)}
+                                            </p>
+                                            <p className="mt-1 text-xs" style={{ color: 'var(--color-text-muted)' }}>Extrato</p>
+                                        </div>
+                                    </Link>
+                                )
+                            })}
+                        </div>
+                    )}
+                </section>
+
                 {/* ─── Balanço Mensal ─── */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
                     {[
                         {
-                            label: 'Saldo do periodo',
+                            label: 'Resultado do período',
                             value: formatCurrency(periodBalance),
                             icon: Wallet,
                             color: periodBalance >= 0 ? 'text-blue-600' : 'text-red-600',
                             bg: periodBalance >= 0 ? 'bg-blue-50' : 'bg-red-50',
                         },
                         {
-                            label: 'Media mensal de gastos',
+                            label: 'Média mensal de gastos',
                             value: formatCurrency(averageExpenses),
                             icon: TrendingDown,
                             color: 'text-red-600',
                             bg: 'bg-red-50',
                         },
                         {
-                            label: 'Taxa de poupanca',
+                            label: 'Taxa de poupança',
                             value: `${savingsRate.toFixed(1)}%`,
                             icon: PiggyBank,
                             color: savingsRate >= 0 ? 'text-green-600' : 'text-red-600',

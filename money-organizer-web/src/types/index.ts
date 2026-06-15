@@ -83,6 +83,60 @@ export interface BalanceAdjustment {
     updatedAt: string
 }
 
+export type ReminderStatus = 'PENDING' | 'DONE' | 'CANCELED'
+
+export interface Reminder {
+    id: string
+    title: string
+    dueDate: string
+    amount?: number | null
+    status: ReminderStatus
+    note?: string | null
+    financialAccountId?: string | null
+    financialAccount?: Pick<FinancialAccount, 'id' | 'name' | 'type' | 'institutionName' | 'icon' | 'color' | 'isArchived'> | null
+    categoryId?: string | null
+    category?: Pick<Category, 'id' | 'name' | 'icon' | 'isArchived'> | null
+    createdAt: string
+    updatedAt: string
+}
+
+export type StatementMovementDirection = 'IN' | 'OUT'
+
+export interface StatementImportPreviewMovement {
+    date: string
+    amountCents: number
+    direction: StatementMovementDirection
+    rawType: string
+    rawDescription: string
+    normalizedDescription: string
+    sourcePage?: number
+    sourceLine?: number
+    fingerprint: string
+}
+
+export interface StatementImportPreview {
+    file: {
+        originalName: string
+        size: number
+        mimeType: string
+        sha256: string
+    }
+    targetAccount?: Pick<FinancialAccount, 'id' | 'name' | 'type' | 'institutionName' | 'icon' | 'color' | 'isArchived'> | null
+    provider: 'NUBANK' | 'UNKNOWN'
+    sourceType: 'PDF' | 'CSV' | 'XLSX' | 'OFX'
+    accountNumber?: string
+    periodStart?: string
+    periodEnd?: string
+    summary?: {
+        openingBalanceCents?: number
+        closingBalanceCents?: number
+        totalInCents?: number
+        totalOutCents?: number
+    }
+    movements: StatementImportPreviewMovement[]
+    warnings: string[]
+}
+
 export type AccountLedgerMovementType =
     | 'TRANSACTION_INCOME'
     | 'TRANSACTION_EXPENSE'

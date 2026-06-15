@@ -11,6 +11,8 @@ import { TransactionsModule } from './transactions/transactions.module';
 import { FinancialAccountsModule } from './financial-accounts/financial-accounts.module';
 import { TransfersModule } from './transfers/transfers.module';
 import { BalanceAdjustmentsModule } from './balance-adjustments/balance-adjustments.module';
+import { RemindersModule } from './reminders/reminders.module';
+import { StatementImportsModule } from './statement-imports/statement-imports.module';
 
 @Module({
   imports: [
@@ -25,6 +27,8 @@ import { BalanceAdjustmentsModule } from './balance-adjustments/balance-adjustme
     TransactionsModule,
     TransfersModule,
     BalanceAdjustmentsModule,
+    RemindersModule,
+    StatementImportsModule,
   ],
   controllers: [AppController],
   providers: [AppService, PrismaService],

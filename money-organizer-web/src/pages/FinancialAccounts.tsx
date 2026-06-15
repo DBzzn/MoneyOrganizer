@@ -165,6 +165,7 @@ export function FinancialAccounts() {
         isOpen: boolean
         payload: ReturnType<typeof sanitizeAccountPayload> | null
     }>({ isOpen: false, payload: null })
+    const accountDeepLinkId = searchParams.get('account')
     const adjustmentDeepLinkId = searchParams.get('adjustment')
 
     const {
@@ -236,13 +237,17 @@ export function FinancialAccounts() {
         }
 
         setLedgerAccountId((currentId) => {
+            if (accountDeepLinkId && accounts.some((account) => account.id === accountDeepLinkId)) {
+                return accountDeepLinkId
+            }
+
             if (currentId && accounts.some((account) => account.id === currentId)) {
                 return currentId
             }
 
             return accounts[0].id
         })
-    }, [accounts])
+    }, [accountDeepLinkId, accounts])
 
     useEffect(() => {
         if (!ledgerAccountId) {
@@ -472,6 +477,29 @@ export function FinancialAccounts() {
             toast.error('Erro ao reativar a conta!')
         }
     }
+
+    useEffect(() => {
+        if (!accountDeepLinkId || isLoading) return
+
+        const account = accounts.find((entry) => entry.id === accountDeepLinkId)
+        const nextParams = new URLSearchParams(searchParams)
+        nextParams.delete('account')
+
+        if (!account) {
+            toast.error('Conta não encontrada para abrir o extrato.')
+            setSearchParams(nextParams, { replace: true })
+            return
+        }
+
+        setLedgerAccountId(account.id)
+        setSearchParams(nextParams, { replace: true })
+    }, [
+        accountDeepLinkId,
+        accounts,
+        isLoading,
+        searchParams,
+        setSearchParams,
+    ])
 
     useEffect(() => {
         if (!adjustmentDeepLinkId || isLoading) return

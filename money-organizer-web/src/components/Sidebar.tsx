@@ -4,6 +4,8 @@ import {
     LayoutDashboard,
     Tag,
     ArrowLeftRight,
+    Bell,
+    FileUp,
     Repeat2,
     LogOut,
     NotebookPen,
@@ -30,10 +32,12 @@ const navItems = [
     { to: '/categories', icon: Tag, Label: 'Categorias' },
     { to: '/transactions', icon: ArrowLeftRight, Label: 'Transações' },
     { to: '/transfers', icon: Repeat2, Label: 'Transferências' },
+    { to: '/reminders', icon: Bell, Label: 'Lembretes' },
+    { to: '/statement-imports', icon: FileUp, Label: 'Importar' },
     { to: '/reports', icon: NotebookPen, Label: 'Relatórios' },
 ]
 
-const routeKeys = ['/dashboard', '/accounts', '/categories', '/transactions', '/transfers', '/reports'] as const
+const routeKeys = ['/dashboard', '/accounts', '/categories', '/transactions', '/transfers', '/reminders', '/statement-imports', '/reports'] as const
 
 type RouteKey = typeof routeKeys[number] | 'default'
 type TimeBucket = 'dawn' | 'morningWeekday' | 'morningWeekend' | 'afternoon' | 'evening'
@@ -111,6 +115,20 @@ const pageNudges: Record<RouteKey, string[]> = {
         'Origem e destino limpam o saldo.',
         'Movimento não precisa virar bagunça.',
         'Ponte entre contas não é despesa.',
+    ],
+    '/reminders': [
+        'Vencimento lembrado vira escolha.',
+        'Pendência boa tem data e contexto.',
+        'Anota antes de virar susto.',
+        'Lembrete não mexe no saldo, mexe na clareza.',
+        'O futuro fica menos nebuloso aqui.',
+    ],
+    '/statement-imports': [
+        'Extrato vira rascunho antes de virar conta.',
+        'Importar com revisão preserva o saldo.',
+        'Arquivo primeiro, decisão depois.',
+        'Nada entra no saldo sem passar pelos seus olhos.',
+        'O banco trouxe dados, você traz contexto.',
     ],
     '/reports': [
         'Relatório revela padrão.',

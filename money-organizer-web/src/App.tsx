@@ -13,6 +13,8 @@ import { Transactions } from './pages/Transactions'
 import { Transfers } from './pages/Transfers'
 import { Reports } from './pages/Reports'
 import { FinancialAccounts } from './pages/FinancialAccounts'
+import { Reminders } from './pages/Reminders'
+import { StatementImports } from './pages/StatementImports'
 
 export default function App() {
     return (
@@ -49,6 +51,18 @@ export default function App() {
                     <Route path="/transfers" element={
                         <PrivateRoute>
                             <Transfers />
+                        </PrivateRoute>
+                    }
+                    />
+                    <Route path="/reminders" element={
+                        <PrivateRoute>
+                            <Reminders />
+                        </PrivateRoute>
+                    }
+                    />
+                    <Route path="/statement-imports" element={
+                        <PrivateRoute>
+                            <StatementImports />
                         </PrivateRoute>
                     }
                     />

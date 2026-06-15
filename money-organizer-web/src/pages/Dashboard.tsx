@@ -1,12 +1,15 @@
 import { Layout } from '../components/Layout'
 import { useState, useEffect, type ChangeEvent } from 'react'
+import { Link } from 'react-router-dom'
 import { getMonthlyBalance, getEvolution, getTransactions } from '../api/transactions'
 import { getFinancialAccounts } from '../api/financialAccounts'
+import { getReminders } from '../api/reminders'
 import { buildAccountIdsParam, formatCurrency, formatDate, formatMonth } from '../utils'
 import { ChartTooltip } from '../components/ChartTooltip'
 import { AccountFilter } from '../components/AccountFilter'
 import { formatStoredIconPrefix } from '../components/storedIconRegistry'
-import type { FinancialAccount, MonthlyBalance, EvolutionEntry, Transaction, TransactionType } from '../types'
+import { StoredIcon } from '../components/StoredIcon'
+import type { FinancialAccount, MonthlyBalance, EvolutionEntry, Reminder, Transaction, TransactionType } from '../types'
 import {
   ResponsiveContainer,
   AreaChart,
@@ -24,13 +27,20 @@ import {
   AlertTriangle,
   ArrowDownRight,
   ArrowUpRight,
+  Bell,
   Calendar,
+  CalendarClock,
   ChevronLeft,
   ChevronRight,
+  ExternalLink,
+  EyeOff,
+  Landmark,
+  Scale,
   Tag,
   TrendingUp,
   TrendingDown,
   Wallet,
+  WalletCards,
   Receipt,
   type LucideIcon,
 } from 'lucide-react'
@@ -97,6 +107,72 @@ function getTransactionAmount(transaction: Transaction): number {
 
 function isExpenseTransaction(transaction: Transaction): boolean {
   return EXPENSE_TRANSACTION_TYPES.includes(transaction.type)
+}
+
+function getAccountBalance(account: FinancialAccount): number {
+  return Number(account.currentBalance) || 0
+}
+
+function getTodayInputDate(): string {
+  const now = new Date()
+  const y = now.getFullYear()
+  const m = String(now.getMonth() + 1).padStart(2, '0')
+  const d = String(now.getDate()).padStart(2, '0')
+
+  return `${y}-${m}-${d}`
+}
+
+function toInputDate(isoString: string): string {
+  const date = new Date(isoString)
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+
+  return `${y}-${m}-${d}`
+}
+
+function getReminderAmount(reminder: Reminder): number {
+  return Number(reminder.amount ?? 0) || 0
+}
+
+function isReminderOverdue(reminder: Reminder): boolean {
+  return reminder.status === 'PENDING' && toInputDate(reminder.dueDate) < getTodayInputDate()
+}
+
+function reminderMatchesSelectedAccounts(
+  reminder: Reminder,
+  selectedAccountIds: string[],
+  allAccountCount: number,
+): boolean {
+  if (!reminder.financialAccountId) {
+    return true
+  }
+
+  if (selectedAccountIds.length === 0 || selectedAccountIds.length === allAccountCount) {
+    return true
+  }
+
+  return selectedAccountIds.includes(reminder.financialAccountId)
+}
+
+function getDashboardDefaultAccountIds(accounts: FinancialAccount[]): string[] {
+  const dashboardAccounts = accounts.filter((account) => !account.isArchived && account.includeInDashboard)
+
+  if (dashboardAccounts.length > 0) {
+    return dashboardAccounts.map((account) => account.id)
+  }
+
+  const activeAccounts = accounts.filter((account) => !account.isArchived)
+
+  return (activeAccounts.length > 0 ? activeAccounts : accounts).map((account) => account.id)
+}
+
+function sortAccountsByCurrentBalance(accounts: FinancialAccount[]): FinancialAccount[] {
+  return [...accounts].sort((a, b) => {
+    const balanceDiff = getAccountBalance(b) - getAccountBalance(a)
+
+    return balanceDiff !== 0 ? balanceDiff : a.name.localeCompare(b.name)
+  })
 }
 
 function getTopTransactions(
@@ -219,6 +295,7 @@ export function Dashboard() {
   const [evolution, setEvolution] = useState<EvolutionEntry[]>([])
   const [balance, setBalance] = useState<MonthlyBalance | null>(null)
   const [transactions, setTransactions] = useState<Transaction[]>([])
+  const [reminders, setReminders] = useState<Reminder[]>([])
   const [financialAccounts, setFinancialAccounts] = useState<FinancialAccount[]>([])
   const [selectedAccountIds, setSelectedAccountIds] = useState<string[]>([])
 
@@ -226,16 +303,17 @@ export function Dashboard() {
     getFinancialAccounts()
       .then((res) => {
         const accountIds = res.data.map((account) => account.id)
+        const defaultAccountIds = getDashboardDefaultAccountIds(res.data)
 
         setFinancialAccounts(res.data)
         setSelectedAccountIds((currentIds) => {
           if (currentIds.length === 0) {
-            return accountIds
+            return defaultAccountIds
           }
 
           const validIds = currentIds.filter((id) => accountIds.includes(id))
 
-          return validIds.length > 0 ? validIds : accountIds
+          return validIds.length > 0 ? validIds : defaultAccountIds
         })
       })
   }, [])
@@ -253,13 +331,15 @@ export function Dashboard() {
       getMonthlyBalance({ month: monthRange.month, ...accountFilters }),
       getEvolution({ ...evolutionRange, ...accountFilters }),
       getTransactions({ ...monthTransactionFilters, ...accountFilters }),
+      getReminders({ status: 'PENDING', endDate: monthRange.endDate }),
     ])
-      .then(([balanceRes, evolutionRes, transactionsRes]) => {
+      .then(([balanceRes, evolutionRes, transactionsRes, remindersRes]) => {
         if (!isActive) return
 
         setBalance(balanceRes.data)
         setEvolution(evolutionRes.data)
         setTransactions(transactionsRes.data)
+        setReminders(remindersRes.data)
       })
       .finally(() => {
         if (!isActive) return
@@ -286,11 +366,32 @@ export function Dashboard() {
   const monthlyIncome = Number(balance?.income ?? 0)
   const monthlyExpenses = Number(balance?.expenses ?? 0)
   const monthlyBalance = Number(balance?.balance ?? 0)
+  const selectedAccounts = financialAccounts.filter((account) => selectedAccountIds.includes(account.id))
+  const sortedSelectedAccounts = sortAccountsByCurrentBalance(selectedAccounts)
+  const currentCashBalance = selectedAccounts.reduce((total, account) => total + getAccountBalance(account), 0)
+  const activeAccountCount = financialAccounts.filter((account) => !account.isArchived).length
+  const includedDashboardAccountCount = financialAccounts.filter(
+    (account) => !account.isArchived && account.includeInDashboard,
+  ).length
+  const hiddenDashboardAccountCount = financialAccounts.filter(
+    (account) => !account.isArchived && !account.includeInDashboard,
+  ).length
+  const negativeAccountCount = selectedAccounts.filter((account) => getAccountBalance(account) < 0).length
   const selectedMonthLabel = getMonthLabel(selectedMonth)
   const expenseUsagePercent = monthlyIncome > 0 ? (monthlyExpenses / monthlyIncome) * 100 : null
   const topExpenses = getTopTransactions(transactions, isExpenseTransaction, 5)
   const topIncome = getTopTransactions(transactions, (transaction) => transaction.type === 'INCOME', 3)
   const dominantExpenseCategory = getDominantExpenseCategory(transactions)
+  const pendingReminders = reminders
+    .filter((reminder) => reminderMatchesSelectedAccounts(reminder, selectedAccountIds, financialAccounts.length))
+    .sort((a, b) => {
+      const dueDateDiff = toInputDate(a.dueDate).localeCompare(toInputDate(b.dueDate))
+
+      return dueDateDiff !== 0 ? dueDateDiff : a.title.localeCompare(b.title)
+    })
+  const upcomingReminders = pendingReminders.slice(0, 5)
+  const overdueReminderCount = pendingReminders.filter(isReminderOverdue).length
+  const expectedReminderAmount = pendingReminders.reduce((total, reminder) => total + getReminderAmount(reminder), 0)
   const expenseUsageColor =
     expenseUsagePercent === null
       ? 'var(--color-text-muted)'
@@ -362,6 +463,68 @@ export function Dashboard() {
     bg: 'var(--color-count-bg)',
   },
 ]
+
+  const cashPositionCards = [
+    {
+      label: 'Saldo atual',
+      value: formatCurrency(currentCashBalance),
+      detail: `${selectedAccounts.length} de ${financialAccounts.length} contas selecionadas`,
+      icon: Wallet,
+      color: currentCashBalance < 0 ? 'var(--color-expense)' : 'var(--color-balance)',
+      bg: currentCashBalance < 0 ? 'var(--color-expense-bg)' : 'var(--color-balance-bg)',
+    },
+    {
+      label: 'Contas ativas',
+      value: activeAccountCount,
+      detail: `${includedDashboardAccountCount} incluídas no dashboard`,
+      icon: Landmark,
+      color: 'var(--color-brand)',
+      bg: 'var(--color-balance-bg)',
+    },
+    {
+      label: 'Saldos negativos',
+      value: negativeAccountCount,
+      detail: negativeAccountCount === 0 ? 'Nenhuma conta selecionada abaixo de zero' : 'Revisar no extrato',
+      icon: Scale,
+      color: negativeAccountCount > 0 ? 'var(--color-expense)' : 'var(--color-income)',
+      bg: negativeAccountCount > 0 ? 'var(--color-expense-bg)' : 'var(--color-income-bg)',
+    },
+    {
+      label: 'Fora do dashboard',
+      value: hiddenDashboardAccountCount,
+      detail: hiddenDashboardAccountCount === 0 ? 'Todas as ativas participam' : 'Ocultas por configuração',
+      icon: EyeOff,
+      color: 'var(--color-text-muted)',
+      bg: 'var(--color-bg-muted-card)',
+    },
+  ]
+
+  const reminderSummaryCards = [
+    {
+      label: 'Pendentes',
+      value: pendingReminders.length,
+      detail: `Até o fim de ${selectedMonthLabel}`,
+      icon: Bell,
+      color: 'var(--color-brand)',
+      bg: 'var(--color-balance-bg)',
+    },
+    {
+      label: 'Vencidos',
+      value: overdueReminderCount,
+      detail: overdueReminderCount === 0 ? 'Nenhum atraso pendente' : 'Revisar vencimentos',
+      icon: AlertTriangle,
+      color: overdueReminderCount > 0 ? 'var(--color-expense)' : 'var(--color-income)',
+      bg: overdueReminderCount > 0 ? 'var(--color-expense-bg)' : 'var(--color-income-bg)',
+    },
+    {
+      label: 'Valor previsto',
+      value: formatCurrency(expectedReminderAmount),
+      detail: 'Não altera saldo automaticamente',
+      icon: CalendarClock,
+      color: 'var(--color-text)',
+      bg: 'var(--color-bg-muted-card)',
+    },
+  ]
 
   const goToPreviousMonth = () => {
     setIsRefreshing(true)
@@ -477,6 +640,204 @@ export function Dashboard() {
             </div>
           ))}
         </div>
+
+        <section className="space-y-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold" style={{ color: 'var(--color-text)' }}>Posição de caixa</h2>
+              <p className="mt-1 text-sm" style={{ color: 'var(--color-text-muted)' }}>
+                Saldo atual das contas consideradas no dashboard
+              </p>
+            </div>
+            <Link
+              to="/accounts"
+              className="app-icon-control inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-medium sm:w-auto"
+            >
+              <ExternalLink size={16} />
+              Extratos
+            </Link>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            {cashPositionCards.map((card) => (
+              <div
+                key={card.label}
+                className="glass flex min-h-[7rem] items-start gap-4 rounded-2xl p-5"
+                style={{ backgroundColor: 'var(--color-bg-card)', border: '1px solid var(--color-border)' }}
+              >
+                <div className="shrink-0 rounded-xl p-3" style={{ backgroundColor: card.bg }}>
+                  <card.icon size={21} style={{ color: card.color }} />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>{card.label}</p>
+                  <p className="break-words text-xl font-bold leading-tight" style={{ color: card.color }}>
+                    {card.value}
+                  </p>
+                  <p className="mt-1 text-xs leading-5" style={{ color: 'var(--color-text-muted)' }}>
+                    {card.detail}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {sortedSelectedAccounts.length === 0 ? (
+            <div
+              className="glass flex min-h-[8rem] items-center justify-center rounded-2xl p-6"
+              style={{ backgroundColor: 'var(--color-bg-card)', border: '1px solid var(--color-border)' }}
+            >
+              <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>Nenhuma conta cadastrada</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
+              {sortedSelectedAccounts.map((account) => {
+                const accountBalance = getAccountBalance(account)
+                const accountColor = accountBalance < 0 ? 'var(--color-expense)' : 'var(--color-text)'
+
+                return (
+                  <Link
+                    key={account.id}
+                    to={`/accounts?account=${account.id}`}
+                    className="glass flex min-h-[8rem] min-w-0 items-center justify-between gap-4 rounded-2xl p-5 transition hover:opacity-90"
+                    style={{ backgroundColor: 'var(--color-bg-card)', border: '1px solid var(--color-border)' }}
+                  >
+                    <div className="flex min-w-0 items-center gap-3">
+                      <span
+                        className="grid h-11 w-11 shrink-0 place-items-center rounded-xl"
+                        style={{ backgroundColor: 'var(--color-bg)', color: account.color ?? 'var(--color-brand)' }}
+                      >
+                        <StoredIcon value={account.icon} fallback={WalletCards} size={21} />
+                      </span>
+                      <div className="min-w-0">
+                        <div className="flex min-w-0 flex-wrap items-center gap-2">
+                          <p className="truncate text-sm font-semibold" style={{ color: 'var(--color-text)' }}>
+                            {account.name}
+                          </p>
+                          {account.isArchived && (
+                            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
+                              Arquivada
+                            </span>
+                          )}
+                          {!account.includeInDashboard && !account.isArchived && (
+                            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
+                              Fora
+                            </span>
+                          )}
+                        </div>
+                        <p className="mt-1 text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                          {account.institutionName || 'Sem instituição'}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p className="text-base font-bold leading-tight sm:text-lg" style={{ color: accountColor }}>
+                        {formatCurrency(account.currentBalance)}
+                      </p>
+                      <p className="mt-1 text-xs" style={{ color: 'var(--color-text-muted)' }}>Extrato</p>
+                    </div>
+                  </Link>
+                )
+              })}
+            </div>
+          )}
+        </section>
+
+        <section className="space-y-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold" style={{ color: 'var(--color-text)' }}>Próximos vencimentos</h2>
+              <p className="mt-1 text-sm" style={{ color: 'var(--color-text-muted)' }}>
+                Lembretes pendentes tratados fora do saldo e do fluxo mensal
+              </p>
+            </div>
+            <Link
+              to="/reminders"
+              className="app-icon-control inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-medium sm:w-auto"
+            >
+              <ExternalLink size={16} />
+              Lembretes
+            </Link>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            {reminderSummaryCards.map((card) => (
+              <div
+                key={card.label}
+                className="glass flex min-h-[7rem] items-start gap-4 rounded-2xl p-5"
+                style={{ backgroundColor: 'var(--color-bg-card)', border: '1px solid var(--color-border)' }}
+              >
+                <div className="shrink-0 rounded-xl p-3" style={{ backgroundColor: card.bg }}>
+                  <card.icon size={21} style={{ color: card.color }} />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>{card.label}</p>
+                  <p className="break-words text-xl font-bold leading-tight" style={{ color: card.color }}>
+                    {card.value}
+                  </p>
+                  <p className="mt-1 text-xs leading-5" style={{ color: 'var(--color-text-muted)' }}>
+                    {card.detail}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div
+            className="glass rounded-2xl p-5 sm:p-6"
+            style={{ backgroundColor: 'var(--color-bg-card)', border: '1px solid var(--color-border)' }}
+          >
+            {upcomingReminders.length === 0 ? (
+              <div className="flex min-h-[8rem] items-center justify-center">
+                <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
+                  Nenhum lembrete pendente até o fim de {selectedMonthLabel}.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {upcomingReminders.map((reminder) => {
+                  const overdue = isReminderOverdue(reminder)
+                  const amount = getReminderAmount(reminder)
+
+                  return (
+                    <Link
+                      key={reminder.id}
+                      to="/reminders"
+                      className="flex min-w-0 flex-col gap-3 rounded-xl border p-4 transition hover:opacity-90 sm:flex-row sm:items-center sm:justify-between"
+                      style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-bg)' }}
+                    >
+                      <div className="min-w-0">
+                        <div className="flex min-w-0 flex-wrap items-center gap-2">
+                          <p className="break-words text-sm font-semibold" style={{ color: 'var(--color-text)' }}>
+                            {reminder.title}
+                          </p>
+                          {overdue && (
+                            <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">
+                              Vencido
+                            </span>
+                          )}
+                        </div>
+                        <p className="mt-1 text-xs leading-5" style={{ color: 'var(--color-text-muted)' }}>
+                          {formatDate(reminder.dueDate)}
+                          {reminder.category ? ` · ${formatStoredIconPrefix(reminder.category.icon)}${reminder.category.name}` : ''}
+                          {reminder.financialAccount ? ` · ${reminder.financialAccount.name}` : ' · Sem conta vinculada'}
+                        </p>
+                      </div>
+
+                      <div className="shrink-0 text-left sm:text-right">
+                        <p className="text-sm font-semibold" style={{ color: amount > 0 ? 'var(--color-text)' : 'var(--color-text-muted)' }}>
+                          {amount > 0 ? formatCurrency(amount) : 'Sem valor'}
+                        </p>
+                        <p className="mt-1 text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                          Abrir lembretes
+                        </p>
+                      </div>
+                    </Link>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        </section>
 
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
           <TransactionRanking
