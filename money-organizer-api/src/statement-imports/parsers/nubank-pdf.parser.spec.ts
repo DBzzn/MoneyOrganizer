@@ -15,8 +15,8 @@ describe('NubankPdfParser', () => {
         '..',
         'docs',
         'EXEMPLOS DE EXTRATOS',
-        'NU',
-        'NU_470852067_01JUN2026_10JUN2026.pdf',
+        'nu',
+        '2026-06-11_194724_Nubank_NU_470852067_01JUN2026_10JUN2026.pdf',
       ),
     );
 

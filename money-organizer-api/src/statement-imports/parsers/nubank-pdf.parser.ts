@@ -5,6 +5,7 @@ import {
   ParsedStatementMovement,
 } from '../types';
 import { PdfTextExtractor, PdfTextRow } from './pdf-text-extractor';
+import { StatementParser } from './statement-parser';
 
 const FULL_MONTHS: Record<string, string> = {
   JANEIRO: '01',
@@ -203,7 +204,10 @@ function isFooterOrHeaderRow(row: PdfTextRow): boolean {
   );
 }
 
-export class NubankPdfParser {
+export class NubankPdfParser implements StatementParser {
+  readonly priority = 30;
+  readonly label = 'Nubank PDF';
+
   private readonly extractor = new PdfTextExtractor();
 
   canParse(fileName: string, mimeType: string) {

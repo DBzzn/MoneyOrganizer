@@ -1,0 +1,725 @@
+import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { Test, TestingModule } from '@nestjs/testing';
+import {
+  ImportedMovementStatus,
+  ImportedMovementReviewTarget,
+  Prisma,
+  TransactionType,
+} from '../../generated/prisma/client';
+import { PrismaService } from '../prisma/prisma.service';
+import { CsvStatementParser } from './parsers/csv-statement.parser';
+import { NubankPdfParser } from './parsers/nubank-pdf.parser';
+import { OfxParser } from './parsers/ofx.parser';
+import { StatementImportsService } from './statement-imports.service';
+
+describe('StatementImportsService', () => {
+  let service: StatementImportsService;
+  let prisma: {
+    $transaction: jest.Mock;
+    statementImportBatch: {
+      findFirst: jest.Mock;
+      update: jest.Mock;
+    };
+    transaction: {
+      create: jest.Mock;
+      findMany: jest.Mock;
+    };
+    transfer: {
+      create: jest.Mock;
+      findMany: jest.Mock;
+    };
+    balanceAdjustment: {
+      findMany: jest.Mock;
+    };
+    financialAccount: {
+      findFirst: jest.Mock;
+    };
+    category: {
+      findFirst: jest.Mock;
+    };
+    importedMovement: {
+      findMany: jest.Mock;
+      findFirst: jest.Mock;
+      update: jest.Mock;
+      updateMany: jest.Mock;
+    };
+  };
+
+  beforeEach(async () => {
+    prisma = {
+      $transaction: jest.fn((callback) => callback(prisma)),
+      statementImportBatch: {
+        findFirst: jest.fn(),
+        update: jest.fn(),
+      },
+      transaction: {
+        create: jest.fn(),
+        findMany: jest.fn(),
+      },
+      transfer: {
+        create: jest.fn(),
+        findMany: jest.fn(),
+      },
+      balanceAdjustment: {
+        findMany: jest.fn(),
+      },
+      financialAccount: {
+        findFirst: jest.fn(),
+      },
+      category: {
+        findFirst: jest.fn(),
+      },
+      importedMovement: {
+        findMany: jest.fn(),
+        findFirst: jest.fn(),
+        update: jest.fn(),
+        updateMany: jest.fn(),
+      },
+    };
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        StatementImportsService,
+        {
+          provide: PrismaService,
+          useValue: prisma,
+        },
+        {
+          provide: OfxParser,
+          useValue: {},
+        },
+        {
+          provide: CsvStatementParser,
+          useValue: {},
+        },
+        {
+          provide: NubankPdfParser,
+          useValue: {},
+        },
+      ],
+    }).compile();
+
+    service = module.get<StatementImportsService>(StatementImportsService);
+  });
+
+  it('should be defined', () => {
+    expect(service).toBeDefined();
+  });
+
+  it('updates an imported movement status scoped to the user', async () => {
+    const updatedMovement = {
+      id: 'movement-1',
+      status: ImportedMovementStatus.IGNORED,
+    };
+    prisma.importedMovement.findFirst.mockResolvedValue({
+      id: 'movement-1',
+      status: ImportedMovementStatus.NEW,
+      direction: 'OUT',
+      amountCents: 12990,
+      rawType: 'DEBITO',
+      rawDescription: 'Compra no debito',
+      reviewTarget: ImportedMovementReviewTarget.TRANSACTION,
+      reviewCategoryId: null,
+      reviewTransferAccountId: null,
+      file: {
+        financialAccountId: 'account-1',
+      },
+    });
+    prisma.importedMovement.update.mockResolvedValue(updatedMovement);
+
+    await expect(
+      service.updateMovementStatus(
+        'user-1',
+        'movement-1',
+        ImportedMovementStatus.IGNORED,
+      ),
+    ).resolves.toBe(updatedMovement);
+
+    expect(prisma.importedMovement.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: 'movement-1',
+        userId: 'user-1',
+      },
+      select: {
+        id: true,
+        status: true,
+        direction: true,
+        amountCents: true,
+        rawType: true,
+        rawDescription: true,
+        reviewTarget: true,
+        reviewCategoryId: true,
+        reviewTransferAccountId: true,
+        file: {
+          select: {
+            financialAccountId: true,
+          },
+        },
+      },
+    });
+    expect(prisma.importedMovement.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          id: 'movement-1',
+        },
+        data: {
+          status: ImportedMovementStatus.IGNORED,
+        },
+      }),
+    );
+  });
+
+  it('edits reviewable imported movement fields and sends it back to review', async () => {
+    const updatedMovement = {
+      id: 'movement-1',
+      date: new Date(2026, 5, 15, 12),
+      amountCents: 12990,
+      direction: 'IN',
+      rawType: 'PIX',
+      rawDescription: 'Pix recebido de cliente',
+      normalizedDescription: 'PIX RECEBIDO DE CLIENTE',
+      status: ImportedMovementStatus.NEEDS_REVIEW,
+    };
+    prisma.importedMovement.findFirst.mockResolvedValue({
+      id: 'movement-1',
+      status: ImportedMovementStatus.NEW,
+    });
+    prisma.importedMovement.update.mockResolvedValue(updatedMovement);
+
+    await expect(
+      service.updateMovement('user-1', 'movement-1', {
+        date: '2026-06-15',
+        amountCents: 12990,
+        direction: 'IN',
+        rawType: '  PIX  ',
+        rawDescription: '  Pix recebido de cliente  ',
+      }),
+    ).resolves.toBe(updatedMovement);
+
+    expect(prisma.importedMovement.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          id: 'movement-1',
+        },
+        data: expect.objectContaining({
+          date: new Date(2026, 5, 15, 12),
+          amountCents: 12990,
+          direction: 'IN',
+          rawType: 'PIX',
+          rawDescription: 'Pix recebido de cliente',
+          normalizedDescription: 'PIX RECEBIDO DE CLIENTE',
+          reviewTarget: ImportedMovementReviewTarget.TRANSACTION,
+          reviewTransferAccount: {
+            disconnect: true,
+          },
+          status: ImportedMovementStatus.NEEDS_REVIEW,
+        }),
+      }),
+    );
+  });
+
+  it('rejects transaction review types that are invalid for income movements', async () => {
+    prisma.importedMovement.findFirst.mockResolvedValue({
+      id: 'movement-1',
+      status: ImportedMovementStatus.NEW,
+      direction: 'OUT',
+      rawType: 'DEBITO',
+      reviewTarget: ImportedMovementReviewTarget.TRANSACTION,
+      reviewTransferAccountId: null,
+      file: {
+        financialAccountId: 'account-1',
+      },
+    });
+
+    await expect(
+      service.updateMovement('user-1', 'movement-1', {
+        direction: 'IN',
+        rawType: 'CREDITO',
+      }),
+    ).rejects.toThrow(BadRequestException);
+
+    expect(prisma.importedMovement.update).not.toHaveBeenCalled();
+  });
+
+  it('stores a reviewed category for transaction review intent', async () => {
+    const updatedMovement = {
+      id: 'movement-1',
+      reviewTarget: ImportedMovementReviewTarget.TRANSACTION,
+      reviewCategoryId: 'category-1',
+      status: ImportedMovementStatus.NEEDS_REVIEW,
+    };
+    prisma.importedMovement.findFirst.mockResolvedValue({
+      id: 'movement-1',
+      status: ImportedMovementStatus.NEW,
+      direction: 'OUT',
+      rawType: 'DEBITO',
+      reviewTarget: ImportedMovementReviewTarget.TRANSACTION,
+      reviewCategoryId: null,
+      reviewTransferAccountId: null,
+      file: {
+        financialAccountId: 'account-1',
+      },
+    });
+    prisma.category.findFirst.mockResolvedValue({
+      id: 'category-1',
+    });
+    prisma.importedMovement.update.mockResolvedValue(updatedMovement);
+
+    await expect(
+      service.updateMovement('user-1', 'movement-1', {
+        reviewCategoryId: 'category-1',
+      }),
+    ).resolves.toBe(updatedMovement);
+
+    expect(prisma.category.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: 'category-1',
+        userId: 'user-1',
+        isArchived: false,
+      },
+      select: {
+        id: true,
+      },
+    });
+    expect(prisma.importedMovement.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          reviewTarget: ImportedMovementReviewTarget.TRANSACTION,
+          reviewCategory: {
+            connect: {
+              id: 'category-1',
+            },
+          },
+          reviewTransferAccount: {
+            disconnect: true,
+          },
+          status: ImportedMovementStatus.NEEDS_REVIEW,
+        }),
+      }),
+    );
+  });
+
+  it('does not mark transaction review as ready without a reviewed category', async () => {
+    prisma.importedMovement.findFirst.mockResolvedValue({
+      id: 'movement-1',
+      status: ImportedMovementStatus.NEW,
+      direction: 'OUT',
+      amountCents: 12990,
+      rawType: 'DEBITO',
+      rawDescription: 'Compra no debito',
+      reviewTarget: ImportedMovementReviewTarget.TRANSACTION,
+      reviewCategoryId: null,
+      reviewTransferAccountId: null,
+      file: {
+        financialAccountId: 'account-1',
+      },
+    });
+
+    await expect(
+      service.updateMovementStatus(
+        'user-1',
+        'movement-1',
+        ImportedMovementStatus.READY,
+      ),
+    ).rejects.toThrow(BadRequestException);
+
+    expect(prisma.importedMovement.update).not.toHaveBeenCalled();
+  });
+
+  it('marks transaction review as ready after category validation', async () => {
+    const updatedMovement = {
+      id: 'movement-1',
+      status: ImportedMovementStatus.READY,
+    };
+    prisma.importedMovement.findFirst.mockResolvedValue({
+      id: 'movement-1',
+      status: ImportedMovementStatus.NEW,
+      direction: 'OUT',
+      amountCents: 12990,
+      rawType: 'DEBITO',
+      rawDescription: 'Compra no debito',
+      reviewTarget: ImportedMovementReviewTarget.TRANSACTION,
+      reviewCategoryId: 'category-1',
+      reviewTransferAccountId: null,
+      file: {
+        financialAccountId: 'account-1',
+      },
+    });
+    prisma.category.findFirst.mockResolvedValue({
+      id: 'category-1',
+    });
+    prisma.importedMovement.update.mockResolvedValue(updatedMovement);
+
+    await expect(
+      service.updateMovementStatus(
+        'user-1',
+        'movement-1',
+        ImportedMovementStatus.READY,
+      ),
+    ).resolves.toBe(updatedMovement);
+
+    expect(prisma.category.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: 'category-1',
+        userId: 'user-1',
+        isArchived: false,
+      },
+      select: {
+        id: true,
+      },
+    });
+  });
+
+  it('stores transfer review intent with the other active account', async () => {
+    const updatedMovement = {
+      id: 'movement-1',
+      reviewTarget: ImportedMovementReviewTarget.TRANSFER,
+      reviewTransferAccountId: 'account-2',
+      rawType: 'TRANSFERENCIA',
+      status: ImportedMovementStatus.NEEDS_REVIEW,
+    };
+    prisma.importedMovement.findFirst.mockResolvedValue({
+      id: 'movement-1',
+      status: ImportedMovementStatus.NEW,
+      direction: 'OUT',
+      rawType: 'DEBITO',
+      reviewTarget: ImportedMovementReviewTarget.TRANSACTION,
+      reviewTransferAccountId: null,
+      file: {
+        financialAccountId: 'account-1',
+      },
+    });
+    prisma.financialAccount.findFirst.mockResolvedValue({
+      id: 'account-2',
+    });
+    prisma.importedMovement.update.mockResolvedValue(updatedMovement);
+
+    await expect(
+      service.updateMovement('user-1', 'movement-1', {
+        reviewTarget: ImportedMovementReviewTarget.TRANSFER,
+        reviewTransferAccountId: 'account-2',
+      }),
+    ).resolves.toBe(updatedMovement);
+
+    expect(prisma.financialAccount.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: 'account-2',
+        userId: 'user-1',
+        isArchived: false,
+      },
+      select: {
+        id: true,
+      },
+    });
+    expect(prisma.importedMovement.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          reviewTarget: ImportedMovementReviewTarget.TRANSFER,
+          reviewTransferAccount: {
+            connect: {
+              id: 'account-2',
+            },
+          },
+          rawType: 'TRANSFERENCIA',
+          status: ImportedMovementStatus.NEEDS_REVIEW,
+        }),
+      }),
+    );
+  });
+
+  it('applies ready reviewed transaction movements and keeps audit link', async () => {
+    const movementDate = new Date(2026, 5, 15, 12);
+    jest.spyOn(service, 'findBatch').mockResolvedValue({
+      id: 'batch-1',
+    } as any);
+    prisma.statementImportBatch.findFirst.mockResolvedValue({
+      id: 'batch-1',
+      files: [
+        {
+          id: 'file-1',
+          financialAccountId: 'account-1',
+          movements: [
+            {
+              id: 'movement-1',
+              status: ImportedMovementStatus.READY,
+              date: movementDate,
+              direction: 'OUT',
+              amountCents: 12990,
+              rawType: 'DEBITO',
+              rawDescription: 'Compra no debito',
+              reviewTarget: ImportedMovementReviewTarget.TRANSACTION,
+              reviewCategoryId: 'category-1',
+              reviewTransferAccountId: null,
+            },
+          ],
+        },
+      ],
+    });
+    prisma.category.findFirst.mockResolvedValue({ id: 'category-1' });
+    prisma.transaction.create.mockResolvedValue({ id: 'transaction-1' });
+    prisma.importedMovement.updateMany.mockResolvedValue({ count: 1 });
+    prisma.importedMovement.findMany.mockResolvedValue([
+      { status: ImportedMovementStatus.APPLIED },
+    ]);
+    prisma.statementImportBatch.update.mockResolvedValue({ id: 'batch-1' });
+
+    await expect(
+      service.applyReadyMovements('user-1', 'batch-1'),
+    ).resolves.toMatchObject({
+      appliedCount: 1,
+      transactionCount: 1,
+      transferCount: 0,
+      batchStatus: 'APPLIED',
+    });
+
+    expect(prisma.transaction.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        type: TransactionType.DEBIT,
+        date: movementDate,
+        isPending: false,
+        description: 'Compra no debito',
+        categoryId: 'category-1',
+        financialAccountId: 'account-1',
+        userId: 'user-1',
+      }),
+      select: { id: true },
+    });
+    expect(
+      prisma.transaction.create.mock.calls[0][0].data.amount.toString(),
+    ).toBe('129.9');
+    expect(prisma.importedMovement.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: 'movement-1',
+        userId: 'user-1',
+        status: ImportedMovementStatus.READY,
+      },
+      data: {
+        status: ImportedMovementStatus.APPLIED,
+        appliedTransactionId: 'transaction-1',
+        appliedTransferId: null,
+      },
+    });
+  });
+
+  it('applies ready reviewed transfer movements as one transfer', async () => {
+    const movementDate = new Date(2026, 5, 15, 12);
+    jest.spyOn(service, 'findBatch').mockResolvedValue({
+      id: 'batch-1',
+    } as any);
+    prisma.statementImportBatch.findFirst.mockResolvedValue({
+      id: 'batch-1',
+      files: [
+        {
+          id: 'file-1',
+          financialAccountId: 'account-1',
+          movements: [
+            {
+              id: 'movement-1',
+              status: ImportedMovementStatus.READY,
+              date: movementDate,
+              direction: 'IN',
+              amountCents: 5000,
+              rawType: 'TRANSFERENCIA',
+              rawDescription: 'Transferencia entre contas',
+              reviewTarget: ImportedMovementReviewTarget.TRANSFER,
+              reviewCategoryId: null,
+              reviewTransferAccountId: 'account-2',
+            },
+          ],
+        },
+      ],
+    });
+    prisma.financialAccount.findFirst.mockResolvedValue({ id: 'account-2' });
+    prisma.transfer.create.mockResolvedValue({ id: 'transfer-1' });
+    prisma.importedMovement.updateMany.mockResolvedValue({ count: 1 });
+    prisma.importedMovement.findMany.mockResolvedValue([
+      { status: ImportedMovementStatus.APPLIED },
+    ]);
+    prisma.statementImportBatch.update.mockResolvedValue({ id: 'batch-1' });
+
+    await expect(
+      service.applyReadyMovements('user-1', 'batch-1'),
+    ).resolves.toMatchObject({
+      appliedCount: 1,
+      transactionCount: 0,
+      transferCount: 1,
+      batchStatus: 'APPLIED',
+    });
+
+    expect(prisma.transfer.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        date: movementDate,
+        isPending: false,
+        description: 'Transferencia entre contas',
+        fromAccountId: 'account-2',
+        toAccountId: 'account-1',
+        userId: 'user-1',
+      }),
+      select: { id: true },
+    });
+    expect(prisma.importedMovement.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: 'movement-1',
+        userId: 'user-1',
+        status: ImportedMovementStatus.READY,
+      },
+      data: {
+        status: ImportedMovementStatus.APPLIED,
+        appliedTransferId: 'transfer-1',
+        appliedTransactionId: null,
+      },
+    });
+  });
+
+  it('does not apply a batch without ready movements', async () => {
+    prisma.statementImportBatch.findFirst.mockResolvedValue({
+      id: 'batch-1',
+      files: [
+        {
+          id: 'file-1',
+          financialAccountId: 'account-1',
+          movements: [
+            {
+              id: 'movement-1',
+              status: ImportedMovementStatus.NEEDS_REVIEW,
+            },
+          ],
+        },
+      ],
+    });
+
+    await expect(
+      service.applyReadyMovements('user-1', 'batch-1'),
+    ).rejects.toThrow(BadRequestException);
+
+    expect(prisma.transaction.create).not.toHaveBeenCalled();
+    expect(prisma.transfer.create).not.toHaveBeenCalled();
+  });
+
+  it('adds read-only review hints when loading a persisted batch', async () => {
+    const movementDate = new Date(2026, 1, 21, 12);
+    prisma.statementImportBatch.findFirst.mockResolvedValue({
+      id: 'batch-1',
+      status: 'REVIEWING',
+      createdAt: new Date(2026, 1, 21, 13),
+      updatedAt: new Date(2026, 1, 21, 13),
+      files: [
+        {
+          id: 'file-1',
+          financialAccountId: 'account-1',
+          movements: [
+            {
+              id: 'movement-1',
+              date: movementDate,
+              direction: 'OUT',
+              amountCents: 5000,
+              rawDescription: 'Transferencia enviada pelo Pix - LIVEPIX',
+              normalizedDescription: 'TRANSFERENCIA ENVIADA PELO PIX LIVEPIX',
+            },
+          ],
+        },
+      ],
+    });
+    prisma.transaction.findMany
+      .mockResolvedValueOnce([
+        {
+          id: 'transaction-1',
+          type: TransactionType.DEBIT,
+          amount: new Prisma.Decimal(50),
+          date: movementDate,
+          description: 'LivePix pagamento',
+          financialAccountId: 'account-1',
+          category: {
+            id: 'category-1',
+            name: 'Doacoes',
+            icon: null,
+          },
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          description: 'TRANSFERENCIA ENVIADA PELO PIX LIVEPIX',
+          category: {
+            id: 'category-1',
+            name: 'Doacoes',
+            icon: null,
+          },
+        },
+      ]);
+    prisma.transfer.findMany.mockResolvedValue([]);
+    prisma.balanceAdjustment.findMany.mockResolvedValue([]);
+
+    const batch = await service.findBatch('user-1', 'batch-1');
+    const hints = (batch.files[0].movements[0] as any).reviewHints;
+
+    expect(hints.reconciliationMatches[0]).toMatchObject({
+      sourceType: 'TRANSACTION',
+      sourceId: 'transaction-1',
+      amountCents: 5000,
+      direction: 'OUT',
+    });
+    expect(hints.categorySuggestion).toMatchObject({
+      categoryId: 'category-1',
+      categoryName: 'Doacoes',
+      basedOnCount: 1,
+    });
+    expect(hints.flags).toEqual(
+      expect.arrayContaining([
+        'POSSIBLE_LEDGER_MATCH',
+        'PIX_REQUIRES_MANUAL_TRANSFER_REVIEW',
+      ]),
+    );
+    expect(prisma.statementImportBatch.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          id: 'batch-1',
+          userId: 'user-1',
+        },
+      }),
+    );
+    expect(prisma.transaction.findMany).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not update movements from another user', async () => {
+    prisma.importedMovement.findFirst.mockResolvedValue(null);
+
+    await expect(
+      service.updateMovementStatus(
+        'user-1',
+        'movement-1',
+        ImportedMovementStatus.IGNORED,
+      ),
+    ).rejects.toThrow(NotFoundException);
+    expect(prisma.importedMovement.update).not.toHaveBeenCalled();
+  });
+
+  it('does not revise movements that were already applied', async () => {
+    prisma.importedMovement.findFirst.mockResolvedValue({
+      id: 'movement-1',
+      status: ImportedMovementStatus.APPLIED,
+    });
+
+    await expect(
+      service.updateMovementStatus(
+        'user-1',
+        'movement-1',
+        ImportedMovementStatus.NEW,
+      ),
+    ).rejects.toThrow(BadRequestException);
+    expect(prisma.importedMovement.update).not.toHaveBeenCalled();
+  });
+
+  it('does not edit movements that were already applied', async () => {
+    prisma.importedMovement.findFirst.mockResolvedValue({
+      id: 'movement-1',
+      status: ImportedMovementStatus.APPLIED,
+    });
+
+    await expect(
+      service.updateMovement('user-1', 'movement-1', {
+        rawType: 'PIX',
+      }),
+    ).rejects.toThrow(BadRequestException);
+    expect(prisma.importedMovement.update).not.toHaveBeenCalled();
+  });
+});

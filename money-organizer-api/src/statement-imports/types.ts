@@ -1,4 +1,14 @@
-export type StatementProvider = 'NUBANK' | 'UNKNOWN';
+export type StatementProvider =
+  | 'NUBANK'
+  | 'INTER'
+  | 'ITAU'
+  | 'SANTANDER'
+  | 'BRADESCO'
+  | 'CAIXA'
+  | 'BB'
+  | 'C6'
+  | 'MERCADO_PAGO'
+  | 'UNKNOWN';
 
 export type StatementSourceType = 'PDF' | 'CSV' | 'XLSX' | 'OFX';
 
@@ -20,6 +30,7 @@ export interface ParsedStatementMovement {
   normalizedDescription: string;
   sourcePage?: number;
   sourceLine?: number;
+  externalId?: string;
   fingerprint: string;
 }
 
@@ -32,6 +43,34 @@ export interface ParsedStatement {
   summary?: ParsedStatementSummary;
   movements: ParsedStatementMovement[];
   warnings: string[];
+}
+
+export type ImportedMovementReviewMatchSource =
+  | 'TRANSACTION'
+  | 'TRANSFER'
+  | 'BALANCE_ADJUSTMENT';
+
+export interface ImportedMovementReviewMatch {
+  sourceType: ImportedMovementReviewMatchSource;
+  sourceId: string;
+  date: string;
+  direction: ParsedStatementDirection;
+  amountCents: number;
+  label: string;
+}
+
+export interface ImportedMovementCategorySuggestion {
+  categoryId: string;
+  categoryName: string;
+  categoryIcon?: string | null;
+  confidence: 'EXACT_DESCRIPTION';
+  basedOnCount: number;
+}
+
+export interface ImportedMovementReviewHints {
+  reconciliationMatches: ImportedMovementReviewMatch[];
+  categorySuggestion?: ImportedMovementCategorySuggestion;
+  flags: string[];
 }
 
 export interface StatementPreviewFile {
