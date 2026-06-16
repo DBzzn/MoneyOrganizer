@@ -12,8 +12,27 @@ import { NubankPdfParser } from './parsers/nubank-pdf.parser';
 import { OfxParser } from './parsers/ofx.parser';
 import { StatementImportsService } from './statement-imports.service';
 
+type ParserMock = {
+  priority: number;
+  label: string;
+  canParse: jest.Mock;
+  parse: jest.Mock;
+};
+
+function mockStatementParser(priority: number, label: string): ParserMock {
+  return {
+    priority,
+    label,
+    canParse: jest.fn(),
+    parse: jest.fn(),
+  };
+}
+
 describe('StatementImportsService', () => {
   let service: StatementImportsService;
+  let ofxParser: ParserMock;
+  let csvStatementParser: ParserMock;
+  let nubankPdfParser: ParserMock;
   let prisma: {
     $transaction: jest.Mock;
     statementImportBatch: {
@@ -46,6 +65,10 @@ describe('StatementImportsService', () => {
   };
 
   beforeEach(async () => {
+    ofxParser = mockStatementParser(10, 'OFX');
+    csvStatementParser = mockStatementParser(20, 'CSV/TSV');
+    nubankPdfParser = mockStatementParser(30, 'Nubank PDF');
+
     prisma = {
       $transaction: jest.fn((callback) => callback(prisma)),
       statementImportBatch: {
@@ -86,15 +109,15 @@ describe('StatementImportsService', () => {
         },
         {
           provide: OfxParser,
-          useValue: {},
+          useValue: ofxParser,
         },
         {
           provide: CsvStatementParser,
-          useValue: {},
+          useValue: csvStatementParser,
         },
         {
           provide: NubankPdfParser,
-          useValue: {},
+          useValue: nubankPdfParser,
         },
       ],
     }).compile();
@@ -104,6 +127,46 @@ describe('StatementImportsService', () => {
 
   it('should be defined', () => {
     expect(service).toBeDefined();
+  });
+
+  it('selects the parser by priority when multiple parsers accept a file', async () => {
+    const buffer = Buffer.from('ambiguous statement');
+    ofxParser.priority = 30;
+    csvStatementParser.priority = 10;
+    nubankPdfParser.priority = 20;
+    ofxParser.canParse.mockReturnValue(true);
+    csvStatementParser.canParse.mockReturnValue(true);
+    nubankPdfParser.canParse.mockReturnValue(true);
+    csvStatementParser.parse.mockReturnValue({
+      provider: 'UNKNOWN',
+      sourceType: 'CSV',
+      movements: [],
+      warnings: [],
+    });
+
+    await expect(
+      service.preview('user-1', {
+        originalname: 'ambiguous.statement',
+        mimetype: 'text/plain',
+        size: buffer.length,
+        buffer,
+      }),
+    ).resolves.toMatchObject({
+      sourceType: 'CSV',
+      warnings: [],
+    });
+
+    expect(csvStatementParser.canParse).toHaveBeenCalledWith(
+      'ambiguous.statement',
+      'text/plain',
+      buffer,
+    );
+    expect(csvStatementParser.parse).toHaveBeenCalledWith(
+      buffer,
+      'ambiguous.statement',
+    );
+    expect(nubankPdfParser.canParse).not.toHaveBeenCalled();
+    expect(ofxParser.canParse).not.toHaveBeenCalled();
   });
 
   it('updates an imported movement status scoped to the user', async () => {

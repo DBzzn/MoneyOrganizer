@@ -5,6 +5,7 @@ import {
   type ChangeEvent,
   type FormEvent,
 } from "react";
+import { Link } from "react-router-dom";
 import { toast } from "react-hot-toast";
 import {
   AlertTriangle,
@@ -24,6 +25,7 @@ import {
   Upload,
   XCircle,
 } from "lucide-react";
+import ConfirmModal from "../components/ConfirmModal";
 import { Layout } from "../components/Layout";
 import { getCategories } from "../api/categories";
 import { getFinancialAccounts } from "../api/financialAccounts";
@@ -83,6 +85,7 @@ const MOVEMENT_STATUS_FILTERS: Array<{
   { value: "IGNORED", label: "Ignorados" },
   { value: "DUPLICATE", label: "Duplicados" },
   { value: "NEEDS_REVIEW", label: "Revisar" },
+  { value: "APPLIED", label: "Aplicados" },
 ];
 
 const MOVEMENT_REVIEW_ACTIONS: Array<{
@@ -562,6 +565,24 @@ function formatBatchSummaryLabel(summary: StatementImportBatchSummary): string {
   return `${formatDate(summary.createdAt)} - ${summary.files.length} arquivo(s), ${getSummaryMovementCount(summary)} movimento(s)`;
 }
 
+function getAppliedMovementLink(movement: ImportedMovement) {
+  if (movement.appliedTransactionId) {
+    return {
+      href: `/transactions?edit=${encodeURIComponent(movement.appliedTransactionId)}`,
+      label: "Transacao",
+    };
+  }
+
+  if (movement.appliedTransferId) {
+    return {
+      href: `/transfers?edit=${encodeURIComponent(movement.appliedTransferId)}`,
+      label: "Transferencia",
+    };
+  }
+
+  return null;
+}
+
 export function StatementImports() {
   const [accounts, setAccounts] = useState<FinancialAccount[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -585,6 +606,7 @@ export function StatementImports() {
   const [updatingMovementId, setUpdatingMovementId] = useState<string | null>(
     null,
   );
+  const [isApplyConfirmOpen, setIsApplyConfirmOpen] = useState(false);
   const [isSavingMovement, setIsSavingMovement] = useState(false);
   const [isApplyingReady, setIsApplyingReady] = useState(false);
   const [isLoadingAccounts, setIsLoadingAccounts] = useState(true);
@@ -999,6 +1021,7 @@ export function StatementImports() {
 
     try {
       setIsApplyingReady(true);
+      setIsApplyConfirmOpen(false);
       const response = await applyReadyImportedMovements(currentBatch.id);
       setCurrentBatch(response.data.batch);
       await refreshBatches(response.data.batch.id);
@@ -1298,7 +1321,7 @@ export function StatementImports() {
               </div>
               <button
                 type="button"
-                onClick={() => void handleApplyReadyMovements()}
+                onClick={() => setIsApplyConfirmOpen(true)}
                 disabled={isApplyingReady || movementStatusCounts.READY === 0}
                 className="flex h-10 items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 text-sm font-medium text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-emerald-400 sm:w-auto"
               >
@@ -1379,6 +1402,17 @@ export function StatementImports() {
             onSubmit={handleMovementEditSubmit}
           />
         )}
+        <ConfirmModal
+          isOpen={isApplyConfirmOpen}
+          message={`Aplicar ${movementStatusCounts.READY} movimento(s) pronto(s)? Essa acao cria transacoes ou transferencias reais e passa a impactar os saldos calculados. Movimentos aplicados nao ficam editaveis na revisao.`}
+          confirmLabel="Aplicar prontos"
+          onConfirm={() => void handleApplyReadyMovements()}
+          onCancel={() => {
+            if (!isApplyingReady) {
+              setIsApplyConfirmOpen(false);
+            }
+          }}
+        />
       </div>
     </Layout>
   );
@@ -2092,6 +2126,21 @@ function MovementStatusActions({
   isUpdating: boolean;
 }) {
   if (movement.status === "APPLIED") {
+    const appliedLink = getAppliedMovementLink(movement);
+
+    if (appliedLink) {
+      return (
+        <Link
+          to={appliedLink.href}
+          title={`Abrir ${appliedLink.label.toLowerCase()} aplicada`}
+          className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-green-200 bg-green-50 px-2.5 text-xs font-medium text-green-700 transition hover:bg-green-100"
+        >
+          <FileSearch size={14} />
+          {appliedLink.label}
+        </Link>
+      );
+    }
+
     return (
       <span className="inline-flex h-8 items-center rounded-lg px-2.5 text-xs font-medium text-gray-500">
         {movementStatusLabel(movement.status)}
