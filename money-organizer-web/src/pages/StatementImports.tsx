@@ -12,6 +12,9 @@ import {
   ArrowDownRight,
   ArrowUpRight,
   CheckCircle2,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Clock3,
   FileSearch,
   FileUp,
@@ -21,6 +24,7 @@ import {
   ListFilter,
   Pencil,
   RefreshCw,
+  Trash2,
   type LucideIcon,
   Upload,
   XCircle,
@@ -32,6 +36,7 @@ import { getFinancialAccounts } from "../api/financialAccounts";
 import {
   applyReadyImportedMovements,
   createStatementImportBatch,
+  deleteStatementImportBatch,
   getStatementImportBatch,
   getStatementImportBatches,
   updateImportedMovement,
@@ -42,6 +47,7 @@ import type {
   Category,
   FinancialAccount,
   ImportedMovement,
+  ImportedMovementReconciliationStatus,
   ImportedMovementReviewTarget,
   ImportedMovementStatus,
   StatementImportBatch,
@@ -59,6 +65,10 @@ type ReviewableMovementStatus = Extract<
   ImportedMovementStatus,
   "NEW" | "IGNORED" | "READY"
 >;
+type ReviewableReconciliationStatus = Exclude<
+  ImportedMovementReconciliationStatus,
+  "PENDING"
+>;
 type MovementEditForm = {
   date: string;
   amount: string;
@@ -70,10 +80,54 @@ type MovementEditForm = {
   rawDescription: string;
 };
 
+type SafeReadyCandidate = {
+  movement: ImportedMovement;
+  reviewCategoryId: string;
+};
+
+type ApplyReadySummary = {
+  totalCount: number;
+  transactionCount: number;
+  transferCount: number;
+  inCents: number;
+  outCents: number;
+  netCents: number;
+};
+
+type ReviewBlockSummaryItem = {
+  reason: string;
+  count: number;
+};
+
+type ReadyMovementPreview = {
+  id: string;
+  date: string;
+  description: string;
+  label: string;
+  direction: StatementMovementDirection;
+  amountCents: number;
+};
+
+type ApplyReadyMovementDetail = {
+  id: string;
+  date: string;
+  sourceFileName: string;
+  sourceAccountName: string;
+  description: string;
+  reviewTarget: ImportedMovementReviewTarget;
+  typeLabel: string;
+  destinationLabel: string;
+  direction: StatementMovementDirection;
+  amountCents: number;
+};
+
 type ReviewTypeOption = {
   value: string;
   label: string;
 };
+
+const BATCHES_PER_PAGE = 10;
+const MOVEMENTS_PER_PAGE = 50;
 
 const MOVEMENT_STATUS_FILTERS: Array<{
   value: MovementStatusFilter;
@@ -143,7 +197,7 @@ function centsToCurrency(cents?: number | null): string {
 }
 
 function centsToInputValue(cents: number): string {
-  return (cents / 100).toFixed(2);
+  return (cents / 100).toFixed(2).replace(".", ",");
 }
 
 function apiErrorMessage(error: unknown, fallback: string): string {
@@ -166,14 +220,63 @@ function apiErrorMessage(error: unknown, fallback: string): string {
 }
 
 function inputValueToCents(value: string): number | undefined {
-  const normalized = value.trim().replace(/\./g, "").replace(",", ".");
-  const amount = Number(normalized);
+  const raw = value.trim();
+
+  if (!raw) {
+    return undefined;
+  }
+
+  const cleaned = raw
+    .replace(/\s+/g, "")
+    .replace(/[R$]/g, "")
+    .replace(/[^\d,.\-+]/g, "");
+
+  if (!cleaned || cleaned === "-" || cleaned === "+") {
+    return undefined;
+  }
+
+  const unsigned = cleaned.replace(/^[-+]/, "");
+  const separatorCount = (unsigned.match(/[,.]/g) ?? []).length;
+  const lastComma = unsigned.lastIndexOf(",");
+  const lastDot = unsigned.lastIndexOf(".");
+  const decimalSeparator =
+    lastComma > lastDot ? "," : lastDot > -1 ? "." : "";
+
+  if (!decimalSeparator) {
+    const integerAmount = Number(unsigned);
+
+    if (!Number.isFinite(integerAmount)) {
+      return undefined;
+    }
+
+    return integerAmount > 0 ? Math.round(integerAmount * 100) : undefined;
+  }
+
+  const decimalIndex = Math.max(lastComma, lastDot);
+  const integerPart = unsigned.slice(0, decimalIndex).replace(/[,.]/g, "");
+  const decimalPart = unsigned.slice(decimalIndex + 1).replace(/[,.]/g, "");
+
+  if (decimalPart.length > 2) {
+    if (separatorCount === 1 && decimalPart.length === 3) {
+      const groupedInteger = Number(`${integerPart}${decimalPart}`);
+
+      return Number.isFinite(groupedInteger) && groupedInteger > 0
+        ? groupedInteger * 100
+        : undefined;
+    }
+
+    return undefined;
+  }
+
+  const major = Number(integerPart || "0");
+  const minor = Number(decimalPart.padEnd(2, "0"));
+  const amount = major * 100 + minor;
 
   if (!Number.isFinite(amount) || amount <= 0) {
     return undefined;
   }
 
-  return Math.round(amount * 100);
+  return amount;
 }
 
 function dateInputValue(date: string): string {
@@ -310,6 +413,66 @@ function getDefaultReviewCategoryId(
   return "";
 }
 
+function getSafePrepareReviewCategoryId(
+  categories: Category[],
+  movement: ImportedMovement,
+): string | null {
+  return getDefaultReviewCategoryId(categories, movement) || null;
+}
+
+function getSafePrepareBlockReason(
+  categories: Category[],
+  movement: ImportedMovement,
+  file: StatementImportFile,
+): string | null {
+  if (movement.status !== "NEW" && movement.status !== "NEEDS_REVIEW") {
+    return "Movimento ja saiu da revisao rapida";
+  }
+
+  if (movement.amountCents <= 0) {
+    return "Valor invalido";
+  }
+
+  if (!movement.rawDescription.trim()) {
+    return "Descricao pendente";
+  }
+
+  if (!file.financialAccountId) {
+    return "Conta do extrato pendente";
+  }
+
+  const reconciliationIssue = getMovementReconciliationIssue(movement);
+  if (reconciliationIssue) {
+    return reconciliationIssue;
+  }
+
+  if (
+    movement.reviewHints?.flags.includes("PIX_REQUIRES_MANUAL_TRANSFER_REVIEW")
+  ) {
+    return "Pix exige revisao manual de transferencia";
+  }
+
+  if (movement.reviewTarget === "TRANSFER") {
+    return "Transferencia exige revisao manual";
+  }
+
+  const rawType = normalizeReviewTypeValue(movement.rawType);
+  const validType = getReviewTypeOptions(
+    movement.direction,
+    "TRANSACTION",
+  ).some((option) => option.value === rawType);
+
+  if (!validType) {
+    return "Tipo revisado pendente";
+  }
+
+  if (!getSafePrepareReviewCategoryId(categories, movement)) {
+    return "Categoria pendente";
+  }
+
+  return null;
+}
+
 function getMovementReadinessIssue(
   movement: ImportedMovement,
   file: StatementImportFile,
@@ -324,6 +487,11 @@ function getMovementReadinessIssue(
 
   if (!file.financialAccountId) {
     return "Selecione a conta do extrato";
+  }
+
+  const reconciliationIssue = getMovementReconciliationIssue(movement);
+  if (reconciliationIssue) {
+    return reconciliationIssue;
   }
 
   if (movement.reviewTarget === "TRANSFER") {
@@ -350,6 +518,27 @@ function getMovementReadinessIssue(
 
   if (!movement.reviewCategoryId) {
     return "Informe a categoria revisada";
+  }
+
+  return null;
+}
+
+function hasLedgerReconciliationMatch(movement: ImportedMovement): boolean {
+  return (movement.reviewHints?.reconciliationMatches.length ?? 0) > 0;
+}
+
+function getMovementReconciliationIssue(
+  movement: ImportedMovement,
+): string | null {
+  if (movement.reconciliationStatus === "CONFIRMED_DUPLICATE") {
+    return "Movimento confirmado como duplicidade";
+  }
+
+  if (
+    hasLedgerReconciliationMatch(movement) &&
+    movement.reconciliationStatus !== "CONFIRMED_UNIQUE"
+  ) {
+    return "Confirme a conciliacao do match antes de marcar como pronto";
   }
 
   return null;
@@ -422,10 +611,37 @@ function reviewSourceLabel(sourceType: string): string {
 function reviewFlagLabel(flag: string): string {
   const labels: Record<string, string> = {
     POSSIBLE_LEDGER_MATCH: "Possivel match",
+    RECONCILIATION_REQUIRED: "Conciliacao pendente",
     PIX_REQUIRES_MANUAL_TRANSFER_REVIEW: "Pix: revisar transferencia",
   };
 
   return labels[flag] ?? flag;
+}
+
+function reconciliationStatusLabel(
+  status: ImportedMovementReconciliationStatus,
+): string {
+  const labels: Record<ImportedMovementReconciliationStatus, string> = {
+    PENDING: "Conciliacao pendente",
+    CONFIRMED_UNIQUE: "Novo confirmado",
+    CONFIRMED_DUPLICATE: "Duplicidade confirmada",
+  };
+
+  return labels[status];
+}
+
+function reconciliationStatusClass(
+  status: ImportedMovementReconciliationStatus,
+): string {
+  if (status === "CONFIRMED_UNIQUE") {
+    return "bg-green-100 text-green-700";
+  }
+
+  if (status === "CONFIRMED_DUPLICATE") {
+    return "bg-red-100 text-red-700";
+  }
+
+  return "bg-yellow-100 text-yellow-700";
 }
 
 function statusClass(
@@ -517,11 +733,159 @@ function getBatchMovementStatusCounts(
   return counts;
 }
 
+function hasAppliedMovements(batch: StatementImportBatch | null): boolean {
+  return (
+    batch?.files.some((file) =>
+      file.movements.some((movement) => movement.status === "APPLIED"),
+    ) ?? false
+  );
+}
+
+function getApplyReadySummary(batch: StatementImportBatch | null): ApplyReadySummary {
+  const readyMovements =
+    batch?.files.flatMap((file) =>
+      file.movements.filter((movement) => movement.status === "READY"),
+    ) ?? [];
+
+  const summary = readyMovements.reduce(
+    (totals, movement) => {
+      if (movement.reviewTarget === "TRANSFER") {
+        totals.transferCount += 1;
+      } else {
+        totals.transactionCount += 1;
+      }
+
+      if (movement.direction === "IN") {
+        totals.inCents += movement.amountCents;
+      } else {
+        totals.outCents += movement.amountCents;
+      }
+
+      return totals;
+    },
+    {
+      totalCount: readyMovements.length,
+      transactionCount: 0,
+      transferCount: 0,
+      inCents: 0,
+      outCents: 0,
+      netCents: 0,
+    },
+  );
+
+  summary.netCents = summary.inCents - summary.outCents;
+  return summary;
+}
+
+function getReviewBlockSummary(
+  categories: Category[],
+  batch: StatementImportBatch | null,
+): ReviewBlockSummaryItem[] {
+  if (!batch) {
+    return [];
+  }
+
+  const counts = new Map<string, number>();
+
+  batch.files.forEach((file) => {
+    file.movements.forEach((movement) => {
+      const reason = getSafePrepareBlockReason(categories, movement, file);
+
+      if (!reason || movement.status === "APPLIED") {
+        return;
+      }
+
+      counts.set(reason, (counts.get(reason) ?? 0) + 1);
+    });
+  });
+
+  return [...counts.entries()]
+    .map(([reason, count]) => ({ reason, count }))
+    .sort((left, right) => right.count - left.count)
+    .slice(0, 5);
+}
+
+function getReadyMovementPreview(
+  batch: StatementImportBatch | null,
+): ReadyMovementPreview[] {
+  if (!batch) {
+    return [];
+  }
+
+  return batch.files
+    .flatMap((file) =>
+      file.movements
+        .filter((movement) => movement.status === "READY")
+        .map((movement) => ({
+          id: movement.id,
+          date: movement.date,
+          description: movement.rawDescription || "-",
+          label:
+            movement.reviewTarget === "TRANSFER"
+              ? `Transferencia - ${file.financialAccount?.name ?? "Conta do extrato"}`
+              : (movement.reviewCategory?.name ?? "Transacao"),
+          direction: movement.direction,
+          amountCents: movement.amountCents,
+        })),
+    )
+    .sort((left, right) => left.date.localeCompare(right.date))
+    .slice(0, 5);
+}
+
+function getApplyReadyMovementDetails(
+  batch: StatementImportBatch | null,
+): ApplyReadyMovementDetail[] {
+  if (!batch) {
+    return [];
+  }
+
+  return batch.files
+    .flatMap((file) =>
+      file.movements
+        .filter((movement) => movement.status === "READY")
+        .map((movement) => ({
+          id: movement.id,
+          date: movement.date,
+          sourceFileName: file.originalName,
+          sourceAccountName: file.financialAccount?.name ?? "Conta do extrato",
+          description: movement.rawDescription || "-",
+          reviewTarget: movement.reviewTarget,
+          typeLabel: movement.rawType || "-",
+          destinationLabel:
+            movement.reviewTarget === "TRANSFER"
+              ? (movement.reviewTransferAccount?.name ?? "Outra conta pendente")
+              : (movement.reviewCategory
+                  ? formatCategoryLabel(movement.reviewCategory)
+                  : "Categoria pendente"),
+          direction: movement.direction,
+          amountCents: movement.amountCents,
+        })),
+    )
+    .sort((left, right) => left.date.localeCompare(right.date));
+}
+
 function getSummaryMovementCount(summary: StatementImportBatchSummary): number {
   return summary.files.reduce(
     (total, file) => total + file._count.movements,
     0,
   );
+}
+
+function formatBatchSummaryPeriod(summary: StatementImportBatchSummary): string {
+  const starts = summary.files
+    .map((file) => file.periodStart)
+    .filter((value): value is string => Boolean(value))
+    .sort();
+  const ends = summary.files
+    .map((file) => file.periodEnd)
+    .filter((value): value is string => Boolean(value))
+    .sort();
+
+  if (starts.length === 0 || ends.length === 0) {
+    return "Periodo nao identificado";
+  }
+
+  return `${formatDate(starts[0])} a ${formatDate(ends[ends.length - 1])}`;
 }
 
 function formatFilePeriod(
@@ -561,10 +925,6 @@ function getWarnings(file: StatementImportFile): string[] {
   );
 }
 
-function formatBatchSummaryLabel(summary: StatementImportBatchSummary): string {
-  return `${formatDate(summary.createdAt)} - ${summary.files.length} arquivo(s), ${getSummaryMovementCount(summary)} movimento(s)`;
-}
-
 function getAppliedMovementLink(movement: ImportedMovement) {
   if (movement.appliedTransactionId) {
     return {
@@ -595,6 +955,7 @@ export function StatementImports() {
   const [currentBatch, setCurrentBatch] = useState<StatementImportBatch | null>(
     null,
   );
+  const [batchPage, setBatchPage] = useState(1);
   const [movementStatusFilter, setMovementStatusFilter] =
     useState<MovementStatusFilter>("ALL");
   const [editingMovement, setEditingMovement] =
@@ -607,7 +968,11 @@ export function StatementImports() {
     null,
   );
   const [isApplyConfirmOpen, setIsApplyConfirmOpen] = useState(false);
+  const [batchToDeleteId, setBatchToDeleteId] = useState<string | null>(null);
   const [isSavingMovement, setIsSavingMovement] = useState(false);
+  const [isDeletingBatch, setIsDeletingBatch] = useState(false);
+  const [isPreparingSafe, setIsPreparingSafe] = useState(false);
+  const [isIgnoringDuplicates, setIsIgnoringDuplicates] = useState(false);
   const [isApplyingReady, setIsApplyingReady] = useState(false);
   const [isLoadingAccounts, setIsLoadingAccounts] = useState(true);
   const [isLoadingBatches, setIsLoadingBatches] = useState(true);
@@ -631,7 +996,102 @@ export function StatementImports() {
     () => getBatchMovementStatusCounts(currentBatch),
     [currentBatch],
   );
+  const applyReadySummary = useMemo(
+    () => getApplyReadySummary(currentBatch),
+    [currentBatch],
+  );
+  const currentBatchHasAppliedMovements = useMemo(
+    () => hasAppliedMovements(currentBatch),
+    [currentBatch],
+  );
+  const reviewBlockSummary = useMemo(
+    () => getReviewBlockSummary(categories, currentBatch),
+    [categories, currentBatch],
+  );
+  const readyMovementPreview = useMemo(
+    () => getReadyMovementPreview(currentBatch),
+    [currentBatch],
+  );
+  const applyReadyMovementDetails = useMemo(
+    () => getApplyReadyMovementDetails(currentBatch),
+    [currentBatch],
+  );
+  const totalBatchPages = Math.max(
+    1,
+    Math.ceil(batchSummaries.length / BATCHES_PER_PAGE),
+  );
+  const effectiveBatchPage = Math.min(batchPage, totalBatchPages);
+  const visibleBatchSummaries = useMemo(() => {
+    const start = (effectiveBatchPage - 1) * BATCHES_PER_PAGE;
 
+    return batchSummaries.slice(start, start + BATCHES_PER_PAGE);
+  }, [effectiveBatchPage, batchSummaries]);
+  const batchRangeStart =
+    batchSummaries.length === 0
+      ? 0
+      : (effectiveBatchPage - 1) * BATCHES_PER_PAGE + 1;
+  const batchRangeEnd = Math.min(
+    effectiveBatchPage * BATCHES_PER_PAGE,
+    batchSummaries.length,
+  );
+  const readyReconciliationBlockCount = useMemo(() => {
+    const movements =
+      currentBatch?.files.flatMap((file) => file.movements) ?? [];
+
+    return movements.filter(
+      (movement) =>
+        movement.status === "READY" &&
+        Boolean(getMovementReconciliationIssue(movement)),
+    ).length;
+  }, [currentBatch]);
+  const pendingReconciliationCount = useMemo(() => {
+    const movements =
+      currentBatch?.files.flatMap((file) => file.movements) ?? [];
+
+    return movements.filter(
+      (movement) =>
+        hasLedgerReconciliationMatch(movement) &&
+        movement.reconciliationStatus === "PENDING",
+    ).length;
+  }, [currentBatch]);
+  const safeReadyCandidates = useMemo<SafeReadyCandidate[]>(() => {
+    if (!currentBatch) {
+      return [];
+    }
+
+    return currentBatch.files.flatMap((file) =>
+      file.movements.flatMap((movement) => {
+        if (getSafePrepareBlockReason(categories, movement, file)) {
+          return [];
+        }
+
+        const reviewCategoryId = getSafePrepareReviewCategoryId(
+          categories,
+          movement,
+        );
+
+        return reviewCategoryId
+          ? [
+              {
+                movement,
+                reviewCategoryId,
+              },
+            ]
+          : [];
+      }),
+    );
+  }, [categories, currentBatch]);
+  const duplicateMovementCandidates = useMemo(
+    () =>
+      currentBatch?.files.flatMap((file) =>
+        file.movements.filter((movement) => movement.status === "DUPLICATE"),
+      ) ?? [],
+    [currentBatch],
+  );
+  const canApplyReadyMovements =
+    movementStatusCounts.READY > 0 &&
+    readyReconciliationBlockCount === 0 &&
+    !isPreparingSafe;
   useEffect(() => {
     let isActive = true;
 
@@ -669,27 +1129,6 @@ export function StatementImports() {
       if (batchesResult.status === "fulfilled") {
         const summaries = batchesResult.value.data;
         setBatchSummaries(summaries);
-
-        const latestBatchId = summaries[0]?.id;
-        if (latestBatchId) {
-          setSelectedBatchId(latestBatchId);
-          setIsLoadingBatch(true);
-
-          try {
-            const batchResponse = await getStatementImportBatch(latestBatchId);
-            if (isActive) {
-              setCurrentBatch(batchResponse.data);
-            }
-          } catch {
-            if (isActive) {
-              toast.error("Erro ao carregar o lote mais recente.");
-            }
-          } finally {
-            if (isActive) {
-              setIsLoadingBatch(false);
-            }
-          }
-        }
       } else {
         toast.error("Erro ao carregar lotes.");
       }
@@ -726,17 +1165,19 @@ export function StatementImports() {
     }
   };
 
-  const refreshBatches = async (preferredBatchId?: string) => {
+  const refreshBatches = async (preferredBatchId?: string | null) => {
     try {
       setIsLoadingBatches(true);
       const response = await getStatementImportBatches();
       setBatchSummaries(response.data);
 
       const nextBatchId =
-        preferredBatchId ||
+        preferredBatchId === null
+          ? ""
+          : preferredBatchId ||
         (response.data.some((summary) => summary.id === selectedBatchId)
           ? selectedBatchId
-          : response.data[0]?.id);
+          : "");
 
       if (nextBatchId) {
         await loadBatch(nextBatchId);
@@ -749,6 +1190,37 @@ export function StatementImports() {
     } finally {
       setIsLoadingBatches(false);
     }
+  };
+
+  const handleDeleteBatch = async () => {
+    if (!batchToDeleteId) {
+      return;
+    }
+
+    const deletedBatchId = batchToDeleteId;
+    const shouldClearExpandedBatch = selectedBatchId === deletedBatchId;
+
+    try {
+      setIsDeletingBatch(true);
+      await deleteStatementImportBatch(deletedBatchId);
+      setBatchToDeleteId(null);
+      toast.success("Lote excluido com sucesso.");
+      await refreshBatches(shouldClearExpandedBatch ? null : selectedBatchId);
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "Erro ao excluir lote."));
+    } finally {
+      setIsDeletingBatch(false);
+    }
+  };
+
+  const handleBatchToggle = async (batchId: string) => {
+    if (selectedBatchId === batchId) {
+      setSelectedBatchId("");
+      setCurrentBatch(null);
+      return;
+    }
+
+    await loadBatch(batchId);
   };
 
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -772,6 +1244,7 @@ export function StatementImports() {
       );
       setCurrentBatch(response.data);
       setSelectedBatchId(response.data.id);
+      setBatchPage(1);
       setSelectedFiles([]);
       form.reset();
       await refreshBatches(response.data.id);
@@ -814,6 +1287,43 @@ export function StatementImports() {
       );
     } catch (error) {
       toast.error(apiErrorMessage(error, "Erro ao atualizar movimento."));
+    } finally {
+      setUpdatingMovementId(null);
+    }
+  };
+
+  const handleMovementReconciliationChange = async (
+    movementId: string,
+    reconciliationStatus: ReviewableReconciliationStatus,
+  ) => {
+    try {
+      setUpdatingMovementId(movementId);
+      const response = await updateImportedMovement(movementId, {
+        reconciliationStatus,
+        reconciliationNote: null,
+      });
+
+      setCurrentBatch((batch) => {
+        if (!batch) {
+          return batch;
+        }
+
+        return {
+          ...batch,
+          files: batch.files.map((file) => ({
+            ...file,
+            movements: file.movements.map((movement) =>
+              movement.id === movementId
+                ? { ...response.data, reviewHints: movement.reviewHints }
+                : movement,
+            ),
+          })),
+        };
+      });
+
+      toast.success(reconciliationStatusLabel(reconciliationStatus));
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "Erro ao conciliar movimento."));
     } finally {
       setUpdatingMovementId(null);
     }
@@ -1006,6 +1516,9 @@ export function StatementImports() {
       setEditingMovement(null);
       setEditingMovementFile(null);
       setMovementEditForm(null);
+      if (currentBatch) {
+        await loadBatch(currentBatch.id);
+      }
       toast.success("Movimento atualizado para revisao.");
     } catch (error) {
       toast.error(apiErrorMessage(error, "Erro ao editar movimento."));
@@ -1016,6 +1529,11 @@ export function StatementImports() {
 
   const handleApplyReadyMovements = async () => {
     if (!currentBatch || movementStatusCounts.READY === 0) {
+      return;
+    }
+
+    if (readyReconciliationBlockCount > 0) {
+      toast.error("Resolva a conciliacao dos movimentos prontos antes de aplicar.");
       return;
     }
 
@@ -1032,6 +1550,81 @@ export function StatementImports() {
       toast.error(apiErrorMessage(error, "Erro ao aplicar movimentos prontos."));
     } finally {
       setIsApplyingReady(false);
+    }
+  };
+
+  const handlePrepareSafeMovements = async () => {
+    if (!currentBatch || safeReadyCandidates.length === 0) {
+      return;
+    }
+
+    let preparedCount = 0;
+
+    try {
+      setIsPreparingSafe(true);
+
+      for (const candidate of safeReadyCandidates) {
+        const shouldPersistCategory =
+          candidate.movement.reviewCategoryId !== candidate.reviewCategoryId;
+
+        if (shouldPersistCategory) {
+          await updateImportedMovement(candidate.movement.id, {
+            reviewCategoryId: candidate.reviewCategoryId,
+            reconciliationStatus:
+              candidate.movement.reconciliationStatus === "CONFIRMED_UNIQUE"
+                ? "CONFIRMED_UNIQUE"
+                : undefined,
+          });
+        }
+
+        await updateImportedMovementStatus(candidate.movement.id, "READY");
+        preparedCount += 1;
+      }
+
+      await loadBatch(currentBatch.id);
+      toast.success(
+        `${preparedCount} movimento(s) seguro(s) marcado(s) como pronto(s).`,
+      );
+    } catch (error) {
+      await loadBatch(currentBatch.id);
+      toast.error(
+        `${preparedCount} movimento(s) preparado(s). ${apiErrorMessage(
+          error,
+          "Erro ao preparar movimentos seguros.",
+        )}`,
+      );
+    } finally {
+      setIsPreparingSafe(false);
+    }
+  };
+
+  const handleIgnoreDuplicateMovements = async () => {
+    if (!currentBatch || duplicateMovementCandidates.length === 0) {
+      return;
+    }
+
+    let ignoredCount = 0;
+
+    try {
+      setIsIgnoringDuplicates(true);
+
+      for (const movement of duplicateMovementCandidates) {
+        await updateImportedMovementStatus(movement.id, "IGNORED");
+        ignoredCount += 1;
+      }
+
+      await loadBatch(currentBatch.id);
+      toast.success(`${ignoredCount} duplicado(s) ignorado(s).`);
+    } catch (error) {
+      await loadBatch(currentBatch.id);
+      toast.error(
+        `${ignoredCount} duplicado(s) ignorado(s). ${apiErrorMessage(
+          error,
+          "Erro ao ignorar duplicados.",
+        )}`,
+      );
+    } finally {
+      setIsIgnoringDuplicates(false);
     }
   };
 
@@ -1149,29 +1742,22 @@ export function StatementImports() {
             border: "1px solid var(--color-border)",
           }}
         >
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_auto] lg:items-end">
-            <div>
-              <label
-                className="mb-1 block text-sm font-medium"
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <h2
+                className="text-base font-semibold"
                 style={{ color: "var(--color-text)" }}
               >
-                Lotes salvos
-              </label>
-              <select
-                value={selectedBatchId}
-                onChange={(event) => void loadBatch(event.target.value)}
-                className="app-control"
-                disabled={isLoadingBatches || batchSummaries.length === 0}
+                Lotes importados
+              </h2>
+              <p
+                className="mt-1 text-sm"
+                style={{ color: "var(--color-text-muted)" }}
               >
-                <option value="">Nenhum lote salvo</option>
-                {batchSummaries.map((summary) => (
-                  <option key={summary.id} value={summary.id}>
-                    {formatBatchSummaryLabel(summary)}
-                  </option>
-                ))}
-              </select>
+                {batchSummaries.length} lote(s) salvo(s), {batchRangeStart}-
+                {batchRangeEnd} visivel(is)
+              </p>
             </div>
-
             <button
               type="button"
               title="Atualizar lotes"
@@ -1189,9 +1775,151 @@ export function StatementImports() {
               />
             </button>
           </div>
+
+          {batchSummaries.length === 0 && !isLoadingBatches && (
+            <div
+              className="mt-4 flex min-h-[8rem] flex-col items-center justify-center rounded-xl border p-5 text-center"
+              style={{
+                borderColor: "var(--color-border)",
+                color: "var(--color-text-muted)",
+              }}
+            >
+              <FileUp size={30} />
+              <p className="mt-2 text-sm">Nenhum lote persistido encontrado.</p>
+            </div>
+          )}
+
+          {visibleBatchSummaries.length > 0 && (
+            <div className="mt-4 space-y-3">
+              {visibleBatchSummaries.map((summary) => {
+                const isExpanded = selectedBatchId === summary.id;
+                const deleteBlockedByAppliedMovements =
+                  isExpanded && currentBatchHasAppliedMovements;
+                const isDeletingThisBatch =
+                  isDeletingBatch && batchToDeleteId === summary.id;
+
+                return (
+                  <div
+                    key={summary.id}
+                    className="rounded-xl border"
+                    style={{
+                      borderColor: isExpanded
+                        ? "var(--color-brand)"
+                        : "var(--color-border)",
+                      backgroundColor: "var(--color-bg)",
+                    }}
+                  >
+                    <div className="flex flex-col gap-3 p-3 sm:flex-row sm:items-start sm:justify-between">
+                      <button
+                        type="button"
+                        aria-expanded={isExpanded}
+                        onClick={() => void handleBatchToggle(summary.id)}
+                        className="flex min-w-0 flex-1 items-start gap-3 text-left"
+                      >
+                        <span
+                          className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border"
+                          style={{ borderColor: "var(--color-border)" }}
+                        >
+                          <ChevronDown
+                            size={16}
+                            className={`transition ${isExpanded ? "rotate-180" : ""}`}
+                          />
+                        </span>
+                        <span className="min-w-0">
+                          <span className="flex flex-wrap items-center gap-2">
+                            <span
+                              className="font-semibold"
+                              style={{ color: "var(--color-text)" }}
+                            >
+                              #{summary.id.slice(0, 8)}
+                            </span>
+                            <span
+                              className="rounded-full border px-2 py-0.5 text-xs font-medium"
+                              style={{
+                                borderColor: "var(--color-border)",
+                                color: "var(--color-text-muted)",
+                              }}
+                            >
+                              {batchStatusLabel(summary.status)}
+                            </span>
+                          </span>
+                          <span
+                            className="mt-1 block text-sm"
+                            style={{ color: "var(--color-text)" }}
+                          >
+                            {formatBatchSummaryPeriod(summary)}
+                          </span>
+                          <span
+                            className="mt-1 block text-xs"
+                            style={{ color: "var(--color-text-muted)" }}
+                          >
+                            {summary.files.length} arquivo(s) -{" "}
+                            {getSummaryMovementCount(summary)} movimento(s) -{" "}
+                            {formatDate(summary.createdAt)}
+                          </span>
+                        </span>
+                      </button>
+
+                      <button
+                        type="button"
+                        title={
+                          deleteBlockedByAppliedMovements
+                            ? "Lote aplicado preserva rastreabilidade"
+                            : "Excluir lote"
+                        }
+                        onClick={() => setBatchToDeleteId(summary.id)}
+                        disabled={
+                          deleteBlockedByAppliedMovements ||
+                          isDeletingBatch ||
+                          isUploading ||
+                          isApplyingReady
+                        }
+                        className="flex h-10 w-full items-center justify-center rounded-lg border px-3 transition disabled:cursor-not-allowed disabled:opacity-60 sm:w-10"
+                        style={{
+                          borderColor: "var(--color-border)",
+                          color: deleteBlockedByAppliedMovements
+                            ? "var(--color-text-muted)"
+                            : "#dc2626",
+                        }}
+                      >
+                        {isDeletingThisBatch ? (
+                          <RefreshCw size={16} className="animate-spin" />
+                        ) : (
+                          <Trash2 size={16} />
+                        )}
+                      </button>
+                    </div>
+
+                    {isExpanded && isLoadingBatch && (
+                      <div
+                        className="flex items-center gap-2 border-t px-4 py-3 text-sm"
+                        style={{
+                          borderColor: "var(--color-border)",
+                          color: "var(--color-text-muted)",
+                        }}
+                      >
+                        <RefreshCw size={15} className="animate-spin" />
+                        Carregando lote...
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {batchSummaries.length > BATCHES_PER_PAGE && (
+            <PaginationControls
+              className="mt-4"
+              label={`${batchRangeStart}-${batchRangeEnd} de ${batchSummaries.length} lotes`}
+              page={effectiveBatchPage}
+              totalPages={totalBatchPages}
+              onPageChange={setBatchPage}
+            />
+          )}
         </div>
 
-        {isLoadingBatch && (
+        {isLoadingBatch && selectedBatchId && (
           <div
             className="glass flex min-h-[12rem] flex-col items-center justify-center rounded-2xl p-6 text-center"
             style={{
@@ -1205,24 +1933,6 @@ export function StatementImports() {
               style={{ color: "var(--color-text-muted)" }}
             >
               Carregando lote...
-            </p>
-          </div>
-        )}
-
-        {!isLoadingBatch && !currentBatch && (
-          <div
-            className="glass flex min-h-[12rem] flex-col items-center justify-center rounded-2xl p-6 text-center"
-            style={{
-              backgroundColor: "var(--color-bg-card)",
-              border: "1px solid var(--color-border)",
-            }}
-          >
-            <FileUp size={34} style={{ color: "var(--color-text-muted)" }} />
-            <p
-              className="mt-3 text-sm"
-              style={{ color: "var(--color-text-muted)" }}
-            >
-              Nenhum lote persistido encontrado.
             </p>
           </div>
         )}
@@ -1315,23 +2025,161 @@ export function StatementImports() {
                   className="mt-1 text-xs"
                   style={{ color: "var(--color-text-muted)" }}
                 >
-                  {movementStatusCounts.READY} movimento(s) pronto(s) para
+                  {applyReadySummary.totalCount} movimento(s) pronto(s) para
                   criar transacoes ou transferencias revisadas.
+                  {pendingReconciliationCount > 0
+                    ? ` ${pendingReconciliationCount} movimento(s) ainda pedem conciliacao.`
+                    : ""}
+                  {readyReconciliationBlockCount > 0
+                    ? " Ha prontos bloqueados por conciliacao pendente."
+                    : ""}
+                  {safeReadyCandidates.length > 0
+                    ? ` ${safeReadyCandidates.length} movimento(s) seguro(s) podem ser preparados automaticamente.`
+                    : ""}
+                  {duplicateMovementCandidates.length > 0
+                    ? ` ${duplicateMovementCandidates.length} duplicado(s) podem ser ignorados.`
+                    : ""}
                 </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsApplyConfirmOpen(true)}
-                disabled={isApplyingReady || movementStatusCounts.READY === 0}
-                className="flex h-10 items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 text-sm font-medium text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-emerald-400 sm:w-auto"
-              >
-                {isApplyingReady ? (
-                  <RefreshCw size={16} className="animate-spin" />
-                ) : (
-                  <CheckCircle2 size={16} />
+                {applyReadySummary.totalCount > 0 && (
+                  <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3 xl:grid-cols-5">
+                    <ApplySummaryMetric
+                      label="Transacoes"
+                      value={String(applyReadySummary.transactionCount)}
+                    />
+                    <ApplySummaryMetric
+                      label="Transferencias"
+                      value={String(applyReadySummary.transferCount)}
+                    />
+                    <ApplySummaryMetric
+                      label="Entradas"
+                      value={centsToCurrency(applyReadySummary.inCents)}
+                    />
+                    <ApplySummaryMetric
+                      label="Saidas"
+                      value={centsToCurrency(applyReadySummary.outCents)}
+                    />
+                    <ApplySummaryMetric
+                      label="Liquido"
+                      value={centsToCurrency(applyReadySummary.netCents)}
+                    />
+                  </div>
                 )}
-                {isApplyingReady ? "Aplicando..." : "Aplicar prontos"}
-              </button>
+                {(reviewBlockSummary.length > 0 ||
+                  readyMovementPreview.length > 0) && (
+                  <div className="mt-4 grid grid-cols-1 gap-3 xl:grid-cols-2">
+                    {readyMovementPreview.length > 0 && (
+                      <div className="min-w-0">
+                        <p
+                          className="text-xs font-semibold"
+                          style={{ color: "var(--color-text)" }}
+                        >
+                          Prontos para aplicar
+                        </p>
+                        <div className="mt-2 space-y-1.5">
+                          {readyMovementPreview.map((movement) => (
+                            <div
+                              key={movement.id}
+                              className="flex min-w-0 items-center justify-between gap-3 text-xs"
+                            >
+                              <div className="min-w-0">
+                                <p
+                                  className="truncate font-medium"
+                                  style={{ color: "var(--color-text)" }}
+                                >
+                                  {movement.description}
+                                </p>
+                                <p
+                                  className="truncate"
+                                  style={{ color: "var(--color-text-muted)" }}
+                                >
+                                  {formatDate(movement.date)} - {movement.label}
+                                </p>
+                              </div>
+                              <span
+                                className={`shrink-0 rounded-full px-2 py-1 font-medium ${directionClass(movement.direction)}`}
+                              >
+                                {centsToCurrency(movement.amountCents)}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {reviewBlockSummary.length > 0 && (
+                      <div className="min-w-0">
+                        <p
+                          className="text-xs font-semibold"
+                          style={{ color: "var(--color-text)" }}
+                        >
+                          Pendencias de revisao
+                        </p>
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {reviewBlockSummary.map((item) => (
+                            <span
+                              key={item.reason}
+                              className="rounded-full bg-yellow-100 px-2.5 py-1 text-xs font-medium text-yellow-700"
+                              title={item.reason}
+                            >
+                              {item.count} - {item.reason}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+              <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
+                <button
+                  type="button"
+                  onClick={() => void handleIgnoreDuplicateMovements()}
+                  disabled={
+                    isIgnoringDuplicates ||
+                    isPreparingSafe ||
+                    isApplyingReady ||
+                    duplicateMovementCandidates.length === 0
+                  }
+                  className="flex h-10 items-center justify-center gap-2 rounded-lg bg-yellow-600 px-4 text-sm font-medium text-white transition hover:bg-yellow-700 disabled:cursor-not-allowed disabled:bg-yellow-400 sm:w-auto"
+                >
+                  {isIgnoringDuplicates ? (
+                    <RefreshCw size={16} className="animate-spin" />
+                  ) : (
+                    <XCircle size={16} />
+                  )}
+                  {isIgnoringDuplicates ? "Ignorando..." : "Ignorar duplicados"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handlePrepareSafeMovements()}
+                  disabled={
+                    isPreparingSafe ||
+                    isApplyingReady ||
+                    safeReadyCandidates.length === 0
+                  }
+                  className="flex h-10 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-400 sm:w-auto"
+                >
+                  {isPreparingSafe ? (
+                    <RefreshCw size={16} className="animate-spin" />
+                  ) : (
+                    <CheckCircle2 size={16} />
+                  )}
+                  {isPreparingSafe ? "Preparando..." : "Preparar seguros"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsApplyConfirmOpen(true)}
+                  disabled={isApplyingReady || !canApplyReadyMovements}
+                  className="flex h-10 items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 text-sm font-medium text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-emerald-400 sm:w-auto"
+                >
+                  {isApplyingReady ? (
+                    <RefreshCw size={16} className="animate-spin" />
+                  ) : (
+                    <CheckCircle2 size={16} />
+                  )}
+                  {isApplyingReady ? "Aplicando..." : "Aplicar prontos"}
+                </button>
+              </div>
             </div>
 
             <div
@@ -1381,6 +2229,9 @@ export function StatementImports() {
                   file={file}
                   movementStatusFilter={movementStatusFilter}
                   onMovementStatusChange={handleMovementStatusChange}
+                  onMovementReconciliationChange={
+                    handleMovementReconciliationChange
+                  }
                   onEditMovement={openMovementEditor}
                   updatingMovementId={updatingMovementId}
                 />
@@ -1403,16 +2254,31 @@ export function StatementImports() {
           />
         )}
         <ConfirmModal
+          isOpen={Boolean(batchToDeleteId)}
+          message="Excluir este lote de importacao? Arquivos e movimentos importados deste lote serao removidos. Lotes com movimentos aplicados ficam bloqueados para preservar a rastreabilidade financeira."
+          confirmLabel="Excluir lote"
+          onConfirm={() => void handleDeleteBatch()}
+          onCancel={() => {
+            if (!isDeletingBatch) {
+              setBatchToDeleteId(null);
+            }
+          }}
+        />
+        <ConfirmModal
           isOpen={isApplyConfirmOpen}
-          message={`Aplicar ${movementStatusCounts.READY} movimento(s) pronto(s)? Essa acao cria transacoes ou transferencias reais e passa a impactar os saldos calculados. Movimentos aplicados nao ficam editaveis na revisao.`}
+          message={`Aplicar ${applyReadySummary.totalCount} movimento(s) pronto(s)? Isso deve criar ${applyReadySummary.transactionCount} transacao(oes) e ${applyReadySummary.transferCount} transferencia(s), com ${centsToCurrency(applyReadySummary.inCents)} em entradas e ${centsToCurrency(applyReadySummary.outCents)} em saidas. Para desfazer neste corte, abra a entidade criada pelo link de auditoria e edite ou remova por la; o movimento importado permanece aplicado como rastro de origem.`}
+          title="Confirmar aplicacao"
           confirmLabel="Aplicar prontos"
+          maxWidthClassName="max-w-5xl"
           onConfirm={() => void handleApplyReadyMovements()}
           onCancel={() => {
             if (!isApplyingReady) {
               setIsApplyConfirmOpen(false);
             }
           }}
-        />
+        >
+          <ApplyReadyConfirmationGrid movements={applyReadyMovementDetails} />
+        </ConfirmModal>
       </div>
     </Layout>
   );
@@ -1752,6 +2618,15 @@ function MovementReviewHints({ movement }: { movement: ImportedMovement }) {
         </span>
       ))}
 
+      {hints.reconciliationMatches.length > 0 && (
+        <span
+          className={`rounded-full px-2 py-1 text-xs font-medium ${reconciliationStatusClass(movement.reconciliationStatus)}`}
+          title={movement.reconciliationNote || undefined}
+        >
+          {reconciliationStatusLabel(movement.reconciliationStatus)}
+        </span>
+      )}
+
       {hints.categorySuggestion && (
         <span
           className="rounded-full bg-blue-100 px-2 py-1 text-xs font-medium text-blue-700"
@@ -1763,7 +2638,11 @@ function MovementReviewHints({ movement }: { movement: ImportedMovement }) {
       )}
 
       {hints.flags
-        .filter((flag) => flag !== "POSSIBLE_LEDGER_MATCH")
+        .filter(
+          (flag) =>
+            flag !== "POSSIBLE_LEDGER_MATCH" &&
+            flag !== "RECONCILIATION_REQUIRED",
+        )
         .slice(0, 1)
         .map((flag) => (
           <span
@@ -1781,6 +2660,7 @@ function StatementImportFilePanel({
   file,
   movementStatusFilter,
   onMovementStatusChange,
+  onMovementReconciliationChange,
   onEditMovement,
   updatingMovementId,
 }: {
@@ -1789,6 +2669,10 @@ function StatementImportFilePanel({
   onMovementStatusChange: (
     movementId: string,
     status: ReviewableMovementStatus,
+  ) => void;
+  onMovementReconciliationChange: (
+    movementId: string,
+    status: ReviewableReconciliationStatus,
   ) => void;
   onEditMovement: (movement: ImportedMovement, file: StatementImportFile) => void;
   updatingMovementId: string | null;
@@ -1803,6 +2687,33 @@ function StatementImportFilePanel({
       : file.movements.filter(
           (movement) => movement.status === movementStatusFilter,
         );
+  const [movementPageState, setMovementPageState] = useState({
+    fileId: file.id,
+    filter: movementStatusFilter,
+    page: 1,
+  });
+  const totalMovementPages = Math.max(
+    1,
+    Math.ceil(visibleMovements.length / MOVEMENTS_PER_PAGE),
+  );
+  const requestedMovementPage =
+    movementPageState.fileId === file.id &&
+    movementPageState.filter === movementStatusFilter
+      ? movementPageState.page
+      : 1;
+  const movementPage = Math.min(requestedMovementPage, totalMovementPages);
+  const movementRangeStart =
+    visibleMovements.length === 0
+      ? 0
+      : (movementPage - 1) * MOVEMENTS_PER_PAGE + 1;
+  const movementRangeEnd = Math.min(
+    movementPage * MOVEMENTS_PER_PAGE,
+    visibleMovements.length,
+  );
+  const paginatedMovements = visibleMovements.slice(
+    (movementPage - 1) * MOVEMENTS_PER_PAGE,
+    movementPage * MOVEMENTS_PER_PAGE,
+  );
 
   return (
     <div
@@ -1901,12 +2812,13 @@ function StatementImportFilePanel({
       {visibleMovements.length > 0 && (
         <>
           <div className="mt-5 space-y-3 md:hidden">
-            {visibleMovements.map((movement) => (
+            {paginatedMovements.map((movement) => (
               <MovementCard
                 key={movement.id}
                 movement={movement}
                 readinessIssue={getMovementReadinessIssue(movement, file)}
                 onStatusChange={onMovementStatusChange}
+                onReconciliationChange={onMovementReconciliationChange}
                 onEditMovement={(selectedMovement) =>
                   onEditMovement(selectedMovement, file)
                 }
@@ -1970,7 +2882,7 @@ function StatementImportFilePanel({
                 </tr>
               </thead>
               <tbody>
-                {visibleMovements.map((movement) => (
+                {paginatedMovements.map((movement) => (
                   <tr
                     key={movement.id}
                     style={{ borderBottom: "1px solid var(--color-border)" }}
@@ -1997,6 +2909,9 @@ function StatementImportFilePanel({
                           file,
                         )}
                         onStatusChange={onMovementStatusChange}
+                        onReconciliationChange={
+                          onMovementReconciliationChange
+                        }
                         onEditMovement={(selectedMovement) =>
                           onEditMovement(selectedMovement, file)
                         }
@@ -2057,6 +2972,22 @@ function StatementImportFilePanel({
               </tbody>
             </table>
           </div>
+
+          {visibleMovements.length > MOVEMENTS_PER_PAGE && (
+            <PaginationControls
+              className="mt-4"
+              label={`${movementRangeStart}-${movementRangeEnd} de ${visibleMovements.length} movimentos`}
+              page={movementPage}
+              totalPages={totalMovementPages}
+              onPageChange={(page) =>
+                setMovementPageState({
+                  fileId: file.id,
+                  filter: movementStatusFilter,
+                  page,
+                })
+              }
+            />
+          )}
         </>
       )}
     </div>
@@ -2081,6 +3012,198 @@ function InfoPill({ label, value }: { label: string; value: string }) {
       >
         {value}
       </p>
+    </div>
+  );
+}
+
+function ApplySummaryMetric({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="min-w-0">
+      <p className="text-[11px]" style={{ color: "var(--color-text-muted)" }}>
+        {label}
+      </p>
+      <p
+        className="truncate text-sm font-semibold"
+        style={{ color: "var(--color-text)" }}
+      >
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function PaginationControls({
+  page,
+  totalPages,
+  label,
+  onPageChange,
+  className = "",
+}: {
+  page: number;
+  totalPages: number;
+  label: string;
+  onPageChange: (page: number) => void;
+  className?: string;
+}) {
+  return (
+    <div
+      className={`flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between ${className}`}
+    >
+      <span className="text-sm" style={{ color: "var(--color-text-muted)" }}>
+        {label}
+      </span>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          title="Pagina anterior"
+          onClick={() => onPageChange(Math.max(1, page - 1))}
+          disabled={page <= 1}
+          className="flex h-9 w-9 items-center justify-center rounded-lg border transition disabled:cursor-not-allowed disabled:opacity-50"
+          style={{
+            borderColor: "var(--color-border)",
+            color: "var(--color-text)",
+          }}
+        >
+          <ChevronLeft size={16} />
+        </button>
+        <span
+          className="min-w-16 text-center text-sm font-medium"
+          style={{ color: "var(--color-text)" }}
+        >
+          {page}/{totalPages}
+        </span>
+        <button
+          type="button"
+          title="Proxima pagina"
+          onClick={() => onPageChange(Math.min(totalPages, page + 1))}
+          disabled={page >= totalPages}
+          className="flex h-9 w-9 items-center justify-center rounded-lg border transition disabled:cursor-not-allowed disabled:opacity-50"
+          style={{
+            borderColor: "var(--color-border)",
+            color: "var(--color-text)",
+          }}
+        >
+          <ChevronRight size={16} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ApplyReadyConfirmationGrid({
+  movements,
+}: {
+  movements: ApplyReadyMovementDetail[];
+}) {
+  if (movements.length === 0) {
+    return null;
+  }
+
+  return (
+    <div
+      className="mb-5 overflow-hidden rounded-xl border"
+      style={{ borderColor: "var(--color-border)" }}
+    >
+      <div className="max-h-[24rem] overflow-y-auto">
+        <div className="space-y-3 p-3 md:hidden">
+          {movements.map((movement) => (
+            <div
+              key={movement.id}
+              className="rounded-lg border p-3"
+              style={{ borderColor: "var(--color-border)" }}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p
+                    className="truncate text-sm font-semibold"
+                    style={{ color: "var(--color-text)" }}
+                  >
+                    {movement.description}
+                  </p>
+                  <p
+                    className="mt-1 text-xs"
+                    style={{ color: "var(--color-text-muted)" }}
+                  >
+                    {formatDate(movement.date)} - {movement.typeLabel}
+                  </p>
+                </div>
+                <span
+                  className={`shrink-0 rounded-full px-2 py-1 text-xs font-medium ${directionClass(movement.direction)}`}
+                >
+                  {centsToCurrency(movement.amountCents)}
+                </span>
+              </div>
+              <div
+                className="mt-3 grid grid-cols-1 gap-2 text-xs"
+                style={{ color: "var(--color-text-muted)" }}
+              >
+                <span>{movement.sourceAccountName}</span>
+                <span>{movement.destinationLabel}</span>
+                <span>{movement.sourceFileName}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="hidden min-w-[980px] md:block">
+          <div
+            className="sticky top-0 grid grid-cols-[7rem_8rem_1fr_9rem_11rem_10rem_8rem] gap-3 border-b px-3 py-2 text-xs font-semibold"
+            style={{
+              backgroundColor: "var(--color-bg-modal)",
+              borderColor: "var(--color-border)",
+              color: "var(--color-text-muted)",
+            }}
+          >
+            <span>Data</span>
+            <span>Alvo</span>
+            <span>Descricao</span>
+            <span>Tipo</span>
+            <span>Destino</span>
+            <span>Arquivo</span>
+            <span className="text-right">Valor</span>
+          </div>
+          {movements.map((movement) => (
+            <div
+              key={movement.id}
+              className="grid grid-cols-[7rem_8rem_1fr_9rem_11rem_10rem_8rem] gap-3 border-b px-3 py-2 text-sm last:border-b-0"
+              style={{
+                borderColor: "var(--color-border)",
+                color: "var(--color-text)",
+              }}
+            >
+              <span className="whitespace-nowrap">
+                {formatDate(movement.date)}
+              </span>
+              <span>
+                {movement.reviewTarget === "TRANSFER"
+                  ? "Transferencia"
+                  : "Transacao"}
+              </span>
+              <span className="truncate" title={movement.description}>
+                {movement.description}
+              </span>
+              <span className="truncate" title={movement.typeLabel}>
+                {movement.typeLabel}
+              </span>
+              <span className="truncate" title={movement.destinationLabel}>
+                {movement.destinationLabel}
+              </span>
+              <span className="truncate" title={movement.sourceFileName}>
+                {movement.sourceFileName}
+              </span>
+              <span className="text-right font-semibold">
+                {centsToCurrency(movement.amountCents)}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -2113,6 +3236,7 @@ function MovementStatusActions({
   movement,
   readinessIssue,
   onStatusChange,
+  onReconciliationChange,
   onEditMovement,
   isUpdating,
 }: {
@@ -2122,17 +3246,24 @@ function MovementStatusActions({
     movementId: string,
     status: ReviewableMovementStatus,
   ) => void;
+  onReconciliationChange: (
+    movementId: string,
+    status: ReviewableReconciliationStatus,
+  ) => void;
   onEditMovement: (movement: ImportedMovement) => void;
   isUpdating: boolean;
 }) {
   if (movement.status === "APPLIED") {
     const appliedLink = getAppliedMovementLink(movement);
+    const appliedTitle = movement.appliedAt
+      ? `Abrir ${appliedLink?.label.toLowerCase() ?? "entidade"} aplicada em ${formatDate(movement.appliedAt)}`
+      : `Abrir ${appliedLink?.label.toLowerCase() ?? "entidade"} aplicada`;
 
     if (appliedLink) {
       return (
         <Link
           to={appliedLink.href}
-          title={`Abrir ${appliedLink.label.toLowerCase()} aplicada`}
+          title={appliedTitle}
           className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-green-200 bg-green-50 px-2.5 text-xs font-medium text-green-700 transition hover:bg-green-100"
         >
           <FileSearch size={14} />
@@ -2160,6 +3291,41 @@ function MovementStatusActions({
       >
         <Pencil size={14} />
       </button>
+
+      {hasLedgerReconciliationMatch(movement) && (
+        <>
+          <button
+            type="button"
+            title="Confirmar que nao duplica o ledger"
+            aria-label="Confirmar que nao duplica o ledger"
+            onClick={() =>
+              onReconciliationChange(movement.id, "CONFIRMED_UNIQUE")
+            }
+            disabled={
+              isUpdating ||
+              movement.reconciliationStatus === "CONFIRMED_UNIQUE"
+            }
+            className="flex h-8 w-8 items-center justify-center rounded-lg border border-green-200 bg-green-50 text-green-700 transition hover:bg-green-100 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <CheckCircle2 size={14} />
+          </button>
+          <button
+            type="button"
+            title="Confirmar duplicidade e ignorar"
+            aria-label="Confirmar duplicidade e ignorar"
+            onClick={() =>
+              onReconciliationChange(movement.id, "CONFIRMED_DUPLICATE")
+            }
+            disabled={
+              isUpdating ||
+              movement.reconciliationStatus === "CONFIRMED_DUPLICATE"
+            }
+            className="flex h-8 w-8 items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <XCircle size={14} />
+          </button>
+        </>
+      )}
 
       {MOVEMENT_REVIEW_ACTIONS.map((action) => {
         const Icon = action.icon;
@@ -2193,6 +3359,7 @@ function MovementCard({
   movement,
   readinessIssue,
   onStatusChange,
+  onReconciliationChange,
   onEditMovement,
   isUpdating,
 }: {
@@ -2201,6 +3368,10 @@ function MovementCard({
   onStatusChange: (
     movementId: string,
     status: ReviewableMovementStatus,
+  ) => void;
+  onReconciliationChange: (
+    movementId: string,
+    status: ReviewableReconciliationStatus,
   ) => void;
   onEditMovement: (movement: ImportedMovement) => void;
   isUpdating: boolean;
@@ -2283,6 +3454,7 @@ function MovementCard({
           movement={movement}
           readinessIssue={readinessIssue}
           onStatusChange={onStatusChange}
+          onReconciliationChange={onReconciliationChange}
           onEditMovement={onEditMovement}
           isUpdating={isUpdating}
         />

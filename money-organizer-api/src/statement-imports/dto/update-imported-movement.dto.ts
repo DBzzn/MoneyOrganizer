@@ -9,6 +9,7 @@ import {
   Min,
 } from 'class-validator';
 import {
+  ImportedMovementReconciliationStatus,
   ImportedMovementReviewTarget,
   StatementMovementDirection,
 } from '../../../generated/prisma/client';
@@ -82,6 +83,26 @@ export class UpdateImportedMovementDto {
   @IsString()
   @MaxLength(80)
   reviewCategoryId?: string | null;
+
+  @ApiProperty({
+    description: 'Manual reconciliation decision for possible ledger matches',
+    enum: ImportedMovementReconciliationStatus,
+    required: false,
+  })
+  @IsOptional()
+  @IsEnum(ImportedMovementReconciliationStatus)
+  reconciliationStatus?: ImportedMovementReconciliationStatus;
+
+  @ApiProperty({
+    description: 'Optional note explaining the reconciliation decision',
+    example: 'Nao e duplicidade; compra recorrente no mesmo dia.',
+    required: false,
+    nullable: true,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  reconciliationNote?: string | null;
 
   @ApiProperty({
     description: 'Editable movement description',

@@ -49,6 +49,9 @@ export const getStatementImportBatches = () =>
 export const getStatementImportBatch = (id: string) =>
   api.get<StatementImportBatch>(`/statement-imports/batches/${id}`);
 
+export const deleteStatementImportBatch = (id: string) =>
+  api.delete<{ message: string }>(`/statement-imports/batches/${id}`);
+
 export const applyReadyImportedMovements = (batchId: string) =>
   api.post<StatementImportApplyResult>(
     `/statement-imports/batches/${batchId}/apply-ready`,

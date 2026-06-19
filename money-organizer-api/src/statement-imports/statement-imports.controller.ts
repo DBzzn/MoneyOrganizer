@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -136,6 +137,16 @@ export class StatementImportsController {
   @Get('batches/:id')
   findBatch(@Request() req: AuthenticatedRequest, @Param('id') id: string) {
     return this.statementImportsService.findBatch(req.user.id, id);
+  }
+
+  @ApiOperation({ summary: 'Excluir lote de importacao ainda nao aplicado' })
+  @ApiResponse({ status: 200, description: 'Lote excluido com sucesso' })
+  @ApiResponse({ status: 400, description: 'Lote aplicado nao pode ser excluido' })
+  @ApiResponse({ status: 401, description: 'Nao autenticado' })
+  @ApiResponse({ status: 404, description: 'Lote nao encontrado' })
+  @Delete('batches/:id')
+  removeBatch(@Request() req: AuthenticatedRequest, @Param('id') id: string) {
+    return this.statementImportsService.removeBatch(req.user.id, id);
   }
 
   @ApiOperation({

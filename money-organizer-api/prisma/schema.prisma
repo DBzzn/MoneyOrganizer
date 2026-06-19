@@ -120,6 +120,12 @@ enum ImportedMovementReviewTarget {
   TRANSFER
 }
 
+enum ImportedMovementReconciliationStatus {
+  PENDING
+  CONFIRMED_UNIQUE
+  CONFIRMED_DUPLICATE
+}
+
 model FinancialAccount {
   id                    String                @id @default(uuid())
   name                  String
@@ -279,38 +285,43 @@ model StatementImportFile {
 }
 
 model ImportedMovement {
-  id                      String                       @id @default(uuid())
-  date                    DateTime
-  direction               StatementMovementDirection
-  amountCents             Int
-  rawType                 String
-  rawDescription          String
-  normalizedDescription   String
-  sourcePage              Int?
-  sourceLine              Int?
-  fingerprint             String
-  externalId              String?
-  status                  ImportedMovementStatus       @default(NEW)
-  reviewTarget            ImportedMovementReviewTarget @default(TRANSACTION)
-  reviewCategoryId        String?
-  reviewCategory          Category?                    @relation("ImportedMovementReviewCategory", fields: [reviewCategoryId], references: [id], onDelete: SetNull)
-  reviewTransferAccountId String?
-  reviewTransferAccount   FinancialAccount?            @relation("ImportedMovementReviewTransferAccount", fields: [reviewTransferAccountId], references: [id], onDelete: SetNull)
-  appliedTransactionId    String?
-  appliedTransaction      Transaction?                 @relation("ImportedMovementAppliedTransaction", fields: [appliedTransactionId], references: [id], onDelete: SetNull)
-  appliedTransferId       String?
-  appliedTransfer         Transfer?                    @relation("ImportedMovementAppliedTransfer", fields: [appliedTransferId], references: [id], onDelete: SetNull)
-  fileId                  String
-  file                    StatementImportFile          @relation(fields: [fileId], references: [id], onDelete: Cascade)
-  userId                  String
-  user                    User                         @relation(fields: [userId], references: [id])
-  createdAt               DateTime                     @default(now())
-  updatedAt               DateTime                     @updatedAt
+  id                       String                               @id @default(uuid())
+  date                     DateTime
+  direction                StatementMovementDirection
+  amountCents              Int
+  rawType                  String
+  rawDescription           String
+  normalizedDescription    String
+  sourcePage               Int?
+  sourceLine               Int?
+  fingerprint              String
+  externalId               String?
+  status                   ImportedMovementStatus               @default(NEW)
+  reviewTarget             ImportedMovementReviewTarget         @default(TRANSACTION)
+  reviewCategoryId         String?
+  reviewCategory           Category?                            @relation("ImportedMovementReviewCategory", fields: [reviewCategoryId], references: [id], onDelete: SetNull)
+  reviewTransferAccountId  String?
+  reviewTransferAccount    FinancialAccount?                    @relation("ImportedMovementReviewTransferAccount", fields: [reviewTransferAccountId], references: [id], onDelete: SetNull)
+  reconciliationStatus     ImportedMovementReconciliationStatus @default(PENDING)
+  reconciliationNote       String?
+  reconciliationReviewedAt DateTime?
+  appliedTransactionId     String?
+  appliedTransaction       Transaction?                         @relation("ImportedMovementAppliedTransaction", fields: [appliedTransactionId], references: [id], onDelete: SetNull)
+  appliedTransferId        String?
+  appliedTransfer          Transfer?                            @relation("ImportedMovementAppliedTransfer", fields: [appliedTransferId], references: [id], onDelete: SetNull)
+  appliedAt                DateTime?
+  fileId                   String
+  file                     StatementImportFile                  @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  userId                   String
+  user                     User                                 @relation(fields: [userId], references: [id])
+  createdAt                DateTime                             @default(now())
+  updatedAt                DateTime                             @updatedAt
 
   @@index([fileId])
   @@index([userId, fingerprint])
   @@index([userId, externalId])
   @@index([userId, status])
+  @@index([userId, reconciliationStatus])
   @@index([reviewCategoryId])
   @@index([reviewTransferAccountId])
   @@index([appliedTransactionId])

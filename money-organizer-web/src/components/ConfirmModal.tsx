@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { X } from 'lucide-react'
 
 interface SecondaryAction {
@@ -12,6 +13,9 @@ interface ConfirmModalProps {
     onCancel: () => void
     confirmLabel?: string
     secondaryAction?: SecondaryAction
+    title?: string
+    children?: ReactNode
+    maxWidthClassName?: string
 }
 
 export default function ConfirmModal({
@@ -21,6 +25,9 @@ export default function ConfirmModal({
     onCancel,
     confirmLabel = 'Confirmar',
     secondaryAction,
+    title = 'Confirmacao',
+    children,
+    maxWidthClassName = 'max-w-sm',
 }: ConfirmModalProps) {
     if (!isOpen) return null
 
@@ -30,7 +37,7 @@ export default function ConfirmModal({
             style={{ backgroundColor: 'rgba(0,0,0,0.6)' }}
         >
             <div
-                className="glass-heavy w-full max-w-sm p-5 shadow-xl sm:p-6"
+                className={`glass-heavy w-full ${maxWidthClassName} max-h-[88vh] overflow-hidden p-5 shadow-xl sm:p-6`}
                 style={{
                     backgroundColor: 'var(--color-bg-modal)',
                     color: 'var(--color-text)',
@@ -39,15 +46,17 @@ export default function ConfirmModal({
                 }}
             >
                 <div className="flex justify-between items-center mb-4">
-                    <h2 className="text-lg font-semibold">Confirmação</h2>
+                    <h2 className="text-lg font-semibold">{title}</h2>
                     <button onClick={onCancel}>
                         <X size={20} style={{ color: 'var(--color-text-muted)' }} />
                     </button>
                 </div>
 
-                <p className="mb-6" style={{ color: 'var(--color-text-muted)' }}>
+                <p className="mb-4" style={{ color: 'var(--color-text-muted)' }}>
                     {message}
                 </p>
+
+                {children}
 
                 <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
                     <button

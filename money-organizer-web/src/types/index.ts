@@ -136,6 +136,11 @@ export type ImportedMovementStatus =
 
 export type ImportedMovementReviewTarget = "TRANSACTION" | "TRANSFER";
 
+export type ImportedMovementReconciliationStatus =
+  | "PENDING"
+  | "CONFIRMED_UNIQUE"
+  | "CONFIRMED_DUPLICATE";
+
 export interface StatementImportPreviewMovement {
   date: string;
   amountCents: number;
@@ -196,8 +201,12 @@ export interface ImportedMovement {
     FinancialAccount,
     "id" | "name" | "type" | "institutionName" | "icon" | "color" | "isArchived"
   > | null;
+  reconciliationStatus: ImportedMovementReconciliationStatus;
+  reconciliationNote?: string | null;
+  reconciliationReviewedAt?: string | null;
   appliedTransactionId?: string | null;
   appliedTransferId?: string | null;
+  appliedAt?: string | null;
   reviewHints?: ImportedMovementReviewHints;
   createdAt: string;
   updatedAt: string;
@@ -239,6 +248,8 @@ export interface UpdateImportedMovementPayload {
   reviewTarget?: ImportedMovementReviewTarget;
   reviewCategoryId?: string | null;
   reviewTransferAccountId?: string | null;
+  reconciliationStatus?: ImportedMovementReconciliationStatus;
+  reconciliationNote?: string | null;
   rawDescription?: string;
 }
 

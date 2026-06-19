@@ -26,6 +26,7 @@ import {
 import {
   ImportedMovementStatus,
   ImportedMovementReviewTarget,
+  ImportedMovementReconciliationStatus,
   StatementImportBatchStatus,
   Prisma,
   TransactionType,
@@ -101,8 +102,12 @@ const STATEMENT_IMPORT_BATCH_SELECT = {
           reviewTransferAccount: {
             select: FINANCIAL_ACCOUNT_SELECT,
           },
+          reconciliationStatus: true,
+          reconciliationNote: true,
+          reconciliationReviewedAt: true,
           appliedTransactionId: true,
           appliedTransferId: true,
+          appliedAt: true,
           createdAt: true,
           updatedAt: true,
         },
@@ -386,9 +391,176 @@ export class StatementImportsService {
     return account;
   }
 
+  private async findLedgerReconciliationMatches(
+    userId: string,
+    input: {
+      financialAccountId: string;
+      date: Date;
+      direction: ParsedStatementDirection;
+      amountCents: number;
+    },
+  ): Promise<ImportedMovementReviewMatch[]> {
+    const startDate = new Date(input.date);
+    const endDate = new Date(input.date);
+    startDate.setHours(0, 0, 0, 0);
+    endDate.setHours(23, 59, 59, 999);
+
+    const [transactions, transfers, adjustments] = await Promise.all([
+      this.prisma.transaction.findMany({
+        where: {
+          userId,
+          financialAccountId: input.financialAccountId,
+          amount: centsToDecimal(input.amountCents),
+          date: { gte: startDate, lte: endDate },
+        },
+        select: {
+          id: true,
+          type: true,
+          amount: true,
+          date: true,
+          description: true,
+          category: {
+            select: {
+              name: true,
+            },
+          },
+        },
+      }),
+      this.prisma.transfer.findMany({
+        where: {
+          userId,
+          amount: centsToDecimal(input.amountCents),
+          date: { gte: startDate, lte: endDate },
+          OR: [
+            { fromAccountId: input.financialAccountId },
+            { toAccountId: input.financialAccountId },
+          ],
+        },
+        select: {
+          id: true,
+          amount: true,
+          date: true,
+          description: true,
+          fromAccountId: true,
+          toAccountId: true,
+          fromAccount: {
+            select: {
+              name: true,
+            },
+          },
+          toAccount: {
+            select: {
+              name: true,
+            },
+          },
+        },
+      }),
+      this.prisma.balanceAdjustment.findMany({
+        where: {
+          userId,
+          financialAccountId: input.financialAccountId,
+          date: { gte: startDate, lte: endDate },
+        },
+        select: {
+          id: true,
+          amount: true,
+          date: true,
+          reason: true,
+        },
+      }),
+    ]);
+
+    const matches: ImportedMovementReviewMatch[] = [];
+
+    for (const transaction of transactions) {
+      const direction =
+        transaction.type === TransactionType.INCOME ? 'IN' : 'OUT';
+      const amountCents = toCents(transaction.amount);
+
+      if (
+        direction !== input.direction ||
+        amountCents !== input.amountCents
+      ) {
+        continue;
+      }
+
+      matches.push({
+        sourceType: 'TRANSACTION',
+        sourceId: transaction.id,
+        date: dateOnly(transaction.date),
+        direction,
+        amountCents,
+        label: transaction.description?.trim() || transaction.category.name,
+      });
+    }
+
+    for (const transfer of transfers) {
+      const amountCents = toCents(transfer.amount);
+
+      if (
+        amountCents === input.amountCents &&
+        input.direction === 'IN' &&
+        transfer.toAccountId === input.financialAccountId
+      ) {
+        matches.push({
+          sourceType: 'TRANSFER',
+          sourceId: transfer.id,
+          date: dateOnly(transfer.date),
+          direction: 'IN',
+          amountCents,
+          label:
+            transfer.description?.trim() ||
+            `Transferencia recebida de ${transfer.fromAccount.name}`,
+        });
+      }
+
+      if (
+        amountCents === input.amountCents &&
+        input.direction === 'OUT' &&
+        transfer.fromAccountId === input.financialAccountId
+      ) {
+        matches.push({
+          sourceType: 'TRANSFER',
+          sourceId: transfer.id,
+          date: dateOnly(transfer.date),
+          direction: 'OUT',
+          amountCents,
+          label:
+            transfer.description?.trim() ||
+            `Transferencia enviada para ${transfer.toAccount.name}`,
+        });
+      }
+    }
+
+    for (const adjustment of adjustments) {
+      const signedAmountCents = toCents(adjustment.amount);
+      const direction = signedDirection(signedAmountCents);
+      const amountCents = Math.abs(signedAmountCents);
+
+      if (
+        direction !== input.direction ||
+        amountCents !== input.amountCents
+      ) {
+        continue;
+      }
+
+      matches.push({
+        sourceType: 'BALANCE_ADJUSTMENT',
+        sourceId: adjustment.id,
+        date: dateOnly(adjustment.date),
+        direction,
+        amountCents,
+        label: adjustment.reason,
+      });
+    }
+
+    return matches.slice(0, 3);
+  }
+
   private async assertMovementReady(
     userId: string,
     movement: {
+      date: Date;
       amountCents: number;
       direction: ParsedStatementDirection;
       rawType: string;
@@ -396,6 +568,7 @@ export class StatementImportsService {
       reviewTarget: ImportedMovementReviewTarget | null;
       reviewCategoryId: string | null;
       reviewTransferAccountId: string | null;
+      reconciliationStatus: ImportedMovementReconciliationStatus;
       file: {
         financialAccountId: string | null;
       };
@@ -416,6 +589,35 @@ export class StatementImportsService {
     if (!movement.file.financialAccountId) {
       throw new BadRequestException(
         'Movimento pronto precisa ter conta financeira do extrato.',
+      );
+    }
+
+    if (
+      movement.reconciliationStatus ===
+      ImportedMovementReconciliationStatus.CONFIRMED_DUPLICATE
+    ) {
+      throw new BadRequestException(
+        'Movimento confirmado como duplicidade nao pode ser marcado como pronto.',
+      );
+    }
+
+    const reconciliationMatches = await this.findLedgerReconciliationMatches(
+      userId,
+      {
+        financialAccountId: movement.file.financialAccountId,
+        date: movement.date,
+        direction: movement.direction,
+        amountCents: movement.amountCents,
+      },
+    );
+
+    if (
+      reconciliationMatches.length > 0 &&
+      movement.reconciliationStatus !==
+        ImportedMovementReconciliationStatus.CONFIRMED_UNIQUE
+    ) {
+      throw new BadRequestException(
+        'Existe possivel match no ledger. Confirme a conciliacao antes de marcar como pronto.',
       );
     }
 
@@ -517,6 +719,7 @@ export class StatementImportsService {
           amountCents: number;
           rawDescription: string;
           normalizedDescription: string;
+          reconciliationStatus: ImportedMovementReconciliationStatus;
         }>;
       }>;
     },
@@ -803,6 +1006,13 @@ export class StatementImportsService {
 
           if (reconciliationMatches.length > 0) {
             flags.push('POSSIBLE_LEDGER_MATCH');
+
+            if (
+              movement.reconciliationStatus ===
+              ImportedMovementReconciliationStatus.PENDING
+            ) {
+              flags.push('RECONCILIATION_REQUIRED');
+            }
           }
 
           if (normalizedDescription?.includes('PIX')) {
@@ -1050,7 +1260,7 @@ export class StatementImportsService {
       where: { userId },
       select: STATEMENT_IMPORT_BATCH_SUMMARY_SELECT,
       orderBy: { createdAt: 'desc' },
-      take: 10,
+      take: 100,
     });
   }
 
@@ -1068,6 +1278,49 @@ export class StatementImportsService {
     }
 
     return this.attachMovementReviewHints(userId, batch);
+  }
+
+  async removeBatch(userId: string, batchId: string) {
+    const batch = await this.prisma.statementImportBatch.findFirst({
+      where: {
+        id: batchId,
+        userId,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    if (!batch) {
+      throw new NotFoundException('Lote de importacao nao encontrado.');
+    }
+
+    const appliedMovements = await this.prisma.importedMovement.count({
+      where: {
+        userId,
+        status: ImportedMovementStatus.APPLIED,
+        file: {
+          batchId,
+          userId,
+        },
+      },
+    });
+
+    if (appliedMovements > 0) {
+      throw new BadRequestException(
+        'Lote com movimentos aplicados nao pode ser excluido para preservar a rastreabilidade.',
+      );
+    }
+
+    await this.prisma.statementImportBatch.delete({
+      where: {
+        id: batch.id,
+      },
+    });
+
+    return {
+      message: 'Lote de importacao excluido com sucesso.',
+    };
   }
 
   async updateMovement(
@@ -1088,6 +1341,7 @@ export class StatementImportsService {
         reviewTarget: true,
         reviewCategoryId: true,
         reviewTransferAccountId: true,
+        reconciliationStatus: true,
         file: {
           select: {
             financialAccountId: true,
@@ -1117,6 +1371,8 @@ export class StatementImportsService {
       dto.reviewTarget,
       dto.reviewCategoryId,
       dto.reviewTransferAccountId,
+      dto.reconciliationStatus,
+      dto.reconciliationNote,
     ].some((value) => value !== undefined);
 
     if (!hasChanges) {
@@ -1125,9 +1381,21 @@ export class StatementImportsService {
       );
     }
 
-    const data: Prisma.ImportedMovementUpdateInput = {
-      status: ImportedMovementStatus.NEEDS_REVIEW,
-    };
+    const hasReviewDataChanges = [
+      dto.date,
+      dto.amountCents,
+      dto.direction,
+      rawType,
+      rawDescription,
+      dto.reviewTarget,
+      dto.reviewCategoryId,
+      dto.reviewTransferAccountId,
+    ].some((value) => value !== undefined);
+    const data: Prisma.ImportedMovementUpdateInput = hasReviewDataChanges
+      ? {
+          status: ImportedMovementStatus.NEEDS_REVIEW,
+        }
+      : {};
     const effectiveDirection = dto.direction ?? movement.direction;
     const effectiveReviewTarget =
       dto.reviewTarget ??
@@ -1250,6 +1518,37 @@ export class StatementImportsService {
       data.normalizedDescription = normalizeText(rawDescription).toUpperCase();
     }
 
+    if (hasReviewDataChanges && dto.reconciliationStatus === undefined) {
+      data.reconciliationStatus = ImportedMovementReconciliationStatus.PENDING;
+      data.reconciliationNote = null;
+      data.reconciliationReviewedAt = null;
+    }
+
+    if (dto.reconciliationStatus !== undefined) {
+      data.reconciliationStatus = dto.reconciliationStatus;
+      data.reconciliationNote =
+        dto.reconciliationNote === undefined
+          ? null
+          : dto.reconciliationNote?.trim() || null;
+      data.reconciliationReviewedAt = new Date();
+
+      if (
+        dto.reconciliationStatus ===
+        ImportedMovementReconciliationStatus.CONFIRMED_DUPLICATE
+      ) {
+        data.status = ImportedMovementStatus.IGNORED;
+      } else if (
+        movement.status === ImportedMovementStatus.IGNORED &&
+        dto.reconciliationStatus ===
+          ImportedMovementReconciliationStatus.CONFIRMED_UNIQUE &&
+        !hasReviewDataChanges
+      ) {
+        data.status = ImportedMovementStatus.NEEDS_REVIEW;
+      }
+    } else if (dto.reconciliationNote !== undefined) {
+      data.reconciliationNote = dto.reconciliationNote?.trim() || null;
+    }
+
     return this.prisma.importedMovement.update({
       where: {
         id: movement.id,
@@ -1277,8 +1576,12 @@ export class StatementImportsService {
         reviewTransferAccount: {
           select: FINANCIAL_ACCOUNT_SELECT,
         },
+        reconciliationStatus: true,
+        reconciliationNote: true,
+        reconciliationReviewedAt: true,
         appliedTransactionId: true,
         appliedTransferId: true,
+        appliedAt: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -1298,6 +1601,7 @@ export class StatementImportsService {
       select: {
         id: true,
         status: true,
+        date: true,
         direction: true,
         amountCents: true,
         rawType: true,
@@ -1305,6 +1609,7 @@ export class StatementImportsService {
         reviewTarget: true,
         reviewCategoryId: true,
         reviewTransferAccountId: true,
+        reconciliationStatus: true,
         file: {
           select: {
             financialAccountId: true,
@@ -1356,8 +1661,12 @@ export class StatementImportsService {
         reviewTransferAccount: {
           select: FINANCIAL_ACCOUNT_SELECT,
         },
+        reconciliationStatus: true,
+        reconciliationNote: true,
+        reconciliationReviewedAt: true,
         appliedTransactionId: true,
         appliedTransferId: true,
+        appliedAt: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -1394,6 +1703,7 @@ export class StatementImportsService {
 
     for (const { file, movement } of readyMovements) {
       await this.assertMovementReady(userId, {
+        date: movement.date,
         amountCents: movement.amountCents,
         direction: movement.direction,
         rawType: movement.rawType,
@@ -1401,6 +1711,7 @@ export class StatementImportsService {
         reviewTarget: movement.reviewTarget,
         reviewCategoryId: movement.reviewCategoryId,
         reviewTransferAccountId: movement.reviewTransferAccountId,
+        reconciliationStatus: movement.reconciliationStatus,
         file: {
           financialAccountId: file.financialAccountId,
         },
@@ -1459,6 +1770,7 @@ export class StatementImportsService {
               status: ImportedMovementStatus.APPLIED,
               appliedTransferId: transfer.id,
               appliedTransactionId: null,
+              appliedAt: new Date(),
             },
           });
 
@@ -1507,6 +1819,7 @@ export class StatementImportsService {
             status: ImportedMovementStatus.APPLIED,
             appliedTransactionId: transaction.id,
             appliedTransferId: null,
+            appliedAt: new Date(),
           },
         });
 

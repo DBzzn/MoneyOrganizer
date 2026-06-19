@@ -60,4 +60,26 @@ describe('CsvStatementParser', () => {
       direction: 'OUT',
     });
   });
+
+  it('parses quoted Brazilian decimal values without changing their scale', () => {
+    const sample = Buffer.from(
+      [
+        'Data,Valor,Identificador,Descricao',
+        '15/01/2026,"200,00",row-1,Pix recebido',
+        '16/01/2026,"-200,00",row-2,Pix enviado',
+      ].join('\n'),
+    );
+
+    const parsed = parser.parse(sample, 'nubank.csv');
+
+    expect(parsed.movements).toHaveLength(2);
+    expect(parsed.movements[0]).toMatchObject({
+      amountCents: 20000,
+      direction: 'IN',
+    });
+    expect(parsed.movements[1]).toMatchObject({
+      amountCents: 20000,
+      direction: 'OUT',
+    });
+  });
 });
