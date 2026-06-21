@@ -30,6 +30,18 @@ export interface FinancialAccount {
   updatedAt: string;
 }
 
+export interface AppliedImportSource {
+  id: string;
+  appliedAt?: string | null;
+  file: {
+    id: string;
+    originalName: string;
+    provider: StatementProvider;
+    sourceType: StatementSourceType;
+    batchId: string;
+  };
+}
+
 export type TransactionType =
   | "CREDIT_CASH"
   | "CREDIT_INSTALLMENT"
@@ -52,6 +64,7 @@ export interface Transaction {
   category: Category;
   financialAccountId: string;
   financialAccount: FinancialAccount;
+  importedMovements?: AppliedImportSource[];
   createdAt: string;
 }
 
@@ -65,6 +78,7 @@ export interface Transfer {
   fromAccount: FinancialAccount;
   toAccountId: string;
   toAccount: FinancialAccount;
+  importedMovements?: AppliedImportSource[];
   createdAt: string;
   updatedAt: string;
 }
@@ -291,6 +305,14 @@ export interface StatementImportBatch {
 
 export interface StatementImportApplyResult {
   appliedCount: number;
+  transactionCount: number;
+  transferCount: number;
+  batchStatus: StatementImportBatchStatus;
+  batch: StatementImportBatch;
+}
+
+export interface StatementImportUndoResult {
+  undoneCount: number;
   transactionCount: number;
   transferCount: number;
   batchStatus: StatementImportBatchStatus;

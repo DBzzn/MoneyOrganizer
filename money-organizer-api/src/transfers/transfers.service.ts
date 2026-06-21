@@ -7,7 +7,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateTransferDto } from './dto/create-transfer.dto';
 import { UpdateTransferDto } from './dto/update-transfer.dto';
 import { QueryTransfersDto } from './dto/query-transfers.dto';
-import { Prisma } from '../../generated/prisma/client';
+import { ImportedMovementStatus, Prisma } from '../../generated/prisma/client';
 
 const FINANCIAL_ACCOUNT_SUMMARY_SELECT = {
   id: true,
@@ -17,6 +17,20 @@ const FINANCIAL_ACCOUNT_SUMMARY_SELECT = {
   icon: true,
   color: true,
   isArchived: true,
+};
+
+const IMPORT_SOURCE_SELECT = {
+  id: true,
+  appliedAt: true,
+  file: {
+    select: {
+      id: true,
+      originalName: true,
+      provider: true,
+      sourceType: true,
+      batchId: true,
+    },
+  },
 };
 
 const TRANSFER_SELECT = {
@@ -34,6 +48,9 @@ const TRANSFER_SELECT = {
   },
   toAccount: {
     select: FINANCIAL_ACCOUNT_SUMMARY_SELECT,
+  },
+  importedMovements: {
+    select: IMPORT_SOURCE_SELECT,
   },
 };
 
@@ -269,6 +286,34 @@ export class TransfersService {
   }
 
   async remove(userId: string, transferId: string) {
+    const transfer = await this.prisma.transfer.findFirst({
+      where: {
+        id: transferId,
+        userId,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    if (!transfer) {
+      throw new NotFoundException('TransferÃªncia nÃ£o encontrada.');
+    }
+
+    const importedMovementCount = await this.prisma.importedMovement.count({
+      where: {
+        userId,
+        status: ImportedMovementStatus.APPLIED,
+        appliedTransferId: transfer.id,
+      },
+    });
+
+    if (importedMovementCount > 0) {
+      throw new BadRequestException(
+        'Transferencia criada por importacao nao pode ser excluida diretamente. Mantenha a rastreabilidade ate existir um fluxo de desfazer para importacoes.',
+      );
+    }
+
     try {
       await this.prisma.transfer.delete({
         where: {

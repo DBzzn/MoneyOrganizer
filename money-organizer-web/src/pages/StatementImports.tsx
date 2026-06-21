@@ -1,11 +1,13 @@
 import {
   useEffect,
+  useCallback,
   useMemo,
   useState,
   type ChangeEvent,
   type FormEvent,
+  type ReactNode,
 } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { toast } from "react-hot-toast";
 import {
   AlertTriangle,
@@ -26,6 +28,7 @@ import {
   RefreshCw,
   Trash2,
   type LucideIcon,
+  Undo2,
   Upload,
   XCircle,
 } from "lucide-react";
@@ -39,6 +42,7 @@ import {
   deleteStatementImportBatch,
   getStatementImportBatch,
   getStatementImportBatches,
+  undoAppliedImportedMovements,
   updateImportedMovement,
   updateImportedMovementStatus,
 } from "../api/statementImports";
@@ -119,6 +123,24 @@ type ApplyReadyMovementDetail = {
   destinationLabel: string;
   direction: StatementMovementDirection;
   amountCents: number;
+  hasInvoicePaymentWarning: boolean;
+};
+
+type UndoAppliedMovementDetail = {
+  id: string;
+  batchId: string;
+  batchLabel: string;
+  fileId: string;
+  fileName: string;
+  sourceAccountName: string;
+  date: string;
+  description: string;
+  reviewTarget: ImportedMovementReviewTarget;
+  entityLabel: string;
+  destinationLabel: string;
+  direction: StatementMovementDirection;
+  amountCents: number;
+  appliedAt?: string | null;
 };
 
 type ReviewTypeOption = {
@@ -128,6 +150,18 @@ type ReviewTypeOption = {
 
 const BATCHES_PER_PAGE = 10;
 const MOVEMENTS_PER_PAGE = 50;
+const INVOICE_PAYMENT_FLAG = "INVOICE_PAYMENT_REQUIRES_DUPLICATE_REVIEW";
+
+const APPLY_CONFIRMATION_COLUMNS = [
+  { key: "date", label: "Data", minWidth: 96, defaultWidth: 112 },
+  { key: "target", label: "Alvo", minWidth: 112, defaultWidth: 128 },
+  { key: "description", label: "Descricao", minWidth: 180, defaultWidth: 280 },
+  { key: "type", label: "Tipo", minWidth: 120, defaultWidth: 144 },
+  { key: "destination", label: "Destino", minWidth: 150, defaultWidth: 176 },
+  { key: "account", label: "Conta", minWidth: 150, defaultWidth: 176 },
+  { key: "file", label: "Arquivo", minWidth: 140, defaultWidth: 160 },
+  { key: "amount", label: "Valor", minWidth: 112, defaultWidth: 128 },
+] as const;
 
 const MOVEMENT_STATUS_FILTERS: Array<{
   value: MovementStatusFilter;
@@ -452,6 +486,10 @@ function getSafePrepareBlockReason(
     return "Pix exige revisao manual de transferencia";
   }
 
+  if (hasInvoicePaymentWarning(movement)) {
+    return "Pagamento de fatura exige revisao manual";
+  }
+
   if (movement.reviewTarget === "TRANSFER") {
     return "Transferencia exige revisao manual";
   }
@@ -544,6 +582,10 @@ function getMovementReconciliationIssue(
   return null;
 }
 
+function hasInvoicePaymentWarning(movement: ImportedMovement): boolean {
+  return movement.reviewHints?.flags.includes(INVOICE_PAYMENT_FLAG) ?? false;
+}
+
 function directionClass(direction: StatementMovementDirection): string {
   return direction === "IN"
     ? "bg-green-100 text-green-700"
@@ -613,9 +655,26 @@ function reviewFlagLabel(flag: string): string {
     POSSIBLE_LEDGER_MATCH: "Possivel match",
     RECONCILIATION_REQUIRED: "Conciliacao pendente",
     PIX_REQUIRES_MANUAL_TRANSFER_REVIEW: "Pix: revisar transferencia",
+    INVOICE_PAYMENT_REQUIRES_DUPLICATE_REVIEW:
+      "Pagamento de fatura: risco de duplicidade",
   };
 
   return labels[flag] ?? flag;
+}
+
+function reviewFlagClass(flag: string): string {
+  if (flag === INVOICE_PAYMENT_FLAG) {
+    return "border-red-200 bg-red-50 text-red-700";
+  }
+
+  if (
+    flag === "POSSIBLE_LEDGER_MATCH" ||
+    flag === "RECONCILIATION_REQUIRED"
+  ) {
+    return "border-amber-200 bg-amber-50 text-amber-800";
+  }
+
+  return "border-blue-200 bg-blue-50 text-blue-700";
 }
 
 function reconciliationStatusLabel(
@@ -634,14 +693,14 @@ function reconciliationStatusClass(
   status: ImportedMovementReconciliationStatus,
 ): string {
   if (status === "CONFIRMED_UNIQUE") {
-    return "bg-green-100 text-green-700";
+    return "border-green-200 bg-green-50 text-green-700";
   }
 
   if (status === "CONFIRMED_DUPLICATE") {
-    return "bg-red-100 text-red-700";
+    return "border-red-200 bg-red-50 text-red-700";
   }
 
-  return "bg-yellow-100 text-yellow-700";
+  return "border-amber-200 bg-amber-50 text-amber-800";
 }
 
 function statusClass(
@@ -683,6 +742,22 @@ function StatusIcon({
   }
 
   return <CheckCircle2 size={14} />;
+}
+
+function DisabledReasonTooltip({
+  reason,
+  className = "inline-flex",
+  children,
+}: {
+  reason: string | null;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <span className={className} title={reason ?? undefined}>
+      {children}
+    </span>
+  );
 }
 
 function getBatchTotals(batch: StatementImportBatch | null) {
@@ -777,6 +852,44 @@ function getApplyReadySummary(batch: StatementImportBatch | null): ApplyReadySum
   return summary;
 }
 
+function getAppliedMovementSummary(
+  batch: StatementImportBatch | null,
+): ApplyReadySummary {
+  const appliedMovements =
+    batch?.files.flatMap((file) =>
+      file.movements.filter((movement) => movement.status === "APPLIED"),
+    ) ?? [];
+
+  const summary = appliedMovements.reduce(
+    (totals, movement) => {
+      if (movement.appliedTransferId || movement.reviewTarget === "TRANSFER") {
+        totals.transferCount += 1;
+      } else {
+        totals.transactionCount += 1;
+      }
+
+      if (movement.direction === "IN") {
+        totals.inCents += movement.amountCents;
+      } else {
+        totals.outCents += movement.amountCents;
+      }
+
+      return totals;
+    },
+    {
+      totalCount: appliedMovements.length,
+      transactionCount: 0,
+      transferCount: 0,
+      inCents: 0,
+      outCents: 0,
+      netCents: 0,
+    },
+  );
+
+  summary.netCents = summary.inCents - summary.outCents;
+  return summary;
+}
+
 function getReviewBlockSummary(
   categories: Category[],
   batch: StatementImportBatch | null,
@@ -859,9 +972,81 @@ function getApplyReadyMovementDetails(
                   : "Categoria pendente"),
           direction: movement.direction,
           amountCents: movement.amountCents,
+          hasInvoicePaymentWarning: hasInvoicePaymentWarning(movement),
         })),
     )
     .sort((left, right) => left.date.localeCompare(right.date));
+}
+
+function getUndoAppliedMovementDetails(
+  batch: StatementImportBatch | null,
+): UndoAppliedMovementDetail[] {
+  if (!batch) {
+    return [];
+  }
+
+  return batch.files
+    .flatMap((file) =>
+      file.movements
+        .filter((movement) => movement.status === "APPLIED")
+        .map((movement) => ({
+          id: movement.id,
+          batchId: batch.id,
+          batchLabel: `Lote #${batch.id.slice(0, 8)}`,
+          fileId: file.id,
+          fileName: file.originalName,
+          sourceAccountName: file.financialAccount?.name ?? "Conta do extrato",
+          date: movement.date,
+          description: movement.rawDescription || "-",
+          reviewTarget: movement.reviewTarget,
+          entityLabel: movement.appliedTransferId
+            ? "Transferencia"
+            : "Transacao",
+          destinationLabel:
+            movement.reviewTarget === "TRANSFER"
+              ? (movement.reviewTransferAccount?.name ?? "Outra conta")
+              : (movement.reviewCategory
+                  ? formatCategoryLabel(movement.reviewCategory)
+                  : "Categoria"),
+          direction: movement.direction,
+          amountCents: movement.amountCents,
+          appliedAt: movement.appliedAt,
+        })),
+    )
+    .sort((left, right) => left.date.localeCompare(right.date));
+}
+
+function getUndoAppliedSummary(
+  movements: UndoAppliedMovementDetail[],
+): ApplyReadySummary {
+  const summary = movements.reduce(
+    (totals, movement) => {
+      if (movement.entityLabel === "Transferencia") {
+        totals.transferCount += 1;
+      } else {
+        totals.transactionCount += 1;
+      }
+
+      if (movement.direction === "IN") {
+        totals.inCents += movement.amountCents;
+      } else {
+        totals.outCents += movement.amountCents;
+      }
+
+      return totals;
+    },
+    {
+      totalCount: movements.length,
+      transactionCount: 0,
+      transferCount: 0,
+      inCents: 0,
+      outCents: 0,
+      netCents: 0,
+    },
+  );
+
+  summary.netCents = summary.inCents - summary.outCents;
+  return summary;
 }
 
 function getSummaryMovementCount(summary: StatementImportBatchSummary): number {
@@ -944,6 +1129,7 @@ function getAppliedMovementLink(movement: ImportedMovement) {
 }
 
 export function StatementImports() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [accounts, setAccounts] = useState<FinancialAccount[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState("");
@@ -968,16 +1154,22 @@ export function StatementImports() {
     null,
   );
   const [isApplyConfirmOpen, setIsApplyConfirmOpen] = useState(false);
+  const [isUndoConfirmOpen, setIsUndoConfirmOpen] = useState(false);
   const [batchToDeleteId, setBatchToDeleteId] = useState<string | null>(null);
   const [isSavingMovement, setIsSavingMovement] = useState(false);
   const [isDeletingBatch, setIsDeletingBatch] = useState(false);
   const [isPreparingSafe, setIsPreparingSafe] = useState(false);
   const [isIgnoringDuplicates, setIsIgnoringDuplicates] = useState(false);
   const [isApplyingReady, setIsApplyingReady] = useState(false);
+  const [isUndoingApplied, setIsUndoingApplied] = useState(false);
+  const [selectedUndoMovementIds, setSelectedUndoMovementIds] = useState<
+    string[]
+  >([]);
   const [isLoadingAccounts, setIsLoadingAccounts] = useState(true);
   const [isLoadingBatches, setIsLoadingBatches] = useState(true);
   const [isLoadingBatch, setIsLoadingBatch] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const requestedBatchId = searchParams.get("batch") ?? "";
 
   const activeAccounts = useMemo(
     () => accounts.filter((account) => !account.isArchived),
@@ -1000,6 +1192,10 @@ export function StatementImports() {
     () => getApplyReadySummary(currentBatch),
     [currentBatch],
   );
+  const undoAppliedSummary = useMemo(
+    () => getAppliedMovementSummary(currentBatch),
+    [currentBatch],
+  );
   const currentBatchHasAppliedMovements = useMemo(
     () => hasAppliedMovements(currentBatch),
     [currentBatch],
@@ -1016,6 +1212,21 @@ export function StatementImports() {
     () => getApplyReadyMovementDetails(currentBatch),
     [currentBatch],
   );
+  const undoAppliedMovementDetails = useMemo(
+    () => getUndoAppliedMovementDetails(currentBatch),
+    [currentBatch],
+  );
+  const selectedUndoMovements = useMemo(() => {
+    const selectedIds = new Set(selectedUndoMovementIds);
+
+    return undoAppliedMovementDetails.filter((movement) =>
+      selectedIds.has(movement.id),
+    );
+  }, [selectedUndoMovementIds, undoAppliedMovementDetails]);
+  const selectedUndoSummary = useMemo(
+    () => getUndoAppliedSummary(selectedUndoMovements),
+    [selectedUndoMovements],
+  );
   const totalBatchPages = Math.max(
     1,
     Math.ceil(batchSummaries.length / BATCHES_PER_PAGE),
@@ -1026,6 +1237,9 @@ export function StatementImports() {
 
     return batchSummaries.slice(start, start + BATCHES_PER_PAGE);
   }, [effectiveBatchPage, batchSummaries]);
+  const currentBatchStillListed =
+    !currentBatch ||
+    batchSummaries.some((summary) => summary.id === currentBatch.id);
   const batchRangeStart =
     batchSummaries.length === 0
       ? 0
@@ -1052,6 +1266,15 @@ export function StatementImports() {
       (movement) =>
         hasLedgerReconciliationMatch(movement) &&
         movement.reconciliationStatus === "PENDING",
+    ).length;
+  }, [currentBatch]);
+  const readyInvoicePaymentWarningCount = useMemo(() => {
+    const movements =
+      currentBatch?.files.flatMap((file) => file.movements) ?? [];
+
+    return movements.filter(
+      (movement) =>
+        movement.status === "READY" && hasInvoicePaymentWarning(movement),
     ).length;
   }, [currentBatch]);
   const safeReadyCandidates = useMemo<SafeReadyCandidate[]>(() => {
@@ -1092,6 +1315,52 @@ export function StatementImports() {
     movementStatusCounts.READY > 0 &&
     readyReconciliationBlockCount === 0 &&
     !isPreparingSafe;
+  const uploadDisabledReason = isUploading
+    ? "Aguarde o lote atual terminar de salvar."
+    : null;
+  const refreshDisabledReason = isLoadingBatches
+    ? "Aguarde a atualizacao dos lotes terminar."
+    : null;
+  const ignoreDuplicatesDisabledReason = isIgnoringDuplicates
+    ? "Ignorando duplicados deste lote."
+    : isPreparingSafe
+      ? "Aguarde o preparo dos movimentos seguros terminar."
+      : isApplyingReady
+        ? "Aguarde a aplicacao dos movimentos prontos terminar."
+        : isUndoingApplied
+          ? "Aguarde o desfazer dos movimentos aplicados terminar."
+          : duplicateMovementCandidates.length === 0
+            ? "Nenhum duplicado pendente neste lote."
+            : null;
+  const prepareSafeDisabledReason = isPreparingSafe
+    ? "Preparando movimentos seguros deste lote."
+    : isApplyingReady
+      ? "Aguarde a aplicacao dos movimentos prontos terminar."
+      : isUndoingApplied
+        ? "Aguarde o desfazer dos movimentos aplicados terminar."
+        : safeReadyCandidates.length === 0
+          ? "Nenhum movimento seguro disponivel para preparo automatico."
+          : null;
+  const applyReadyDisabledReason = isApplyingReady
+    ? "Aplicando movimentos prontos deste lote."
+    : isPreparingSafe
+      ? "Aguarde o preparo dos movimentos seguros terminar."
+      : isUndoingApplied
+        ? "Aguarde o desfazer dos movimentos aplicados terminar."
+        : movementStatusCounts.READY === 0
+          ? "Nenhum movimento pronto para aplicar."
+          : readyReconciliationBlockCount > 0
+            ? "Resolva a conciliacao dos movimentos prontos antes de aplicar."
+            : null;
+  const undoAppliedDisabledReason = isUndoingApplied
+    ? "Desfazendo movimentos aplicados deste lote."
+    : isApplyingReady
+      ? "Aguarde a aplicacao dos movimentos prontos terminar."
+      : isPreparingSafe
+        ? "Aguarde o preparo dos movimentos seguros terminar."
+        : undoAppliedSummary.totalCount === 0
+          ? "Nenhum movimento aplicado neste lote para desfazer."
+          : null;
   useEffect(() => {
     let isActive = true;
 
@@ -1146,7 +1415,7 @@ export function StatementImports() {
     };
   }, []);
 
-  const loadBatch = async (batchId: string) => {
+  const loadBatch = useCallback(async (batchId: string) => {
     if (!batchId) {
       setSelectedBatchId("");
       setCurrentBatch(null);
@@ -1163,7 +1432,60 @@ export function StatementImports() {
     } finally {
       setIsLoadingBatch(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    if (!requestedBatchId || isLoadingBatches) {
+      return;
+    }
+
+    if (selectedBatchId === requestedBatchId) {
+      return;
+    }
+
+    if (!batchSummaries.some((summary) => summary.id === requestedBatchId)) {
+      return;
+    }
+
+    void loadBatch(requestedBatchId);
+  }, [
+    batchSummaries,
+    isLoadingBatches,
+    loadBatch,
+    requestedBatchId,
+    selectedBatchId,
+  ]);
+
+  useEffect(() => {
+    if (isLoadingBatches || currentBatchStillListed) {
+      return;
+    }
+
+    setSelectedBatchId("");
+    setCurrentBatch(null);
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("batch");
+    setSearchParams(nextParams, { replace: true });
+  }, [
+    currentBatchStillListed,
+    isLoadingBatches,
+    searchParams,
+    setSearchParams,
+  ]);
+
+  useEffect(() => {
+    if (!isUndoConfirmOpen) {
+      return;
+    }
+
+    const availableIds = new Set(
+      undoAppliedMovementDetails.map((movement) => movement.id),
+    );
+
+    setSelectedUndoMovementIds((current) =>
+      current.filter((movementId) => availableIds.has(movementId)),
+    );
+  }, [isUndoConfirmOpen, undoAppliedMovementDetails]);
 
   const refreshBatches = async (preferredBatchId?: string | null) => {
     try {
@@ -1198,13 +1520,21 @@ export function StatementImports() {
     }
 
     const deletedBatchId = batchToDeleteId;
-    const shouldClearExpandedBatch = selectedBatchId === deletedBatchId;
+    const shouldClearExpandedBatch =
+      selectedBatchId === deletedBatchId || currentBatch?.id === deletedBatchId;
 
     try {
       setIsDeletingBatch(true);
       await deleteStatementImportBatch(deletedBatchId);
       setBatchToDeleteId(null);
       toast.success("Lote excluido com sucesso.");
+      if (shouldClearExpandedBatch) {
+        setSelectedBatchId("");
+        setCurrentBatch(null);
+        const nextParams = new URLSearchParams(searchParams);
+        nextParams.delete("batch");
+        setSearchParams(nextParams, { replace: true });
+      }
       await refreshBatches(shouldClearExpandedBatch ? null : selectedBatchId);
     } catch (error) {
       toast.error(apiErrorMessage(error, "Erro ao excluir lote."));
@@ -1217,9 +1547,15 @@ export function StatementImports() {
     if (selectedBatchId === batchId) {
       setSelectedBatchId("");
       setCurrentBatch(null);
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.delete("batch");
+      setSearchParams(nextParams, { replace: true });
       return;
     }
 
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set("batch", batchId);
+    setSearchParams(nextParams, { replace: true });
     await loadBatch(batchId);
   };
 
@@ -1553,6 +1889,72 @@ export function StatementImports() {
     }
   };
 
+  const openUndoAppliedDialog = () => {
+    setSelectedUndoMovementIds(
+      undoAppliedMovementDetails.map((movement) => movement.id),
+    );
+    setIsUndoConfirmOpen(true);
+  };
+
+  const handleUndoSelectionChange = (
+    movementId: string,
+    shouldSelect: boolean,
+  ) => {
+    setSelectedUndoMovementIds((current) => {
+      if (shouldSelect) {
+        return current.includes(movementId)
+          ? current
+          : [...current, movementId];
+      }
+
+      return current.filter((currentId) => currentId !== movementId);
+    });
+  };
+
+  const handleUndoSelectMany = (movementIds: string[], shouldSelect: boolean) => {
+    setSelectedUndoMovementIds((current) => {
+      const next = new Set(current);
+
+      movementIds.forEach((movementId) => {
+        if (shouldSelect) {
+          next.add(movementId);
+        } else {
+          next.delete(movementId);
+        }
+      });
+
+      return [...next];
+    });
+  };
+
+  const handleUndoAppliedMovements = async () => {
+    if (!currentBatch || selectedUndoMovementIds.length === 0) {
+      toast.error("Selecione alguma coisa para desfazer.");
+      return;
+    }
+
+    try {
+      setIsUndoingApplied(true);
+      setIsUndoConfirmOpen(false);
+      const response = await undoAppliedImportedMovements(
+        currentBatch.id,
+        selectedUndoMovementIds,
+      );
+      setCurrentBatch(response.data.batch);
+      setSelectedUndoMovementIds([]);
+      await refreshBatches(response.data.batch.id);
+      toast.success(
+        `${response.data.undoneCount} movimento(s) desfeito(s): ${response.data.transactionCount} transacao(oes), ${response.data.transferCount} transferencia(s).`,
+      );
+    } catch (error) {
+      toast.error(
+        apiErrorMessage(error, "Erro ao desfazer movimentos aplicados."),
+      );
+    } finally {
+      setIsUndoingApplied(false);
+    }
+  };
+
   const handlePrepareSafeMovements = async () => {
     if (!currentBatch || safeReadyCandidates.length === 0) {
       return;
@@ -1723,14 +2125,23 @@ export function StatementImports() {
             </div>
 
             <div className="flex items-end">
-              <button
-                type="submit"
-                disabled={isUploading}
-                className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-400 lg:w-auto"
+              <DisabledReasonTooltip
+                reason={uploadDisabledReason}
+                className="inline-flex w-full lg:w-auto"
               >
-                {isUploading ? <FileSearch size={16} /> : <Upload size={16} />}
-                {isUploading ? "Salvando..." : "Criar lote"}
-              </button>
+                <button
+                  type="submit"
+                  disabled={isUploading}
+                  className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-400 lg:w-auto"
+                >
+                  {isUploading ? (
+                    <FileSearch size={16} />
+                  ) : (
+                    <Upload size={16} />
+                  )}
+                  {isUploading ? "Salvando..." : "Criar lote"}
+                </button>
+              </DisabledReasonTooltip>
             </div>
           </div>
         </form>
@@ -1758,22 +2169,27 @@ export function StatementImports() {
                 {batchRangeEnd} visivel(is)
               </p>
             </div>
-            <button
-              type="button"
-              title="Atualizar lotes"
-              onClick={() => void refreshBatches()}
-              disabled={isLoadingBatches}
-              className="flex h-11 w-full items-center justify-center rounded-lg border px-4 transition disabled:cursor-not-allowed disabled:opacity-60 lg:w-11"
-              style={{
-                borderColor: "var(--color-border)",
-                color: "var(--color-text)",
-              }}
+            <DisabledReasonTooltip
+              reason={refreshDisabledReason}
+              className="inline-flex w-full lg:w-auto"
             >
-              <RefreshCw
-                size={17}
-                className={isLoadingBatches ? "animate-spin" : ""}
-              />
-            </button>
+              <button
+                type="button"
+                title={refreshDisabledReason ?? "Atualizar lotes"}
+                onClick={() => void refreshBatches()}
+                disabled={isLoadingBatches}
+                className="flex h-11 w-full items-center justify-center rounded-lg border px-4 transition disabled:cursor-not-allowed disabled:opacity-60 lg:w-11"
+                style={{
+                  borderColor: "var(--color-border)",
+                  color: "var(--color-text)",
+                }}
+              >
+                <RefreshCw
+                  size={17}
+                  className={isLoadingBatches ? "animate-spin" : ""}
+                />
+              </button>
+            </DisabledReasonTooltip>
           </div>
 
           {batchSummaries.length === 0 && !isLoadingBatches && (
@@ -1797,6 +2213,17 @@ export function StatementImports() {
                   isExpanded && currentBatchHasAppliedMovements;
                 const isDeletingThisBatch =
                   isDeletingBatch && batchToDeleteId === summary.id;
+                const deleteDisabledReason = deleteBlockedByAppliedMovements
+                  ? "Desfaca os movimentos aplicados antes de excluir o lote."
+                  : isDeletingBatch
+                    ? "Aguarde a exclusao do lote terminar."
+                    : isUploading
+                      ? "Aguarde o envio do lote terminar."
+                      : isApplyingReady
+                        ? "Aguarde a aplicacao dos movimentos prontos terminar."
+                        : isUndoingApplied
+                          ? "Aguarde o desfazer dos movimentos aplicados terminar."
+                          : null;
 
                 return (
                   <div
@@ -1860,34 +2287,36 @@ export function StatementImports() {
                         </span>
                       </button>
 
-                      <button
-                        type="button"
-                        title={
-                          deleteBlockedByAppliedMovements
-                            ? "Lote aplicado preserva rastreabilidade"
-                            : "Excluir lote"
-                        }
-                        onClick={() => setBatchToDeleteId(summary.id)}
-                        disabled={
-                          deleteBlockedByAppliedMovements ||
-                          isDeletingBatch ||
-                          isUploading ||
-                          isApplyingReady
-                        }
-                        className="flex h-10 w-full items-center justify-center rounded-lg border px-3 transition disabled:cursor-not-allowed disabled:opacity-60 sm:w-10"
-                        style={{
-                          borderColor: "var(--color-border)",
-                          color: deleteBlockedByAppliedMovements
-                            ? "var(--color-text-muted)"
-                            : "#dc2626",
-                        }}
+                      <DisabledReasonTooltip
+                        reason={deleteDisabledReason}
+                        className="inline-flex w-full sm:w-auto"
                       >
-                        {isDeletingThisBatch ? (
-                          <RefreshCw size={16} className="animate-spin" />
-                        ) : (
-                          <Trash2 size={16} />
-                        )}
-                      </button>
+                        <button
+                          type="button"
+                          title={deleteDisabledReason ?? "Excluir lote"}
+                          onClick={() => setBatchToDeleteId(summary.id)}
+                          disabled={
+                            deleteBlockedByAppliedMovements ||
+                            isDeletingBatch ||
+                            isUploading ||
+                            isApplyingReady ||
+                            isUndoingApplied
+                          }
+                          className="flex h-10 w-full items-center justify-center rounded-lg border px-3 transition disabled:cursor-not-allowed disabled:opacity-60 sm:w-10"
+                          style={{
+                            borderColor: "var(--color-border)",
+                            color: deleteBlockedByAppliedMovements
+                              ? "var(--color-text-muted)"
+                              : "#dc2626",
+                          }}
+                        >
+                          {isDeletingThisBatch ? (
+                            <RefreshCw size={16} className="animate-spin" />
+                          ) : (
+                            <Trash2 size={16} />
+                          )}
+                        </button>
+                      </DisabledReasonTooltip>
                     </div>
 
                     {isExpanded && isLoadingBatch && (
@@ -2039,6 +2468,9 @@ export function StatementImports() {
                   {duplicateMovementCandidates.length > 0
                     ? ` ${duplicateMovementCandidates.length} duplicado(s) podem ser ignorados.`
                     : ""}
+                  {undoAppliedSummary.totalCount > 0
+                    ? ` ${undoAppliedSummary.totalCount} aplicado(s) podem ser desfeitos.`
+                    : ""}
                 </p>
                 {applyReadySummary.totalCount > 0 && (
                   <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3 xl:grid-cols-5">
@@ -2062,6 +2494,40 @@ export function StatementImports() {
                       label="Liquido"
                       value={centsToCurrency(applyReadySummary.netCents)}
                     />
+                  </div>
+                )}
+                {readyInvoicePaymentWarningCount > 0 && (
+                  <div className="mt-4 overflow-hidden rounded-xl border border-red-200 bg-red-50 shadow-sm">
+                    <div className="grid grid-cols-[4px_1fr]">
+                      <div className="bg-red-500" aria-hidden="true" />
+                      <div className="p-3">
+                        <div className="flex items-start gap-3">
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-red-100 text-red-700">
+                            <AlertTriangle size={18} />
+                          </div>
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="text-sm font-semibold text-red-900">
+                                Risco de duplicidade: pagamento de fatura
+                              </p>
+                              <span className="rounded-full bg-red-600 px-2 py-0.5 text-[11px] font-semibold text-white">
+                                {readyInvoicePaymentWarningCount} pronta(s)
+                              </span>
+                            </div>
+                            <p className="mt-1 text-xs leading-5 text-red-800">
+                              Ha movimento(s) de pagamento de fatura marcados
+                              como prontos. Se as compras ja foram importadas
+                              como transacoes individuais, aplicar tambem o
+                              total da fatura pode duplicar a despesa.
+                            </p>
+                            <p className="mt-2 text-xs font-medium text-red-900">
+                              Revise manualmente e ignore quando for apenas a
+                              quitacao de uma fatura ja detalhada.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 )}
                 {(reviewBlockSummary.length > 0 ||
@@ -2114,14 +2580,17 @@ export function StatementImports() {
                         >
                           Pendencias de revisao
                         </p>
-                        <div className="mt-2 flex flex-wrap gap-1.5">
+                        <div className="mt-2 grid grid-cols-1 gap-1.5 min-[920px]:grid-cols-2 min-[1440px]:grid-cols-3">
                           {reviewBlockSummary.map((item) => (
                             <span
                               key={item.reason}
-                              className="rounded-full bg-yellow-100 px-2.5 py-1 text-xs font-medium text-yellow-700"
+                              className="min-w-0 rounded-lg bg-yellow-100 px-2.5 py-1.5 text-xs font-medium text-yellow-800"
                               title={item.reason}
                             >
-                              {item.count} - {item.reason}
+                              <span className="font-semibold">
+                                {item.count}
+                              </span>{" "}
+                              <span>{item.reason}</span>
                             </span>
                           ))}
                         </div>
@@ -2131,54 +2600,88 @@ export function StatementImports() {
                 )}
               </div>
               <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
-                <button
-                  type="button"
-                  onClick={() => void handleIgnoreDuplicateMovements()}
-                  disabled={
-                    isIgnoringDuplicates ||
-                    isPreparingSafe ||
-                    isApplyingReady ||
-                    duplicateMovementCandidates.length === 0
-                  }
-                  className="flex h-10 items-center justify-center gap-2 rounded-lg bg-yellow-600 px-4 text-sm font-medium text-white transition hover:bg-yellow-700 disabled:cursor-not-allowed disabled:bg-yellow-400 sm:w-auto"
+                <DisabledReasonTooltip
+                  reason={ignoreDuplicatesDisabledReason}
+                  className="inline-flex w-full sm:w-auto"
                 >
-                  {isIgnoringDuplicates ? (
-                    <RefreshCw size={16} className="animate-spin" />
-                  ) : (
-                    <XCircle size={16} />
-                  )}
-                  {isIgnoringDuplicates ? "Ignorando..." : "Ignorar duplicados"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void handlePrepareSafeMovements()}
-                  disabled={
-                    isPreparingSafe ||
-                    isApplyingReady ||
-                    safeReadyCandidates.length === 0
-                  }
-                  className="flex h-10 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-400 sm:w-auto"
+                  <button
+                    type="button"
+                    title={ignoreDuplicatesDisabledReason ?? "Ignorar duplicados"}
+                    onClick={() => void handleIgnoreDuplicateMovements()}
+                    disabled={Boolean(ignoreDuplicatesDisabledReason)}
+                    className="flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-4 text-sm font-semibold text-amber-900 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:border-amber-100 disabled:bg-amber-50 disabled:text-amber-400 sm:w-auto"
+                  >
+                    {isIgnoringDuplicates ? (
+                      <RefreshCw size={16} className="animate-spin" />
+                    ) : (
+                      <XCircle size={16} />
+                    )}
+                    {isIgnoringDuplicates
+                      ? "Ignorando..."
+                      : "Ignorar duplicados"}
+                  </button>
+                </DisabledReasonTooltip>
+                <DisabledReasonTooltip
+                  reason={prepareSafeDisabledReason}
+                  className="inline-flex w-full sm:w-auto"
                 >
-                  {isPreparingSafe ? (
-                    <RefreshCw size={16} className="animate-spin" />
-                  ) : (
-                    <CheckCircle2 size={16} />
-                  )}
-                  {isPreparingSafe ? "Preparando..." : "Preparar seguros"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setIsApplyConfirmOpen(true)}
-                  disabled={isApplyingReady || !canApplyReadyMovements}
-                  className="flex h-10 items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 text-sm font-medium text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-emerald-400 sm:w-auto"
+                  <button
+                    type="button"
+                    title={prepareSafeDisabledReason ?? "Preparar seguros"}
+                    onClick={() => void handlePrepareSafeMovements()}
+                    disabled={Boolean(prepareSafeDisabledReason)}
+                    className="flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-400 sm:w-auto"
+                  >
+                    {isPreparingSafe ? (
+                      <RefreshCw size={16} className="animate-spin" />
+                    ) : (
+                      <CheckCircle2 size={16} />
+                    )}
+                    {isPreparingSafe ? "Preparando..." : "Preparar seguros"}
+                  </button>
+                </DisabledReasonTooltip>
+                <DisabledReasonTooltip
+                  reason={applyReadyDisabledReason}
+                  className="inline-flex w-full sm:w-auto"
                 >
-                  {isApplyingReady ? (
-                    <RefreshCw size={16} className="animate-spin" />
-                  ) : (
-                    <CheckCircle2 size={16} />
-                  )}
-                  {isApplyingReady ? "Aplicando..." : "Aplicar prontos"}
-                </button>
+                  <button
+                    type="button"
+                    title={applyReadyDisabledReason ?? "Aplicar prontos"}
+                    onClick={() => setIsApplyConfirmOpen(true)}
+                    disabled={
+                      isApplyingReady ||
+                      !canApplyReadyMovements ||
+                      Boolean(applyReadyDisabledReason)
+                    }
+                    className="flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 text-sm font-medium text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-emerald-400 sm:w-auto"
+                  >
+                    {isApplyingReady ? (
+                      <RefreshCw size={16} className="animate-spin" />
+                    ) : (
+                      <CheckCircle2 size={16} />
+                    )}
+                    {isApplyingReady ? "Aplicando..." : "Aplicar prontos"}
+                  </button>
+                </DisabledReasonTooltip>
+                <DisabledReasonTooltip
+                  reason={undoAppliedDisabledReason}
+                  className="inline-flex w-full sm:w-auto"
+                >
+                  <button
+                    type="button"
+                    title={undoAppliedDisabledReason ?? "Desfazer aplicados"}
+                    onClick={openUndoAppliedDialog}
+                    disabled={Boolean(undoAppliedDisabledReason)}
+                    className="flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-4 text-sm font-semibold text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:border-rose-100 disabled:bg-rose-50 disabled:text-rose-300 sm:w-auto"
+                  >
+                    {isUndoingApplied ? (
+                      <RefreshCw size={16} className="animate-spin" />
+                    ) : (
+                      <Undo2 size={16} />
+                    )}
+                    {isUndoingApplied ? "Desfazendo..." : "Desfazer aplicados"}
+                  </button>
+                </DisabledReasonTooltip>
               </div>
             </div>
 
@@ -2266,10 +2769,11 @@ export function StatementImports() {
         />
         <ConfirmModal
           isOpen={isApplyConfirmOpen}
-          message={`Aplicar ${applyReadySummary.totalCount} movimento(s) pronto(s)? Isso deve criar ${applyReadySummary.transactionCount} transacao(oes) e ${applyReadySummary.transferCount} transferencia(s), com ${centsToCurrency(applyReadySummary.inCents)} em entradas e ${centsToCurrency(applyReadySummary.outCents)} em saidas. Para desfazer neste corte, abra a entidade criada pelo link de auditoria e edite ou remova por la; o movimento importado permanece aplicado como rastro de origem.`}
-          title="Confirmar aplicacao"
+          message="Revise o impacto antes de criar entidades financeiras reais."
+          title="Aplicar movimentos prontos"
           confirmLabel="Aplicar prontos"
           maxWidthClassName="max-w-5xl"
+          confirmButtonClassName="bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400"
           onConfirm={() => void handleApplyReadyMovements()}
           onCancel={() => {
             if (!isApplyingReady) {
@@ -2277,7 +2781,36 @@ export function StatementImports() {
             }
           }}
         >
-          <ApplyReadyConfirmationGrid movements={applyReadyMovementDetails} />
+          <ApplyReadyConfirmationContent
+            summary={applyReadySummary}
+            movements={applyReadyMovementDetails}
+          />
+        </ConfirmModal>
+        <ConfirmModal
+          isOpen={isUndoConfirmOpen}
+          message="Escolha exatamente quais aplicacoes deste lote devem ser desfeitas."
+          title="Desfazer aplicados"
+          confirmLabel="Desfazer aplicados"
+          maxWidthClassName="max-w-5xl"
+          confirmButtonClassName="bg-rose-600 hover:bg-rose-700 disabled:bg-rose-400"
+          confirmDisabled={selectedUndoMovementIds.length === 0}
+          confirmDisabledReason="selecione alguma coisa"
+          onConfirm={() => void handleUndoAppliedMovements()}
+          onCancel={() => {
+            if (!isUndoingApplied) {
+              setIsUndoConfirmOpen(false);
+              setSelectedUndoMovementIds([]);
+            }
+          }}
+        >
+          <UndoAppliedConfirmationContent
+            allSummary={undoAppliedSummary}
+            selectedSummary={selectedUndoSummary}
+            movements={undoAppliedMovementDetails}
+            selectedMovementIds={selectedUndoMovementIds}
+            onSelectionChange={handleUndoSelectionChange}
+            onSelectMany={handleUndoSelectMany}
+          />
         </ConfirmModal>
       </div>
     </Layout>
@@ -2611,7 +3144,7 @@ function MovementReviewHints({ movement }: { movement: ImportedMovement }) {
       {hints.reconciliationMatches.slice(0, 1).map((match) => (
         <span
           key={`${match.sourceType}-${match.sourceId}`}
-          className="rounded-full bg-yellow-100 px-2 py-1 text-xs font-medium text-yellow-700"
+          className="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800"
           title={`${reviewSourceLabel(match.sourceType)}: ${match.label}`}
         >
           {reviewSourceLabel(match.sourceType)}
@@ -2620,7 +3153,7 @@ function MovementReviewHints({ movement }: { movement: ImportedMovement }) {
 
       {hints.reconciliationMatches.length > 0 && (
         <span
-          className={`rounded-full px-2 py-1 text-xs font-medium ${reconciliationStatusClass(movement.reconciliationStatus)}`}
+          className={`rounded-full border px-2 py-1 text-xs font-medium ${reconciliationStatusClass(movement.reconciliationStatus)}`}
           title={movement.reconciliationNote || undefined}
         >
           {reconciliationStatusLabel(movement.reconciliationStatus)}
@@ -2629,7 +3162,7 @@ function MovementReviewHints({ movement }: { movement: ImportedMovement }) {
 
       {hints.categorySuggestion && (
         <span
-          className="rounded-full bg-blue-100 px-2 py-1 text-xs font-medium text-blue-700"
+          className="rounded-full border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700"
           title={`${hints.categorySuggestion.basedOnCount} ocorrencia(s) por descricao`}
         >
           {formatStoredIconPrefix(hints.categorySuggestion.categoryIcon)}
@@ -2647,7 +3180,7 @@ function MovementReviewHints({ movement }: { movement: ImportedMovement }) {
         .map((flag) => (
           <span
             key={flag}
-            className="rounded-full bg-purple-100 px-2 py-1 text-xs font-medium text-purple-700"
+            className={`rounded-full border px-2 py-1 text-xs font-medium ${reviewFlagClass(flag)}`}
           >
             {reviewFlagLabel(flag)}
           </span>
@@ -3096,27 +3629,547 @@ function PaginationControls({
   );
 }
 
+function UndoAppliedConfirmationContent({
+  allSummary,
+  selectedSummary,
+  movements,
+  selectedMovementIds,
+  onSelectionChange,
+  onSelectMany,
+}: {
+  allSummary: ApplyReadySummary;
+  selectedSummary: ApplyReadySummary;
+  movements: UndoAppliedMovementDetail[];
+  selectedMovementIds: string[];
+  onSelectionChange: (movementId: string, shouldSelect: boolean) => void;
+  onSelectMany: (movementIds: string[], shouldSelect: boolean) => void;
+}) {
+  const selectedIds = new Set(selectedMovementIds);
+  const allMovementIds = movements.map((movement) => movement.id);
+  const allSelected =
+    movements.length > 0 &&
+    movements.every((movement) => selectedIds.has(movement.id));
+  const batchGroups = movements.reduce<
+    Array<{
+      batchId: string;
+      batchLabel: string;
+      movements: UndoAppliedMovementDetail[];
+    }>
+  >((groups, movement) => {
+    const group = groups.find((item) => item.batchId === movement.batchId);
+
+    if (group) {
+      group.movements.push(movement);
+    } else {
+      groups.push({
+        batchId: movement.batchId,
+        batchLabel: movement.batchLabel,
+        movements: [movement],
+      });
+    }
+
+    return groups;
+  }, []);
+
+  return (
+    <div className="space-y-5">
+      <div
+        className="grid gap-3 rounded-xl border p-4 sm:grid-cols-2 lg:grid-cols-5"
+        style={{
+          borderColor: "var(--color-border)",
+          backgroundColor: "var(--color-bg)",
+        }}
+      >
+        <ApplySummaryMetric
+          label="Selecionados"
+          value={`${selectedSummary.totalCount} de ${allSummary.totalCount}`}
+        />
+        <ApplySummaryMetric
+          label="Transacoes"
+          value={`${selectedSummary.transactionCount}`}
+        />
+        <ApplySummaryMetric
+          label="Transferencias"
+          value={`${selectedSummary.transferCount}`}
+        />
+        <ApplySummaryMetric
+          label="Entradas / saidas"
+          value={`${centsToCurrency(selectedSummary.inCents)} / ${centsToCurrency(selectedSummary.outCents)}`}
+        />
+        <div className="min-w-0">
+          <p
+            className="text-[11px]"
+            style={{ color: "var(--color-text-muted)" }}
+          >
+            Saldo liquido
+          </p>
+          <p className="truncate text-sm font-semibold text-rose-700">
+            {centsToCurrency(selectedSummary.netCents)}
+          </p>
+        </div>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
+        <div
+          className="overflow-hidden rounded-xl border"
+          style={{
+            borderColor: "var(--color-border)",
+            backgroundColor: "var(--color-bg)",
+          }}
+        >
+          <div
+            className="flex flex-col gap-3 border-b p-4 sm:flex-row sm:items-center sm:justify-between"
+            style={{ borderColor: "var(--color-border)" }}
+          >
+            <label className="flex min-w-0 items-center gap-3">
+              <input
+                type="checkbox"
+                checked={allSelected}
+                onChange={(event) =>
+                  onSelectMany(allMovementIds, event.target.checked)
+                }
+                className="h-4 w-4 rounded border-gray-300 text-rose-600 focus:ring-rose-500"
+              />
+              <span className="min-w-0">
+                <span
+                  className="block text-sm font-semibold"
+                  style={{ color: "var(--color-text)" }}
+                >
+                  Todas as aplicacoes do lote aberto
+                </span>
+                <span
+                  className="block text-xs"
+                  style={{ color: "var(--color-text-muted)" }}
+                >
+                  Use os grupos abaixo para desfazer apenas parte do lote.
+                </span>
+              </span>
+            </label>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => onSelectMany(allMovementIds, true)}
+                className="rounded-lg border px-3 py-2 text-xs font-semibold transition hover:bg-rose-50"
+                style={{
+                  borderColor: "var(--color-border)",
+                  color: "var(--color-text)",
+                }}
+              >
+                Selecionar tudo
+              </button>
+              <button
+                type="button"
+                onClick={() => onSelectMany(allMovementIds, false)}
+                className="rounded-lg border px-3 py-2 text-xs font-semibold transition hover:bg-rose-50"
+                style={{
+                  borderColor: "var(--color-border)",
+                  color: "var(--color-text)",
+                }}
+              >
+                Limpar selecao
+              </button>
+            </div>
+          </div>
+
+          <div className="max-h-[28rem] overflow-y-auto p-3">
+            {batchGroups.map((batchGroup) => {
+              const batchMovementIds = batchGroup.movements.map(
+                (movement) => movement.id,
+              );
+              const batchSelectedCount = batchMovementIds.filter((movementId) =>
+                selectedIds.has(movementId),
+              ).length;
+              const batchChecked =
+                batchMovementIds.length > 0 &&
+                batchSelectedCount === batchMovementIds.length;
+
+              return (
+                <div key={batchGroup.batchId} className="space-y-3">
+                  <div className="rounded-xl border border-rose-100 bg-rose-50/70 p-3">
+                    <label className="flex items-start gap-3">
+                      <input
+                        type="checkbox"
+                        checked={batchChecked}
+                        onChange={(event) =>
+                          onSelectMany(batchMovementIds, event.target.checked)
+                        }
+                        className="mt-0.5 h-4 w-4 rounded border-gray-300 text-rose-600 focus:ring-rose-500"
+                      />
+                      <span className="min-w-0">
+                        <span className="block text-sm font-semibold text-rose-900">
+                          {batchGroup.batchLabel}
+                        </span>
+                        <span className="block text-xs text-rose-800">
+                          {batchSelectedCount} de {batchMovementIds.length}{" "}
+                          selecionada(s)
+                        </span>
+                      </span>
+                    </label>
+                  </div>
+
+                  {Object.values(
+                    batchGroup.movements.reduce<
+                      Record<
+                        string,
+                        {
+                          fileId: string;
+                          fileName: string;
+                          movements: UndoAppliedMovementDetail[];
+                        }
+                      >
+                    >((files, movement) => {
+                      files[movement.fileId] ??= {
+                        fileId: movement.fileId,
+                        fileName: movement.fileName,
+                        movements: [],
+                      };
+                      files[movement.fileId].movements.push(movement);
+                      return files;
+                    }, {}),
+                  ).map((fileGroup) => {
+                    const fileMovementIds = fileGroup.movements.map(
+                      (movement) => movement.id,
+                    );
+                    const fileSelectedCount = fileMovementIds.filter(
+                      (movementId) => selectedIds.has(movementId),
+                    ).length;
+                    const fileChecked =
+                      fileMovementIds.length > 0 &&
+                      fileSelectedCount === fileMovementIds.length;
+
+                    return (
+                      <div
+                        key={fileGroup.fileId}
+                        className="rounded-xl border p-3"
+                        style={{
+                          borderColor: "var(--color-border)",
+                          backgroundColor: "var(--color-bg-card)",
+                        }}
+                      >
+                        <label className="flex items-start gap-3">
+                          <input
+                            type="checkbox"
+                            checked={fileChecked}
+                            onChange={(event) =>
+                              onSelectMany(
+                                fileMovementIds,
+                                event.target.checked,
+                              )
+                            }
+                            className="mt-0.5 h-4 w-4 rounded border-gray-300 text-rose-600 focus:ring-rose-500"
+                          />
+                          <span className="min-w-0">
+                            <span
+                              className="block truncate text-sm font-semibold"
+                              style={{ color: "var(--color-text)" }}
+                            >
+                              {fileGroup.fileName}
+                            </span>
+                            <span
+                              className="block text-xs"
+                              style={{ color: "var(--color-text-muted)" }}
+                            >
+                              {fileSelectedCount} de {fileMovementIds.length}{" "}
+                              alteracao(oes)
+                            </span>
+                          </span>
+                        </label>
+
+                        <div className="mt-3 divide-y divide-gray-100">
+                          {fileGroup.movements.map((movement) => {
+                            const isSelected = selectedIds.has(movement.id);
+
+                            return (
+                              <label
+                                key={movement.id}
+                                className={`grid cursor-pointer grid-cols-[auto_1fr] gap-3 px-1 py-3 transition first:pt-0 last:pb-0 ${
+                                  isSelected ? "bg-rose-50/50" : ""
+                                }`}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={(event) =>
+                                    onSelectionChange(
+                                      movement.id,
+                                      event.target.checked,
+                                    )
+                                  }
+                                  className="mt-1 h-4 w-4 rounded border-gray-300 text-rose-600 focus:ring-rose-500"
+                                />
+                                <span className="min-w-0">
+                                  <span className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                    <span className="min-w-0">
+                                      <span
+                                        className="block truncate text-sm font-semibold"
+                                        style={{ color: "var(--color-text)" }}
+                                      >
+                                        {movement.description}
+                                      </span>
+                                      <span
+                                        className="mt-1 block text-xs"
+                                        style={{
+                                          color: "var(--color-text-muted)",
+                                        }}
+                                      >
+                                        {formatDate(movement.date)} -{" "}
+                                        {movement.entityLabel} -{" "}
+                                        {movement.destinationLabel}
+                                      </span>
+                                      <span
+                                        className="mt-1 block text-xs"
+                                        style={{
+                                          color: "var(--color-text-muted)",
+                                        }}
+                                      >
+                                        {movement.sourceAccountName}
+                                        {movement.appliedAt
+                                          ? ` - aplicado em ${formatDate(movement.appliedAt)}`
+                                          : ""}
+                                      </span>
+                                    </span>
+                                    <span
+                                      className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${directionClass(movement.direction)}`}
+                                    >
+                                      {centsToCurrency(movement.amountCents)}
+                                    </span>
+                                  </span>
+                                </span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          <div className="overflow-hidden rounded-xl border border-rose-200 bg-rose-50 shadow-sm">
+            <div className="grid grid-cols-[4px_1fr]">
+              <div className="bg-rose-500" aria-hidden="true" />
+              <div className="p-4">
+                <div className="flex gap-3">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-rose-100 text-rose-700">
+                    <Undo2 size={18} />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-rose-900">
+                      O desfazer remove lancamentos financeiros reais.
+                    </p>
+                    <p className="mt-1 text-sm leading-5 text-rose-800">
+                      Apenas as aplicacoes selecionadas serao excluidas. Os
+                      movimentos voltam para Pronto e continuam revisaveis no
+                      lote.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {selectedSummary.totalCount === 0 && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800">
+              Selecione alguma coisa para liberar o botao de desfazer.
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ApplyReadyConfirmationContent({
+  summary,
+  movements,
+}: {
+  summary: ApplyReadySummary;
+  movements: ApplyReadyMovementDetail[];
+}) {
+  const netTone =
+    summary.netCents > 0
+      ? "text-green-700"
+      : summary.netCents < 0
+        ? "text-red-700"
+        : "text-blue-700";
+  const invoiceWarningCount = movements.filter(
+    (movement) => movement.hasInvoicePaymentWarning,
+  ).length;
+
+  return (
+    <div className="mb-5 space-y-4">
+      <div
+        className="grid gap-3 rounded-xl border p-4 sm:grid-cols-2 lg:grid-cols-5"
+        style={{
+          borderColor: "var(--color-border)",
+          backgroundColor: "var(--color-bg)",
+        }}
+      >
+        <ApplySummaryMetric
+          label="Movimentos"
+          value={`${summary.totalCount}`}
+        />
+        <ApplySummaryMetric
+          label="Transacoes"
+          value={`${summary.transactionCount}`}
+        />
+        <ApplySummaryMetric
+          label="Transferencias"
+          value={`${summary.transferCount}`}
+        />
+        <ApplySummaryMetric
+          label="Entradas / saidas"
+          value={`${centsToCurrency(summary.inCents)} / ${centsToCurrency(summary.outCents)}`}
+        />
+        <div className="min-w-0">
+          <p
+            className="text-[11px]"
+            style={{ color: "var(--color-text-muted)" }}
+          >
+            Saldo liquido
+          </p>
+          <p className={`truncate text-sm font-semibold ${netTone}`}>
+            {centsToCurrency(summary.netCents)}
+          </p>
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+        <div className="flex gap-3">
+          <AlertTriangle className="mt-0.5 shrink-0 text-amber-600" size={18} />
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-amber-800">
+              Esta acao cria registros financeiros reais.
+            </p>
+            <p className="mt-1 text-sm leading-5 text-amber-700">
+              O lote permanece como origem auditavel. A exclusao direta de
+              entidades criadas por importacao fica bloqueada; use Desfazer
+              aplicados no proprio lote quando precisar reverter.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {invoiceWarningCount > 0 && (
+        <div className="overflow-hidden rounded-xl border border-red-200 bg-red-50 shadow-sm">
+          <div className="grid grid-cols-[4px_1fr]">
+            <div className="bg-red-500" aria-hidden="true" />
+            <div className="p-4">
+              <div className="flex gap-3">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-red-100 text-red-700">
+                  <AlertTriangle size={18} />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-sm font-semibold text-red-900">
+                      Confirme pagamentos de fatura antes de aplicar
+                    </p>
+                    <span className="rounded-full bg-red-600 px-2 py-0.5 text-[11px] font-semibold text-white">
+                      {invoiceWarningCount} no lote
+                    </span>
+                  </div>
+                  <p className="mt-1 text-sm leading-5 text-red-800">
+                    Esses itens podem duplicar despesas se as compras da fatura
+                    ja estiverem registradas individualmente.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <ApplyReadyConfirmationGrid movements={movements} />
+    </div>
+  );
+}
+
 function ApplyReadyConfirmationGrid({
   movements,
 }: {
   movements: ApplyReadyMovementDetail[];
 }) {
+  const [columnWidths, setColumnWidths] = useState<number[]>(() =>
+    APPLY_CONFIRMATION_COLUMNS.map((column) => column.defaultWidth),
+  );
+
   if (movements.length === 0) {
     return null;
   }
 
+  const gridTemplateColumns = columnWidths
+    .map((width) => `${width}px`)
+    .join(" ");
+
+  const handleColumnResizeStart = (columnIndex: number, startClientX: number) => {
+    const startWidth = columnWidths[columnIndex];
+    const minWidth = APPLY_CONFIRMATION_COLUMNS[columnIndex].minWidth;
+
+    const handlePointerMove = (event: PointerEvent) => {
+      const nextWidth = Math.max(
+        minWidth,
+        startWidth + event.clientX - startClientX,
+      );
+
+      setColumnWidths((current) =>
+        current.map((width, index) =>
+          index === columnIndex ? nextWidth : width,
+        ),
+      );
+    };
+
+    const handlePointerUp = () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+    };
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+  };
+
   return (
     <div
-      className="mb-5 overflow-hidden rounded-xl border"
-      style={{ borderColor: "var(--color-border)" }}
+      className="overflow-hidden rounded-xl border"
+      style={{
+        borderColor: "var(--color-border)",
+        backgroundColor: "var(--color-bg)",
+      }}
     >
+      <div
+        className="flex flex-col gap-1 border-b px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+        style={{ borderColor: "var(--color-border)" }}
+      >
+        <div>
+          <p
+            className="text-sm font-semibold"
+            style={{ color: "var(--color-text)" }}
+          >
+            Movimentos que serao aplicados
+          </p>
+          <p className="text-xs" style={{ color: "var(--color-text-muted)" }}>
+            Confira conta, destino, arquivo de origem e valor.
+          </p>
+        </div>
+        <span className="inline-flex w-fit items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
+          <CheckCircle2 size={13} />
+          {movements.length} pronto(s)
+        </span>
+      </div>
+
       <div className="max-h-[24rem] overflow-y-auto">
         <div className="space-y-3 p-3 md:hidden">
           {movements.map((movement) => (
             <div
               key={movement.id}
               className="rounded-lg border p-3"
-              style={{ borderColor: "var(--color-border)" }}
+              style={{
+                borderColor: "var(--color-border)",
+                backgroundColor: "var(--color-bg-card)",
+              }}
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
@@ -3130,8 +4183,16 @@ function ApplyReadyConfirmationGrid({
                     className="mt-1 text-xs"
                     style={{ color: "var(--color-text-muted)" }}
                   >
-                    {formatDate(movement.date)} - {movement.typeLabel}
+                    {formatDate(movement.date)} -{" "}
+                    {movement.reviewTarget === "TRANSFER"
+                      ? "Transferencia"
+                      : "Transacao"}
                   </p>
+                  {movement.hasInvoicePaymentWarning && (
+                    <span className="mt-2 inline-flex rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-red-700">
+                      Risco de duplicidade
+                    </span>
+                  )}
                 </div>
                 <span
                   className={`shrink-0 rounded-full px-2 py-1 text-xs font-medium ${directionClass(movement.direction)}`}
@@ -3140,64 +4201,106 @@ function ApplyReadyConfirmationGrid({
                 </span>
               </div>
               <div
-                className="mt-3 grid grid-cols-1 gap-2 text-xs"
+                className="mt-3 grid grid-cols-1 gap-2 text-xs sm:grid-cols-2"
                 style={{ color: "var(--color-text-muted)" }}
               >
-                <span>{movement.sourceAccountName}</span>
-                <span>{movement.destinationLabel}</span>
-                <span>{movement.sourceFileName}</span>
+                <span className="truncate">
+                  <strong>Conta:</strong> {movement.sourceAccountName}
+                </span>
+                <span className="truncate">
+                  <strong>Destino:</strong> {movement.destinationLabel}
+                </span>
+                <span className="truncate sm:col-span-2">
+                  <strong>Arquivo:</strong> {movement.sourceFileName}
+                </span>
               </div>
             </div>
           ))}
         </div>
 
-        <div className="hidden min-w-[980px] md:block">
+        <div className="hidden min-w-full md:block">
           <div
-            className="sticky top-0 grid grid-cols-[7rem_8rem_1fr_9rem_11rem_10rem_8rem] gap-3 border-b px-3 py-2 text-xs font-semibold"
+            className="sticky top-0 grid w-max min-w-full select-none border-b text-xs font-semibold"
             style={{
+              gridTemplateColumns,
               backgroundColor: "var(--color-bg-modal)",
               borderColor: "var(--color-border)",
               color: "var(--color-text-muted)",
             }}
           >
-            <span>Data</span>
-            <span>Alvo</span>
-            <span>Descricao</span>
-            <span>Tipo</span>
-            <span>Destino</span>
-            <span>Arquivo</span>
-            <span className="text-right">Valor</span>
+            {APPLY_CONFIRMATION_COLUMNS.map((column, index) => (
+              <div
+                key={column.key}
+                className={`relative flex min-w-0 items-center px-4 py-2 ${
+                  column.key === "amount" ? "justify-end" : ""
+                }`}
+              >
+                <span className="truncate">{column.label}</span>
+                {index < APPLY_CONFIRMATION_COLUMNS.length - 1 && (
+                  <button
+                    type="button"
+                    aria-label={`Redimensionar coluna ${column.label}`}
+                    title="Arraste para redimensionar"
+                    onPointerDown={(event) => {
+                      event.preventDefault();
+                      handleColumnResizeStart(index, event.clientX);
+                    }}
+                    className="absolute right-0 top-0 h-full w-2 cursor-col-resize touch-none border-r border-transparent transition hover:border-blue-400 hover:bg-blue-100/60"
+                  />
+                )}
+              </div>
+            ))}
           </div>
           {movements.map((movement) => (
             <div
               key={movement.id}
-              className="grid grid-cols-[7rem_8rem_1fr_9rem_11rem_10rem_8rem] gap-3 border-b px-3 py-2 text-sm last:border-b-0"
+              className={`grid w-max min-w-full border-b text-sm last:border-b-0 ${
+                movement.hasInvoicePaymentWarning ? "bg-red-50/60" : ""
+              }`}
               style={{
+                gridTemplateColumns,
                 borderColor: "var(--color-border)",
                 color: "var(--color-text)",
               }}
             >
-              <span className="whitespace-nowrap">
+              <span className="whitespace-nowrap px-4 py-3">
                 {formatDate(movement.date)}
               </span>
-              <span>
+              <span className="px-4 py-3">
                 {movement.reviewTarget === "TRANSFER"
                   ? "Transferencia"
                   : "Transacao"}
               </span>
-              <span className="truncate" title={movement.description}>
+              <span className="truncate px-4 py-3" title={movement.description}>
                 {movement.description}
+                {movement.hasInvoicePaymentWarning && (
+                  <span className="ml-2 rounded-full border border-red-200 bg-red-50 px-1.5 py-0.5 text-[10px] font-semibold text-red-700">
+                    Duplicidade
+                  </span>
+                )}
               </span>
-              <span className="truncate" title={movement.typeLabel}>
+              <span className="truncate px-4 py-3" title={movement.typeLabel}>
                 {movement.typeLabel}
               </span>
-              <span className="truncate" title={movement.destinationLabel}>
+              <span
+                className="truncate px-4 py-3"
+                title={movement.destinationLabel}
+              >
                 {movement.destinationLabel}
               </span>
-              <span className="truncate" title={movement.sourceFileName}>
+              <span
+                className="truncate px-4 py-3"
+                title={movement.sourceAccountName}
+              >
+                {movement.sourceAccountName}
+              </span>
+              <span
+                className="truncate px-4 py-3"
+                title={movement.sourceFileName}
+              >
                 {movement.sourceFileName}
               </span>
-              <span className="text-right font-semibold">
+              <span className="px-4 py-3 text-right font-semibold">
                 {centsToCurrency(movement.amountCents)}
               </span>
             </div>
@@ -3264,66 +4367,104 @@ function MovementStatusActions({
         <Link
           to={appliedLink.href}
           title={appliedTitle}
-          className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-green-200 bg-green-50 px-2.5 text-xs font-medium text-green-700 transition hover:bg-green-100"
+          className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-green-200 bg-green-50 px-3 text-xs font-medium text-green-700 transition hover:bg-green-100"
         >
-          <FileSearch size={14} />
+          <FileSearch size={15} />
           {appliedLink.label}
         </Link>
       );
     }
 
     return (
-      <span className="inline-flex h-8 items-center rounded-lg px-2.5 text-xs font-medium text-gray-500">
+      <span className="inline-flex h-9 items-center rounded-lg px-3 text-xs font-medium text-gray-500">
         {movementStatusLabel(movement.status)}
       </span>
     );
   }
 
+  const editDisabledReason = isUpdating
+    ? "Aguarde a atualizacao do movimento terminar."
+    : null;
+
   return (
-    <div className="flex flex-wrap gap-1.5">
-      <button
-        type="button"
-        title="Editar movimento"
-        aria-label="Editar movimento"
-        onClick={() => onEditMovement(movement)}
-        disabled={isUpdating}
-        className="flex h-8 w-8 items-center justify-center rounded-lg border border-blue-200 bg-blue-50 text-blue-700 transition hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
-      >
-        <Pencil size={14} />
-      </button>
+    <div className="flex flex-wrap gap-2">
+      <DisabledReasonTooltip reason={editDisabledReason}>
+        <button
+          type="button"
+          title={editDisabledReason ?? "Editar movimento"}
+          aria-label="Editar movimento"
+          onClick={() => onEditMovement(movement)}
+          disabled={isUpdating}
+          className="flex h-9 w-9 items-center justify-center rounded-lg border border-blue-200 bg-blue-50 text-blue-700 transition hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          <Pencil size={16} />
+        </button>
+      </DisabledReasonTooltip>
 
       {hasLedgerReconciliationMatch(movement) && (
         <>
-          <button
-            type="button"
-            title="Confirmar que nao duplica o ledger"
-            aria-label="Confirmar que nao duplica o ledger"
-            onClick={() =>
-              onReconciliationChange(movement.id, "CONFIRMED_UNIQUE")
+          <DisabledReasonTooltip
+            reason={
+              isUpdating
+                ? "Aguarde a atualizacao do movimento terminar."
+                : movement.reconciliationStatus === "CONFIRMED_UNIQUE"
+                  ? "Movimento ja foi confirmado como novo."
+                  : null
             }
-            disabled={
-              isUpdating ||
-              movement.reconciliationStatus === "CONFIRMED_UNIQUE"
-            }
-            className="flex h-8 w-8 items-center justify-center rounded-lg border border-green-200 bg-green-50 text-green-700 transition hover:bg-green-100 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            <CheckCircle2 size={14} />
-          </button>
-          <button
-            type="button"
-            title="Confirmar duplicidade e ignorar"
-            aria-label="Confirmar duplicidade e ignorar"
-            onClick={() =>
-              onReconciliationChange(movement.id, "CONFIRMED_DUPLICATE")
+            <button
+              type="button"
+              title={
+                isUpdating
+                  ? "Aguarde a atualizacao do movimento terminar."
+                  : movement.reconciliationStatus === "CONFIRMED_UNIQUE"
+                    ? "Movimento ja foi confirmado como novo."
+                    : "Confirmar que nao duplica o ledger"
+              }
+              aria-label="Confirmar que nao duplica o ledger"
+              onClick={() =>
+                onReconciliationChange(movement.id, "CONFIRMED_UNIQUE")
+              }
+              disabled={
+                isUpdating ||
+                movement.reconciliationStatus === "CONFIRMED_UNIQUE"
+              }
+              className="flex h-9 w-9 items-center justify-center rounded-lg border border-green-200 bg-green-50 text-green-700 transition hover:bg-green-100 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <CheckCircle2 size={16} />
+            </button>
+          </DisabledReasonTooltip>
+          <DisabledReasonTooltip
+            reason={
+              isUpdating
+                ? "Aguarde a atualizacao do movimento terminar."
+                : movement.reconciliationStatus === "CONFIRMED_DUPLICATE"
+                  ? "Movimento ja foi confirmado como duplicidade."
+                  : null
             }
-            disabled={
-              isUpdating ||
-              movement.reconciliationStatus === "CONFIRMED_DUPLICATE"
-            }
-            className="flex h-8 w-8 items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            <XCircle size={14} />
-          </button>
+            <button
+              type="button"
+              title={
+                isUpdating
+                  ? "Aguarde a atualizacao do movimento terminar."
+                  : movement.reconciliationStatus === "CONFIRMED_DUPLICATE"
+                    ? "Movimento ja foi confirmado como duplicidade."
+                    : "Confirmar duplicidade e ignorar"
+              }
+              aria-label="Confirmar duplicidade e ignorar"
+              onClick={() =>
+                onReconciliationChange(movement.id, "CONFIRMED_DUPLICATE")
+              }
+              disabled={
+                isUpdating ||
+                movement.reconciliationStatus === "CONFIRMED_DUPLICATE"
+              }
+              className="flex h-9 w-9 items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <XCircle size={16} />
+            </button>
+          </DisabledReasonTooltip>
         </>
       )}
 
@@ -3332,23 +4473,31 @@ function MovementStatusActions({
         const isActive = movement.status === action.status;
         const isReadyBlocked =
           action.status === "READY" && Boolean(readinessIssue);
+        const disabledReason = isUpdating
+          ? "Aguarde a atualizacao do movimento terminar."
+          : isActive
+            ? `Movimento ja esta como ${movementStatusLabel(action.status).toLowerCase()}.`
+            : isReadyBlocked
+              ? readinessIssue
+              : null;
 
         return (
-          <button
-            key={action.status}
-            type="button"
-            title={isReadyBlocked ? readinessIssue ?? action.title : action.title}
-            aria-label={action.title}
-            onClick={() => onStatusChange(movement.id, action.status)}
-            disabled={isUpdating || isActive || isReadyBlocked}
-            className={`flex h-8 w-8 items-center justify-center rounded-lg border transition disabled:cursor-not-allowed disabled:opacity-60 ${movementActionClass(action.status, isActive, isReadyBlocked)}`}
-          >
-            {isUpdating ? (
-              <RefreshCw size={14} className="animate-spin" />
-            ) : (
-              <Icon size={14} />
-            )}
-          </button>
+          <DisabledReasonTooltip key={action.status} reason={disabledReason}>
+            <button
+              type="button"
+              title={disabledReason ?? action.title}
+              aria-label={action.title}
+              onClick={() => onStatusChange(movement.id, action.status)}
+              disabled={isUpdating || isActive || isReadyBlocked}
+              className={`flex h-9 w-9 items-center justify-center rounded-lg border transition disabled:cursor-not-allowed disabled:opacity-60 ${movementActionClass(action.status, isActive, isReadyBlocked)}`}
+            >
+              {isUpdating ? (
+                <RefreshCw size={16} className="animate-spin" />
+              ) : (
+                <Icon size={16} />
+              )}
+            </button>
+          </DisabledReasonTooltip>
         );
       })}
     </div>

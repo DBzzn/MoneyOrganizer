@@ -44,10 +44,12 @@ describe('StatementImportsService', () => {
     transaction: {
       create: jest.Mock;
       findMany: jest.Mock;
+      deleteMany: jest.Mock;
     };
     transfer: {
       create: jest.Mock;
       findMany: jest.Mock;
+      deleteMany: jest.Mock;
     };
     balanceAdjustment: {
       findMany: jest.Mock;
@@ -82,10 +84,12 @@ describe('StatementImportsService', () => {
       transaction: {
         create: jest.fn(),
         findMany: jest.fn(),
+        deleteMany: jest.fn(),
       },
       transfer: {
         create: jest.fn(),
         findMany: jest.fn(),
+        deleteMany: jest.fn(),
       },
       balanceAdjustment: {
         findMany: jest.fn(),
@@ -818,6 +822,166 @@ describe('StatementImportsService', () => {
 
     expect(prisma.transaction.create).not.toHaveBeenCalled();
     expect(prisma.transfer.create).not.toHaveBeenCalled();
+  });
+
+  it('undoes applied movements and restores them to ready', async () => {
+    jest.spyOn(service, 'findBatch').mockResolvedValue({
+      id: 'batch-1',
+    } as any);
+    prisma.statementImportBatch.findFirst.mockResolvedValue({
+      id: 'batch-1',
+      files: [
+        {
+          id: 'file-1',
+          movements: [
+            {
+              id: 'movement-1',
+              status: ImportedMovementStatus.APPLIED,
+              appliedTransactionId: 'transaction-1',
+              appliedTransferId: null,
+            },
+            {
+              id: 'movement-2',
+              status: ImportedMovementStatus.APPLIED,
+              appliedTransactionId: null,
+              appliedTransferId: 'transfer-1',
+            },
+          ],
+        },
+      ],
+    });
+    prisma.transaction.deleteMany.mockResolvedValue({ count: 1 });
+    prisma.transfer.deleteMany.mockResolvedValue({ count: 1 });
+    prisma.importedMovement.updateMany.mockResolvedValue({ count: 2 });
+    prisma.importedMovement.findMany.mockResolvedValue([
+      { status: ImportedMovementStatus.READY },
+      { status: ImportedMovementStatus.READY },
+    ]);
+    prisma.statementImportBatch.update.mockResolvedValue({ id: 'batch-1' });
+
+    await expect(
+      service.undoAppliedMovements('user-1', 'batch-1'),
+    ).resolves.toMatchObject({
+      undoneCount: 2,
+      transactionCount: 1,
+      transferCount: 1,
+      batchStatus: 'REVIEWING',
+    });
+
+    expect(prisma.transaction.deleteMany).toHaveBeenCalledWith({
+      where: {
+        id: { in: ['transaction-1'] },
+        userId: 'user-1',
+      },
+    });
+    expect(prisma.transfer.deleteMany).toHaveBeenCalledWith({
+      where: {
+        id: { in: ['transfer-1'] },
+        userId: 'user-1',
+      },
+    });
+    expect(prisma.importedMovement.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: { in: ['movement-1', 'movement-2'] },
+        userId: 'user-1',
+        status: ImportedMovementStatus.APPLIED,
+      },
+      data: {
+        status: ImportedMovementStatus.READY,
+        appliedTransactionId: null,
+        appliedTransferId: null,
+        appliedAt: null,
+      },
+    });
+  });
+
+  it('undoes only selected applied movements from a batch', async () => {
+    jest.spyOn(service, 'findBatch').mockResolvedValue({
+      id: 'batch-1',
+    } as any);
+    prisma.statementImportBatch.findFirst.mockResolvedValue({
+      id: 'batch-1',
+      files: [
+        {
+          id: 'file-1',
+          movements: [
+            {
+              id: 'movement-1',
+              status: ImportedMovementStatus.APPLIED,
+              appliedTransactionId: 'transaction-1',
+              appliedTransferId: null,
+            },
+            {
+              id: 'movement-2',
+              status: ImportedMovementStatus.APPLIED,
+              appliedTransactionId: 'transaction-2',
+              appliedTransferId: null,
+            },
+          ],
+        },
+      ],
+    });
+    prisma.transaction.deleteMany.mockResolvedValue({ count: 1 });
+    prisma.importedMovement.updateMany.mockResolvedValue({ count: 1 });
+    prisma.importedMovement.findMany.mockResolvedValue([
+      { status: ImportedMovementStatus.READY },
+      { status: ImportedMovementStatus.APPLIED },
+    ]);
+    prisma.statementImportBatch.update.mockResolvedValue({ id: 'batch-1' });
+
+    await expect(
+      service.undoAppliedMovements('user-1', 'batch-1', ['movement-1']),
+    ).resolves.toMatchObject({
+      undoneCount: 1,
+      transactionCount: 1,
+      transferCount: 0,
+      batchStatus: 'PARTIALLY_APPLIED',
+    });
+
+    expect(prisma.transaction.deleteMany).toHaveBeenCalledWith({
+      where: {
+        id: { in: ['transaction-1'] },
+        userId: 'user-1',
+      },
+    });
+    expect(prisma.importedMovement.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: { in: ['movement-1'] },
+        userId: 'user-1',
+        status: ImportedMovementStatus.APPLIED,
+      },
+      data: {
+        status: ImportedMovementStatus.READY,
+        appliedTransactionId: null,
+        appliedTransferId: null,
+        appliedAt: null,
+      },
+    });
+  });
+
+  it('does not undo a batch without applied movements', async () => {
+    prisma.statementImportBatch.findFirst.mockResolvedValue({
+      id: 'batch-1',
+      files: [
+        {
+          id: 'file-1',
+          movements: [
+            {
+              id: 'movement-1',
+              status: ImportedMovementStatus.READY,
+            },
+          ],
+        },
+      ],
+    });
+
+    await expect(
+      service.undoAppliedMovements('user-1', 'batch-1'),
+    ).rejects.toThrow(BadRequestException);
+
+    expect(prisma.transaction.deleteMany).not.toHaveBeenCalled();
+    expect(prisma.transfer.deleteMany).not.toHaveBeenCalled();
+    expect(prisma.importedMovement.updateMany).not.toHaveBeenCalled();
   });
 
   it('adds read-only review hints when loading a persisted batch', async () => {

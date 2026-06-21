@@ -16,6 +16,9 @@ interface ConfirmModalProps {
     title?: string
     children?: ReactNode
     maxWidthClassName?: string
+    confirmButtonClassName?: string
+    confirmDisabled?: boolean
+    confirmDisabledReason?: string
 }
 
 export default function ConfirmModal({
@@ -28,6 +31,9 @@ export default function ConfirmModal({
     title = 'Confirmacao',
     children,
     maxWidthClassName = 'max-w-sm',
+    confirmButtonClassName = 'bg-red-500 hover:bg-red-600',
+    confirmDisabled = false,
+    confirmDisabledReason,
 }: ConfirmModalProps) {
     if (!isOpen) return null
 
@@ -37,7 +43,7 @@ export default function ConfirmModal({
             style={{ backgroundColor: 'rgba(0,0,0,0.6)' }}
         >
             <div
-                className={`glass-heavy w-full ${maxWidthClassName} max-h-[88vh] overflow-hidden p-5 shadow-xl sm:p-6`}
+                className={`glass-heavy flex max-h-[88vh] w-full flex-col ${maxWidthClassName} overflow-hidden p-5 shadow-xl sm:p-6`}
                 style={{
                     backgroundColor: 'var(--color-bg-modal)',
                     color: 'var(--color-text)',
@@ -45,20 +51,22 @@ export default function ConfirmModal({
                     borderRadius: '1rem',
                 }}
             >
-                <div className="flex justify-between items-center mb-4">
+                <div className="mb-4 flex shrink-0 items-center justify-between gap-4">
                     <h2 className="text-lg font-semibold">{title}</h2>
                     <button onClick={onCancel}>
                         <X size={20} style={{ color: 'var(--color-text-muted)' }} />
                     </button>
                 </div>
 
-                <p className="mb-4" style={{ color: 'var(--color-text-muted)' }}>
-                    {message}
-                </p>
+                <div className="min-h-0 overflow-y-auto pr-1">
+                    <p className="mb-4" style={{ color: 'var(--color-text-muted)' }}>
+                        {message}
+                    </p>
 
-                {children}
+                    {children}
+                </div>
 
-                <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                <div className="mt-5 flex shrink-0 flex-col-reverse gap-3 sm:flex-row sm:justify-end">
                     <button
                         onClick={onCancel}
                         className="w-full px-4 py-2 rounded-lg text-sm font-medium sm:w-auto"
@@ -81,13 +89,18 @@ export default function ConfirmModal({
                         </button>
                     )}
 
-                    <button
-                        onClick={onConfirm}
-                        className="w-full px-4 py-2 rounded-lg text-sm font-medium text-white sm:w-auto"
-                        style={{ backgroundColor: '#ef4444' }}
+                    <span
+                        className="inline-flex w-full sm:w-auto"
+                        title={confirmDisabled ? confirmDisabledReason : undefined}
                     >
-                        {confirmLabel}
-                    </button>
+                        <button
+                            onClick={onConfirm}
+                            disabled={confirmDisabled}
+                            className={`w-full rounded-lg px-4 py-2 text-sm font-medium text-white transition disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto ${confirmButtonClassName}`}
+                        >
+                            {confirmLabel}
+                        </button>
+                    </span>
                 </div>
             </div>
         </div>

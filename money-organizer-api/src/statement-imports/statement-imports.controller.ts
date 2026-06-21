@@ -25,6 +25,7 @@ import {
 import { Request as ExpressRequest } from 'express';
 import { UpdateImportedMovementDto } from './dto/update-imported-movement.dto';
 import { UpdateImportedMovementStatusDto } from './dto/update-imported-movement-status.dto';
+import { UndoAppliedMovementsDto } from './dto/undo-applied-movements.dto';
 import { StatementImportsService } from './statement-imports.service';
 import { UploadedStatementFile } from './types';
 
@@ -162,6 +163,26 @@ export class StatementImportsController {
     @Param('id') id: string,
   ) {
     return this.statementImportsService.applyReadyMovements(req.user.id, id);
+  }
+
+  @ApiOperation({
+    summary: 'Desfazer movimentos aplicados de um lote de importacao',
+  })
+  @ApiResponse({ status: 201, description: 'Movimentos aplicados desfeitos' })
+  @ApiResponse({ status: 400, description: 'Lote sem movimentos aplicados' })
+  @ApiResponse({ status: 401, description: 'Nao autenticado' })
+  @ApiResponse({ status: 404, description: 'Lote nao encontrado' })
+  @Post('batches/:id/undo-applied')
+  undoAppliedMovements(
+    @Request() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Body() dto?: UndoAppliedMovementsDto,
+  ) {
+    return this.statementImportsService.undoAppliedMovements(
+      req.user.id,
+      id,
+      dto?.movementIds,
+    );
   }
 
   @ApiOperation({ summary: 'Editar dados de movimento importado em revisao' })

@@ -6,6 +6,7 @@ import type {
   StatementImportBatch,
   StatementImportBatchSummary,
   StatementImportPreview,
+  StatementImportUndoResult,
   UpdateImportedMovementPayload,
 } from "../types";
 
@@ -55,6 +56,15 @@ export const deleteStatementImportBatch = (id: string) =>
 export const applyReadyImportedMovements = (batchId: string) =>
   api.post<StatementImportApplyResult>(
     `/statement-imports/batches/${batchId}/apply-ready`,
+  );
+
+export const undoAppliedImportedMovements = (
+  batchId: string,
+  movementIds?: string[],
+) =>
+  api.post<StatementImportUndoResult>(
+    `/statement-imports/batches/${batchId}/undo-applied`,
+    movementIds ? { movementIds } : undefined,
   );
 
 export const updateImportedMovementStatus = (

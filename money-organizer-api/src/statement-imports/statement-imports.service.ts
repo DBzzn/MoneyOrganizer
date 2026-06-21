@@ -251,6 +251,18 @@ function normalizeReviewDescription(value?: string | null) {
     .trim();
 }
 
+function isPotentialInvoicePayment(normalizedDescription?: string) {
+  if (!normalizedDescription?.includes('FATURA')) {
+    return false;
+  }
+
+  return (
+    normalizedDescription.includes('PAGAMENTO') ||
+    normalizedDescription.includes('PAGTO') ||
+    normalizedDescription.includes('PGTO')
+  );
+}
+
 function trimEditableText(value: string | undefined, fieldLabel: string) {
   if (value === undefined) {
     return undefined;
@@ -1017,6 +1029,10 @@ export class StatementImportsService {
 
           if (normalizedDescription?.includes('PIX')) {
             flags.push('PIX_REQUIRES_MANUAL_TRANSFER_REVIEW');
+          }
+
+          if (isPotentialInvoicePayment(normalizedDescription)) {
+            flags.push('INVOICE_PAYMENT_REQUIRES_DUPLICATE_REVIEW');
           }
 
           const reviewHints: ImportedMovementReviewHints = {
@@ -1863,6 +1879,173 @@ export class StatementImportsService {
         appliedCount: transactionCount + transferCount,
         transactionCount,
         transferCount,
+        batchStatus,
+      };
+    });
+
+    return {
+      ...summary,
+      batch: await this.findBatch(userId, batchId),
+    };
+  }
+
+  async undoAppliedMovements(
+    userId: string,
+    batchId: string,
+    selectedMovementIds?: string[],
+  ) {
+    const batch = await this.prisma.statementImportBatch.findFirst({
+      where: {
+        id: batchId,
+        userId,
+      },
+      select: STATEMENT_IMPORT_BATCH_SELECT,
+    });
+
+    if (!batch) {
+      throw new NotFoundException('Lote de importacao nao encontrado.');
+    }
+
+    const requestedMovementIds = selectedMovementIds
+      ? [...new Set(selectedMovementIds)]
+      : undefined;
+
+    if (requestedMovementIds && requestedMovementIds.length === 0) {
+      throw new BadRequestException(
+        'Selecione ao menos um movimento aplicado para desfazer.',
+      );
+    }
+
+    const allAppliedMovements = batch.files.flatMap((file) =>
+      file.movements.filter(
+        (movement) => movement.status === ImportedMovementStatus.APPLIED,
+      ),
+    );
+    const appliedMovements = requestedMovementIds
+      ? allAppliedMovements.filter((movement) =>
+          requestedMovementIds.includes(movement.id),
+        )
+      : allAppliedMovements;
+
+    if (appliedMovements.length === 0) {
+      throw new BadRequestException(
+        'Nenhum movimento aplicado para desfazer neste lote.',
+      );
+    }
+
+    if (
+      requestedMovementIds &&
+      appliedMovements.length !== requestedMovementIds.length
+    ) {
+      throw new BadRequestException(
+        'Alguns movimentos selecionados nao estao aplicados neste lote.',
+      );
+    }
+
+    const movementIds = appliedMovements.map((movement) => movement.id);
+    const transactionIds = [
+      ...new Set(
+        appliedMovements.flatMap((movement) =>
+          movement.appliedTransactionId ? [movement.appliedTransactionId] : [],
+        ),
+      ),
+    ];
+    const transferIds = [
+      ...new Set(
+        appliedMovements.flatMap((movement) =>
+          movement.appliedTransferId ? [movement.appliedTransferId] : [],
+        ),
+      ),
+    ];
+
+    if (transactionIds.length + transferIds.length === 0) {
+      throw new BadRequestException(
+        'Movimentos aplicados nao possuem vinculo rastreavel para desfazer.',
+      );
+    }
+
+    const summary = await this.prisma.$transaction(async (tx) => {
+      if (transactionIds.length > 0) {
+        const deletedTransactions = await tx.transaction.deleteMany({
+          where: {
+            id: { in: transactionIds },
+            userId,
+          },
+        });
+
+        if (deletedTransactions.count !== transactionIds.length) {
+          throw new BadRequestException(
+            'Nao foi possivel desfazer todas as transacoes vinculadas ao lote.',
+          );
+        }
+      }
+
+      if (transferIds.length > 0) {
+        const deletedTransfers = await tx.transfer.deleteMany({
+          where: {
+            id: { in: transferIds },
+            userId,
+          },
+        });
+
+        if (deletedTransfers.count !== transferIds.length) {
+          throw new BadRequestException(
+            'Nao foi possivel desfazer todas as transferencias vinculadas ao lote.',
+          );
+        }
+      }
+
+      const updatedMovements = await tx.importedMovement.updateMany({
+        where: {
+          id: { in: movementIds },
+          userId,
+          status: ImportedMovementStatus.APPLIED,
+        },
+        data: {
+          status: ImportedMovementStatus.READY,
+          appliedTransactionId: null,
+          appliedTransferId: null,
+          appliedAt: null,
+        },
+      });
+
+      if (updatedMovements.count !== movementIds.length) {
+        throw new BadRequestException(
+          'Alguns movimentos aplicados foram alterados antes do desfazer.',
+        );
+      }
+
+      const statuses = await tx.importedMovement.findMany({
+        where: {
+          file: {
+            batchId,
+            userId,
+          },
+        },
+        select: {
+          status: true,
+        },
+      });
+      const batchStatus = nextBatchStatusAfterApply(
+        statuses.map((movement) => movement.status),
+      );
+
+      await tx.statementImportBatch.update({
+        where: {
+          id: batchId,
+        },
+        data: {
+          status: batchStatus,
+        },
+        select: {
+          id: true,
+        },
+      });
+
+      return {
+        undoneCount: movementIds.length,
+        transactionCount: transactionIds.length,
+        transferCount: transferIds.length,
         batchStatus,
       };
     });

@@ -14,6 +14,9 @@ describe('TransactionsService', () => {
       groupBy: jest.Mock;
       updateMany: jest.Mock;
     };
+    importedMovement: {
+      count: jest.Mock;
+    };
     category: {
       findMany: jest.Mock;
       findFirst: jest.Mock;
@@ -33,6 +36,9 @@ describe('TransactionsService', () => {
         create: jest.fn(),
         groupBy: jest.fn(),
         updateMany: jest.fn(),
+      },
+      importedMovement: {
+        count: jest.fn(),
       },
       category: {
         findMany: jest.fn(),
@@ -76,6 +82,7 @@ describe('TransactionsService', () => {
   describe('remove', () => {
     it('deletes only after validating ownership for every id', async () => {
       prisma.transaction.findMany.mockResolvedValue([{ id: 'tx-1' }, { id: 'tx-2' }]);
+      prisma.importedMovement.count.mockResolvedValue(0);
       prisma.transaction.deleteMany.mockResolvedValue({ count: 2 });
 
       await expect(service.remove('user-1', ['tx-1', 'tx-2'])).resolves.toEqual({
@@ -109,6 +116,7 @@ describe('TransactionsService', () => {
 
     it('accepts a single id', async () => {
       prisma.transaction.findMany.mockResolvedValue([{ id: 'tx-1' }]);
+      prisma.importedMovement.count.mockResolvedValue(0);
       prisma.transaction.deleteMany.mockResolvedValue({ count: 1 });
 
       await expect(service.remove('user-1', 'tx-1')).resolves.toEqual({
@@ -128,6 +136,24 @@ describe('TransactionsService', () => {
           userId: 'user-1',
         },
       });
+    });
+
+    it('blocks deleting transactions created by statement import apply', async () => {
+      prisma.transaction.findMany.mockResolvedValue([{ id: 'tx-1' }]);
+      prisma.importedMovement.count.mockResolvedValue(1);
+
+      await expect(service.remove('user-1', 'tx-1')).rejects.toThrow(
+        BadRequestException,
+      );
+
+      expect(prisma.importedMovement.count).toHaveBeenCalledWith({
+        where: {
+          userId: 'user-1',
+          status: 'APPLIED',
+          appliedTransactionId: { in: ['tx-1'] },
+        },
+      });
+      expect(prisma.transaction.deleteMany).not.toHaveBeenCalled();
     });
   });
 

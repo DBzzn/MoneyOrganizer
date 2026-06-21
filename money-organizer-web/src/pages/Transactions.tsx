@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useForm } from 'react-hook-form'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { toast } from 'react-hot-toast'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Layout } from '../components/Layout'
@@ -14,7 +14,7 @@ import {
 } from '../api/transactions'
 import { getCategories } from '../api/categories'
 import { getFinancialAccounts } from '../api/financialAccounts'
-import type { Transaction, Category, TransactionType, FinancialAccount } from '../types'
+import type { AppliedImportSource, Transaction, Category, TransactionType, FinancialAccount } from '../types'
 import {
     transactionSchema,
     installmentSchema,
@@ -24,7 +24,7 @@ import {
     updateTransactionSchema,
 } from '../schemas'
 import { formatCurrency, formatDate, transactionTypeLabel } from '../utils'
-import { Plus, Trash2, X, CreditCard, Pencil, Search, ArrowUpDown } from 'lucide-react'
+import { Plus, Trash2, X, CreditCard, Pencil, Search, ArrowUpDown, FileSearch } from 'lucide-react'
 import ConfirmModal from '../components/ConfirmModal'
 import { formatStoredIconPrefix } from '../components/storedIconRegistry'
 
@@ -88,6 +88,44 @@ function matchesQuickFilter(transaction: Transaction, filter: QuickFilter): bool
 
 function getQuickFilterCount(transactions: Transaction[], filter: QuickFilter): number {
     return transactions.filter((transaction) => matchesQuickFilter(transaction, filter)).length
+}
+
+function apiErrorMessage(error: unknown, fallback: string): string {
+    const responseData = (
+        error as {
+            response?: {
+                data?: {
+                    message?: unknown
+                }
+            }
+        }
+    ).response?.data
+    const message = responseData?.message
+
+    if (Array.isArray(message)) {
+        return message.filter(Boolean).join(' ')
+    }
+
+    return typeof message === 'string' && message.trim() ? message : fallback
+}
+
+function getImportSource(transaction: Transaction): AppliedImportSource | null {
+    return transaction.importedMovements?.[0] ?? null
+}
+
+function ImportSourceBadge({ source }: { source: AppliedImportSource | null }) {
+    if (!source) return null
+
+    return (
+        <Link
+            to={`/statement-imports?batch=${encodeURIComponent(source.file.batchId)}`}
+            title={`Abrir lote de origem: ${source.file.originalName}`}
+            className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700 transition hover:bg-blue-100"
+        >
+            <FileSearch size={12} />
+            Importado
+        </Link>
+    )
 }
 
 function SortHeader({
@@ -384,8 +422,8 @@ export function Transactions() {
                     setTransactions((prev) => prev.filter((tx) => tx.id !== t.id))
                     setConfirmModal((prev) => ({ ...prev, isOpen: false }))
                     toast.success('Transação removida com sucesso!')
-                } catch {
-                    toast.error('Erro ao remover a transação!')
+                } catch (error) {
+                    toast.error(apiErrorMessage(error, 'Erro ao remover a transacao!'))
                 }
             },
             ...(isInstallment && {
@@ -408,8 +446,8 @@ export function Transactions() {
                             )
                             setConfirmModal((prev) => ({ ...prev, isOpen: false }))
                             toast.success('Todas as parcelas removidas com sucesso!')
-                        } catch {
-                            toast.error('Erro ao remover as parcelas!')
+                        } catch (error) {
+                            toast.error(apiErrorMessage(error, 'Erro ao remover as parcelas!'))
                         }
                     },
                 },
@@ -977,6 +1015,7 @@ export function Transactions() {
                                                 Pendente
                                             </span>
                                         )}
+                                        <ImportSourceBadge source={getImportSource(t)} />
                                     </div>
 
                                     <div className="mt-3 flex justify-end gap-2">
@@ -1051,7 +1090,11 @@ export function Transactions() {
                                                                     Pendente
                                                                 </span>
                                                             )}
+                                                            <ImportSourceBadge source={getImportSource(t)} />
                                                         </div>
+                                                    )}
+                                                    {!t.totalInstallments && !t.isPending && (
+                                                        <ImportSourceBadge source={getImportSource(t)} />
                                                     )}
                                                 </div>
                                             </td>

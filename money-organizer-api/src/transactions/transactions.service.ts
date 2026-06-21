@@ -8,7 +8,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
 import { CreateInstallmentsDto } from './dto/create-installments.dto';
 import { UpdateTransactionDto } from './dto/update-transaction.dto';
-import { FinancialAccountType, TransactionType, Prisma } from '../../generated/prisma/client';
+import { FinancialAccountType, ImportedMovementStatus, TransactionType, Prisma } from '../../generated/prisma/client';
 import { randomUUID } from 'crypto';
 import { QueryTransactionsDto } from './dto/query-transactions.dto';
 import { ReportFiltersDto } from './dto/report-filters.dto';
@@ -56,6 +56,20 @@ const FINANCIAL_ACCOUNT_SUMMARY_SELECT = {
     icon: true,
     color: true,
     isArchived: true,
+};
+
+const IMPORT_SOURCE_SELECT = {
+    id: true,
+    appliedAt: true,
+    file: {
+        select: {
+            id: true,
+            originalName: true,
+            provider: true,
+            sourceType: true,
+            batchId: true,
+        },
+    },
 };
 
 interface FinancialAccountFilterInput {
@@ -244,6 +258,9 @@ export class TransactionsService {
                 financialAccount: {
                     select: FINANCIAL_ACCOUNT_SUMMARY_SELECT,
                 },
+                importedMovements: {
+                    select: IMPORT_SOURCE_SELECT,
+                },
             }
         });
 
@@ -323,6 +340,9 @@ export class TransactionsService {
                 },
                 financialAccount: {
                     select: FINANCIAL_ACCOUNT_SUMMARY_SELECT,
+                },
+                importedMovements: {
+                    select: IMPORT_SOURCE_SELECT,
                 },
             },
             orderBy: {
@@ -439,6 +459,9 @@ export class TransactionsService {
                 financialAccount: {
                     select: FINANCIAL_ACCOUNT_SUMMARY_SELECT,
                 },
+                importedMovements: {
+                    select: IMPORT_SOURCE_SELECT,
+                },
                 createdAt: true,
             },
         });
@@ -521,6 +544,9 @@ export class TransactionsService {
                     financialAccount: {
                         select: FINANCIAL_ACCOUNT_SUMMARY_SELECT,
                     },
+                    importedMovements: {
+                        select: IMPORT_SOURCE_SELECT,
+                    },
                 }
             });
 
@@ -554,6 +580,20 @@ export class TransactionsService {
                 throw new NotFoundException(
                     'Uma ou mais transações não foram encontradas ou não pertencem ao usuário.'
                 )
+            }
+
+            const importedMovementCount = await tx.importedMovement.count({
+                where: {
+                    userId,
+                    status: ImportedMovementStatus.APPLIED,
+                    appliedTransactionId: { in: uniqueIds },
+                },
+            });
+
+            if (importedMovementCount > 0) {
+                throw new BadRequestException(
+                    'Transacao criada por importacao nao pode ser excluida diretamente. Mantenha a rastreabilidade ate existir um fluxo de desfazer para importacoes.',
+                );
             }
 
             const deleted = await tx.transaction.deleteMany({

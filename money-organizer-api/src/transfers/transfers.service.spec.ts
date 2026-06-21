@@ -18,6 +18,9 @@ describe('TransfersService', () => {
       updateMany: jest.Mock;
       delete: jest.Mock;
     };
+    importedMovement: {
+      count: jest.Mock;
+    };
   };
 
   beforeEach(async () => {
@@ -32,6 +35,9 @@ describe('TransfersService', () => {
         update: jest.fn(),
         updateMany: jest.fn(),
         delete: jest.fn(),
+      },
+      importedMovement: {
+        count: jest.fn(),
       },
     };
 
@@ -164,5 +170,23 @@ describe('TransfersService', () => {
     ).rejects.toThrow(NotFoundException);
 
     expect(prisma.transfer.update).not.toHaveBeenCalled();
+  });
+
+  it('blocks deleting transfers created by statement import apply', async () => {
+    prisma.transfer.findFirst.mockResolvedValue({ id: 'transfer-1' });
+    prisma.importedMovement.count.mockResolvedValue(1);
+
+    await expect(service.remove('user-1', 'transfer-1')).rejects.toThrow(
+      BadRequestException,
+    );
+
+    expect(prisma.importedMovement.count).toHaveBeenCalledWith({
+      where: {
+        userId: 'user-1',
+        status: 'APPLIED',
+        appliedTransferId: 'transfer-1',
+      },
+    });
+    expect(prisma.transfer.delete).not.toHaveBeenCalled();
   });
 });

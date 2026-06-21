@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { toast } from 'react-hot-toast'
 import {
@@ -8,6 +8,7 @@ import {
     Check,
     ChevronLeft,
     ChevronRight,
+    FileSearch,
     Pencil,
     Plus,
     Trash2,
@@ -24,7 +25,7 @@ import {
     updateTransfer,
 } from '../api/transfers'
 import { transferSchema, type TransferFormData } from '../schemas'
-import type { FinancialAccount, Transfer } from '../types'
+import type { AppliedImportSource, FinancialAccount, Transfer } from '../types'
 import { formatCurrency, formatDate } from '../utils'
 import { formatStoredIconPrefix } from '../components/storedIconRegistry'
 
@@ -90,6 +91,44 @@ function getQuickFilterCount(transfers: Transfer[], filter: QuickFilter): number
 
 function accountLabel(account: FinancialAccount): string {
     return `${formatStoredIconPrefix(account.icon)}${account.name}${account.isArchived ? ' (arquivada)' : ''}`
+}
+
+function apiErrorMessage(error: unknown, fallback: string): string {
+    const responseData = (
+        error as {
+            response?: {
+                data?: {
+                    message?: unknown
+                }
+            }
+        }
+    ).response?.data
+    const message = responseData?.message
+
+    if (Array.isArray(message)) {
+        return message.filter(Boolean).join(' ')
+    }
+
+    return typeof message === 'string' && message.trim() ? message : fallback
+}
+
+function getImportSource(transfer: Transfer): AppliedImportSource | null {
+    return transfer.importedMovements?.[0] ?? null
+}
+
+function ImportSourceBadge({ source }: { source: AppliedImportSource | null }) {
+    if (!source) return null
+
+    return (
+        <Link
+            to={`/statement-imports?batch=${encodeURIComponent(source.file.batchId)}`}
+            title={`Abrir lote de origem: ${source.file.originalName}`}
+            className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700 transition hover:bg-blue-100"
+        >
+            <FileSearch size={12} />
+            Importado
+        </Link>
+    )
 }
 
 export function Transfers() {
@@ -263,8 +302,8 @@ export function Transfers() {
             await deleteTransfer(confirmModal.transferId)
             setTransfers((prev) => prev.filter((transfer) => transfer.id !== confirmModal.transferId))
             toast.success('Transferência removida com sucesso!')
-        } catch {
-            toast.error('Erro ao remover a transferência.')
+        } catch (error) {
+            toast.error(apiErrorMessage(error, 'Erro ao remover a transferencia.'))
         } finally {
             setConfirmModal({ isOpen: false, transferId: null })
         }
@@ -538,6 +577,7 @@ export function Transfers() {
                                         ) : (
                                             <span className="rounded-full bg-green-100 px-2.5 py-1 text-xs font-medium text-green-700">Confirmada</span>
                                         )}
+                                        <ImportSourceBadge source={getImportSource(transfer)} />
 
                                         <div className="flex gap-2">
                                             <button
@@ -585,7 +625,10 @@ export function Transfers() {
                                                 {formatDate(transfer.date)}
                                             </td>
                                             <td className="px-6 py-4 text-sm" style={{ color: 'var(--color-text)' }}>
-                                                {getTransferDescription(transfer)}
+                                                <div className="flex flex-col gap-1.5">
+                                                    <span>{getTransferDescription(transfer)}</span>
+                                                    <ImportSourceBadge source={getImportSource(transfer)} />
+                                                </div>
                                             </td>
                                             <td className="px-6 py-4 text-sm" style={{ color: 'var(--color-text-muted)' }}>
                                                 {accountLabel(transfer.fromAccount)}
