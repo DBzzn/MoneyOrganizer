@@ -24,14 +24,6 @@ export function StoredIcon({
         return <Icon aria-hidden="true" className={className} size={size} style={style} />
     }
 
-    if (value) {
-        return (
-            <span aria-hidden="true" className={className} style={style}>
-                {value}
-            </span>
-        )
-    }
-
     return <FallbackIcon aria-hidden="true" className={className} size={size} style={style} />
 }
 
@@ -47,8 +39,6 @@ export function StoredIconPicker({
     fallback,
 }: StoredIconPickerProps) {
     const [isOpen, setIsOpen] = useState(false)
-    const isLucideValue = !!getStoredIconOption(value)
-    const manualValue = value && !isLucideValue ? value : ''
 
     return (
         <div className="relative space-y-2">
@@ -121,16 +111,6 @@ export function StoredIconPicker({
                     ))}
                 </div>
             )}
-
-            <input
-                type="text"
-                value={manualValue}
-                onChange={(event) => onChange(event.target.value)}
-                placeholder="Icone opcional"
-                maxLength={2}
-                className="app-control w-full text-sm"
-            />
-
         </div>
     )
 }

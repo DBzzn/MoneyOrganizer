@@ -4,6 +4,7 @@ import type { Category } from "../types"
 interface CategoryPayload {
     name?: string
     icon?: string
+    kind?: Category['kind']
     isArchived?: boolean
 }
 

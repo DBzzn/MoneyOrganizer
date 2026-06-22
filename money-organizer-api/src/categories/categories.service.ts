@@ -7,6 +7,7 @@ const CATEGORY_SELECT = {
   id: true,
   name: true,
   icon: true,
+  kind: true,
   isArchived: true,
   createdAt: true,
 };
@@ -43,6 +44,7 @@ export class CategoriesService {
     const data = removeUndefined({
       name: dto.name,
       icon: dto.icon,
+      kind: dto.kind,
       isArchived: dto.isArchived,
     });
 

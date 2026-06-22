@@ -4,6 +4,7 @@ import { ImportedMovementStatus } from '../../../generated/prisma/client';
 
 export const REVIEWABLE_IMPORTED_MOVEMENT_STATUSES = [
   ImportedMovementStatus.NEW,
+  ImportedMovementStatus.NEEDS_REVIEW,
   ImportedMovementStatus.IGNORED,
   ImportedMovementStatus.READY,
 ] as const;

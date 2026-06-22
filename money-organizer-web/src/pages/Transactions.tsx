@@ -73,6 +73,16 @@ function isExpenseTransaction(transaction: Transaction): boolean {
     return EXPENSE_TRANSACTION_TYPES.includes(transaction.type)
 }
 
+function categoryMatchesTransactionType(category: Category, type?: TransactionType): boolean {
+    if (!type) return true
+
+    if (type === 'INCOME') {
+        return category.kind === 'INCOME' || category.kind === 'BOTH'
+    }
+
+    return category.kind === 'EXPENSE' || category.kind === 'BOTH'
+}
+
 function matchesQuickFilter(transaction: Transaction, filter: QuickFilter): boolean {
     switch (filter) {
         case 'all':
@@ -248,6 +258,18 @@ export function Transactions() {
             !category.isArchived || category.id === editingTransaction.categoryId
         )
         : activeCategories
+    const transactionType = transactionForm.watch('type')
+    const updateTransactionType = updateForm.watch('type')
+    const transactionCategories = activeCategories.filter((category) =>
+        categoryMatchesTransactionType(category, transactionType)
+    )
+    const installmentCategories = activeCategories.filter((category) =>
+        categoryMatchesTransactionType(category, 'CREDIT_INSTALLMENT')
+    )
+    const updateCategories = editableCategories.filter((category) =>
+        category.id === editingTransaction?.categoryId ||
+        categoryMatchesTransactionType(category, updateTransactionType)
+    )
 
     const buildTransactionFilters = useCallback(() => {
         const range = monthToRange(currentMonth)
@@ -271,6 +293,32 @@ export function Transactions() {
             type: editingTransaction.type,
         })
     }, [editingTransaction, updateForm])
+
+    useEffect(() => {
+        const categoryId = transactionForm.getValues('categoryId')
+        if (!categoryId) return
+
+        const category = categories.find((item) => item.id === categoryId)
+        if (category && !categoryMatchesTransactionType(category, transactionType)) {
+            transactionForm.setValue('categoryId', '', { shouldDirty: true, shouldValidate: true })
+        }
+    }, [categories, transactionForm, transactionType])
+
+    useEffect(() => {
+        const categoryId = updateForm.getValues('categoryId')
+        if (!categoryId) return
+
+        const category = categories.find((item) => item.id === categoryId)
+        const isUnchangedArchivedCategory =
+            categoryId === editingTransaction?.categoryId &&
+            updateTransactionType === editingTransaction?.type
+
+        if (isUnchangedArchivedCategory) return
+
+        if (category && !categoryMatchesTransactionType(category, updateTransactionType)) {
+            updateForm.setValue('categoryId', '', { shouldDirty: true, shouldValidate: true })
+        }
+    }, [categories, editingTransaction?.categoryId, editingTransaction?.type, updateForm, updateTransactionType])
 
     useEffect(() => {
         const filters = buildTransactionFilters()
@@ -671,7 +719,7 @@ export function Transactions() {
                                     className="app-control w-full"
                                 >
                                     <option value="">Selecione...</option>
-                                    {activeCategories.map((cat) => (
+                                    {transactionCategories.map((cat) => (
                                         <option key={cat.id} value={cat.id}>{formatStoredIconPrefix(cat.icon)}{cat.name}</option>
                                     ))}
                                 </select>
@@ -789,7 +837,7 @@ export function Transactions() {
                                     className="app-control app-control-purple w-full"
                                 >
                                     <option value="">Selecione...</option>
-                                    {activeCategories.map((cat) => (
+                                    {installmentCategories.map((cat) => (
                                         <option key={cat.id} value={cat.id}>{formatStoredIconPrefix(cat.icon)}{cat.name}</option>
                                     ))}
                                 </select>
@@ -899,7 +947,7 @@ export function Transactions() {
                                     {...updateForm.register('categoryId')}
                                     className="app-control w-full"
                                 >
-                                    {editableCategories.map((cat) => (
+                                    {updateCategories.map((cat) => (
                                         <option key={cat.id} value={cat.id}>
                                             {formatStoredIconPrefix(cat.icon)}{cat.name}{cat.isArchived ? ' (arquivada)' : ''}
                                         </option>

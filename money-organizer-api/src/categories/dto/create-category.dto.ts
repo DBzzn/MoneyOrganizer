@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsEnum, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
+import { CategoryKind } from '../../../generated/prisma/client';
 
 export class CreateCategoryDto {
   @ApiProperty({
@@ -11,7 +12,7 @@ export class CreateCategoryDto {
   name: string;
 
   @ApiProperty({
-    description: 'Icone da categoria, como emoji ou chave lucide:*',
+    description: 'Icone da categoria em uma chave lucide:* selecionada no app',
     example: 'lucide:book-open',
     required: false,
   })
@@ -19,4 +20,14 @@ export class CreateCategoryDto {
   @MaxLength(64)
   @IsOptional()
   icon?: string;
+
+  @ApiProperty({
+    description: 'Natureza financeira permitida para a categoria',
+    enum: CategoryKind,
+    example: CategoryKind.EXPENSE,
+    required: false,
+  })
+  @IsEnum(CategoryKind)
+  @IsOptional()
+  kind?: CategoryKind;
 }

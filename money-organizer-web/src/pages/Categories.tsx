@@ -11,17 +11,19 @@ import {
     updateCategory,
     deleteCategory,
 } from '../api/categories'
-import { ChevronDown, FolderArchive, Plus, Pencil, Trash2, X, Check, RotateCcw, SmilePlus } from 'lucide-react'
+import { ChevronDown, FolderArchive, Plus, Pencil, Trash2, X, Check, RotateCcw } from 'lucide-react'
 import ConfirmModal from '../components/ConfirmModal'
 import { getTotalsByCategory } from '../api/transactions'
 import type { Category, CategoryTotal, TransactionType } from '../types'
 import { formatCurrency } from '../utils'
 import { StoredIcon, StoredIconPicker } from '../components/StoredIcon'
+import { getStoredIconOption } from '../components/storedIconRegistry'
 
 
 const categorySchema = z.object({
     name: z.string().min(1, 'O Nome é obrigatório!'),
     icon: z.string().max(64, 'Icone muito longo').optional(),
+    kind: z.enum(['EXPENSE', 'INCOME', 'BOTH']),
 })
 
 type CategoryFormData = z.infer<typeof categorySchema>
@@ -39,6 +41,12 @@ function getErrorMessage(error: unknown, fallback: string): string {
 }
 
 const EXPENSE_TYPES: TransactionType[] = ['CREDIT_CASH', 'CREDIT_INSTALLMENT', 'DEBIT', 'PIX', 'CASH']
+
+const CATEGORY_KIND_LABELS: Record<Category['kind'], string> = {
+    EXPENSE: 'Despesa',
+    INCOME: 'Receita',
+    BOTH: 'Mista',
+}
 
 function mergeCategoryTotals(groups: CategoryTotal[][]): CategoryTotal[] {
     const totals = new Map<string, CategoryTotal>()
@@ -62,6 +70,14 @@ function movementLabel(count: number, singular: string, plural: string) {
     return `${count} ${count === 1 ? singular : plural}`
 }
 
+function sanitizeCategoryPayload(data: CategoryFormData): CategoryFormData {
+    const icon = data.icon?.trim()
+
+    return {
+        ...data,
+        icon: icon && getStoredIconOption(icon) ? icon : '',
+    }
+}
 
 export function Categories() {
     const [categories, setCategories] = useState<Category[]>([])
@@ -70,7 +86,6 @@ export function Categories() {
     const [editing, setEditing] = useState<Category | null>(null)
     const [expenseTotals, setExpenseTotals] = useState<CategoryTotal[]>([])
     const [incomeTotals, setIncomeTotals] = useState<CategoryTotal[]>([])
-    const [showEmojiPicker, setShowEmojiPicker] = useState(false)
     const [showArchivedCategories, setShowArchivedCategories] = useState(false)
     const [confirmModal, setConfirmModal] = useState<{
         isOpen: boolean
@@ -107,34 +122,34 @@ export function Categories() {
 
     const handleOpenCreate = () => {
         setEditing(null)
-        reset({ name: '', icon: '' })
+        reset({ name: '', icon: '', kind: 'EXPENSE' })
         setShowForm(true)
     }
 
     const handleOpenEdit = (category: Category) => {
         setEditing(category)
-        reset({ name: category.name, icon: category.icon ?? '' })
+        reset({ name: category.name, icon: category.icon ?? '', kind: category.kind })
         setShowForm(true)
     }
 
     const handleClose = () => {
         setShowForm(false)
         setEditing(null)
-        setShowEmojiPicker(false)
         reset()
     }
 
     const onSubmit = async (data: CategoryFormData) => {
+        const payload = sanitizeCategoryPayload(data)
 
         try {
             if (editing) {
-                const res = await updateCategory(editing.id, data)
+                const res = await updateCategory(editing.id, payload)
                 setCategories((prev) =>
                     prev.map((c) => (c.id === editing.id ? res.data : c))
                 )
                 toast.success('Categoria atualizada com sucesso!')
             } else {
-                const res = await createCategory(data)
+                const res = await createCategory(payload)
                 setCategories((prev) => [...prev, res.data])
                 toast.success('Categoria criada!')
             }
@@ -246,80 +261,6 @@ export function Categories() {
                                 />
                             </div>
 
-                            <div className="hidden">
-                                <label className="block text-sm font-medium mb-1" style={{ color: 'var(--color-text)' }}>
-                                    Ícone
-                                </label>
-                                <div className="flex gap-2">
-                                    <input
-                                        {...register('icon')}
-                                        type="text"
-                                        placeholder="🍔"
-                                        maxLength={2}
-                                        className="app-control w-full text-center text-xl"
-                                    />
-                                    <button
-                                        type="button"
-                                        onClick={() => setShowEmojiPicker((prev) => !prev)}
-                                        className="app-icon-control p-2.5 rounded-lg"
-                                    >
-                                        <SmilePlus size={18} />
-                                    </button>
-                                </div>
-
-                                {showEmojiPicker && (
-                                    <div
-                                        className="app-popover absolute z-50 mt-2 p-3 rounded-xl overflow-y-auto"
-                                        style={{
-                                            top: '100%',
-                                            left: 0,
-                                            width: 'min(320px, calc(100vw - 3rem))',
-                                            maxHeight: '280px',
-                                            opacity: 1,
-                                        }}
-                                    >
-                                        {[
-                                            { label: '🍽️ Alimentação', emojis: ['🍔', '🍕', '🍣', '🍜', '🥗', '🍺', '☕', '🍰', '🛒', '🥤'] },
-                                            { label: '🚗 Transporte', emojis: ['🚗', '🚌', '🚇', '✈️', '🛵', '⛽', '🚕', '🚲'] },
-                                            { label: '🏠 Casa', emojis: ['🏠', '💡', '🔧', '🛋️', '📦', '🧹', '🪴', '🛁'] },
-                                            { label: '❤️ Saúde', emojis: ['💊', '🏥', '🧘', '🏋️', '🩺', '🧴', '🩹'] },
-                                            { label: '🎉 Lazer', emojis: ['🎮', '🎬', '🎵', '📚', '🎯', '🏖️', '🎲', '🎭'] },
-                                            { label: '💼 Trabalho', emojis: ['💼', '💻', '📱', '🖨️', '📊', '🗂️'] },
-                                            { label: '💰 Finanças', emojis: ['💰', '💳', '📈', '🏦', '💵', '🪙'] },
-                                            { label: '🛍️ Outros', emojis: ['🎁', '👗', '✂️', '🐾', '🌱', '📷', '⚽', '🧳'] },
-                                        ].map((group) => (
-                                            <div key={group.label} className="mb-3">
-                                                <p className="text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>
-                                                    {group.label}
-                                                </p>
-                                                <div className="flex flex-wrap gap-1">
-                                                    {group.emojis.map((emoji) => (
-                                                        <button
-                                                            key={emoji}
-                                                            type="button"
-                                                            onClick={() => {
-                                                                setValue('icon', emoji)
-                                                                setShowEmojiPicker(false)
-                                                            }}
-                                                            className="text-xl w-9 h-9 flex items-center justify-center rounded-lg transition hover:scale-110"
-                                                            style={{ backgroundColor: 'var(--color-bg)' }}
-                                                        >
-                                                            {emoji}
-                                                        </button>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        ))}
-
-                                        <p className="text-xs mt-1 pt-2" style={{
-                                            color: 'var(--color-text-muted)',
-                                            borderTop: '1px solid var(--color-border)',
-                                        }}>
-                                            💡 Não achou? Cole o emoji que quiser no campo!
-                                        </p>
-                                    </div>
-                                )}
-                            </div>
 
                             <div className="w-full flex-1">
                                 <label className="block text-sm font-medium mb-1" style={{ color: 'var(--color-text)' }}>
@@ -334,6 +275,17 @@ export function Categories() {
                                 {errors.name && (
                                     <p className="text-red-500 text-sm mt-1">{errors.name.message}</p>
                                 )}
+                            </div>
+
+                            <div className="w-full sm:w-48">
+                                <label className="block text-sm font-medium mb-1" style={{ color: 'var(--color-text)' }}>
+                                    Natureza
+                                </label>
+                                <select {...register('kind')} className="app-control w-full">
+                                    <option value="EXPENSE">Despesa</option>
+                                    <option value="INCOME">Receita</option>
+                                    <option value="BOTH">Mista</option>
+                                </select>
                             </div>
 
                             <div className="w-full sm:w-auto sm:pt-6">
@@ -388,6 +340,9 @@ export function Categories() {
                                                     Arquivada
                                                 </span>
                                             )}
+                                            <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700">
+                                                {CATEGORY_KIND_LABELS[category.kind]}
+                                            </span>
                                         </div>
                                         {(() => {
                                             const totals = getTotalsForCategory(category.id)
@@ -494,6 +449,10 @@ export function Categories() {
                                                         <span className="rounded-full px-2 py-0.5 text-xs font-medium"
                                                             style={{ backgroundColor: 'var(--color-bg-card)', color: 'var(--color-muted-text)' }}>
                                                             Arquivada
+                                                        </span>
+                                                        <span className="rounded-full px-2 py-0.5 text-xs font-medium"
+                                                            style={{ backgroundColor: 'var(--color-bg-card)', color: 'var(--color-muted-text)' }}>
+                                                            {CATEGORY_KIND_LABELS[category.kind]}
                                                         </span>
                                                     </div>
                                                     {(() => {

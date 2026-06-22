@@ -4,6 +4,7 @@ import type {
   ImportedMovementStatus,
   StatementImportApplyResult,
   StatementImportBatch,
+  StatementImportBatchStatus,
   StatementImportBatchSummary,
   StatementImportPreview,
   StatementImportUndoResult,
@@ -65,6 +66,16 @@ export const undoAppliedImportedMovements = (
   api.post<StatementImportUndoResult>(
     `/statement-imports/batches/${batchId}/undo-applied`,
     movementIds ? { movementIds } : undefined,
+  );
+
+export const bulkReviewImportedMovementCategory = (
+  batchId: string,
+  movementIds: string[],
+  reviewCategoryId: string,
+) =>
+  api.patch<{ updatedCount: number; batchStatus: StatementImportBatchStatus }>(
+    `/statement-imports/batches/${batchId}/movements/review-category`,
+    { movementIds, reviewCategoryId },
   );
 
 export const updateImportedMovementStatus = (

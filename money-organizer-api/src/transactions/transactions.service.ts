@@ -8,7 +8,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
 import { CreateInstallmentsDto } from './dto/create-installments.dto';
 import { UpdateTransactionDto } from './dto/update-transaction.dto';
-import { FinancialAccountType, ImportedMovementStatus, TransactionType, Prisma } from '../../generated/prisma/client';
+import { CategoryKind, FinancialAccountType, ImportedMovementStatus, TransactionType, Prisma } from '../../generated/prisma/client';
 import { randomUUID } from 'crypto';
 import { QueryTransactionsDto } from './dto/query-transactions.dto';
 import { ReportFiltersDto } from './dto/report-filters.dto';
@@ -143,22 +143,33 @@ export class TransactionsService {
         return account.id;
     }
 
+    private getCategoryKindForTransactionType(type: TransactionType): CategoryKind {
+        return type === TransactionType.INCOME ? CategoryKind.INCOME : CategoryKind.EXPENSE;
+    }
+
     private async ensureCategoryAvailable(
         userId: string,
         categoryId: string,
+        transactionType: TransactionType,
         currentCategoryId?: string,
     ) {
+        const expectedKind = this.getCategoryKindForTransactionType(transactionType);
         const category = await this.prisma.category.findFirst({
             where: {
                 id: categoryId,
                 userId,
                 ...(categoryId === currentCategoryId ? {} : { isArchived: false }),
+                kind: { in: [expectedKind, CategoryKind.BOTH] },
             },
             select: { id: true },
         });
 
         if (!category) {
-            throw new BadRequestException('Categoria não encontrada ou arquivada!');
+            throw new BadRequestException(
+                transactionType === TransactionType.INCOME
+                    ? 'Categoria de receita não encontrada, arquivada ou incompatível!'
+                    : 'Categoria de despesa não encontrada, arquivada ou incompatível!',
+            );
         }
     }
 
@@ -195,7 +206,7 @@ export class TransactionsService {
     }
 
     async create(userId: string, dto: CreateTransactionDto) {
-        await this.ensureCategoryAvailable(userId, dto.categoryId);
+        await this.ensureCategoryAvailable(userId, dto.categoryId, dto.type);
 
         const financialAccountId = await this.resolveFinancialAccountId(
             userId,
@@ -252,6 +263,7 @@ export class TransactionsService {
                         id: true,
                         name: true,
                         icon: true,
+                        kind: true,
                         isArchived: true,
                     }
                 },
@@ -335,6 +347,7 @@ export class TransactionsService {
                         id: true,
                         name: true,
                         icon: true,
+                        kind: true,
                         isArchived: true,
                     }
                 },
@@ -402,6 +415,7 @@ export class TransactionsService {
                 id: true,
                 name: true,
                 icon: true,
+                kind: true,
             },
         });
 
@@ -453,6 +467,7 @@ export class TransactionsService {
                         id: true,
                         name: true,
                         icon: true,
+                        kind: true,
                         isArchived: true,
                     },
                 },
@@ -484,7 +499,7 @@ export class TransactionsService {
                     id: transactionId,
                     userId,
                 },
-                select: { categoryId: true },
+                select: { categoryId: true, type: true },
             });
 
             if (!transaction) {
@@ -494,6 +509,7 @@ export class TransactionsService {
             await this.ensureCategoryAvailable(
                 userId,
                 dto.categoryId,
+                dto.type ?? transaction.type,
                 transaction.categoryId,
             );
         }
@@ -538,6 +554,7 @@ export class TransactionsService {
                             id: true,
                             name: true,
                             icon: true,
+                            kind: true,
                             isArchived: true,
                         }
                     },
@@ -626,7 +643,11 @@ export class TransactionsService {
             throw new BadRequestException('Forneça pelo menos o valor total ou o valor da parcela!');
         }
 
-        await this.ensureCategoryAvailable(userId, dto.categoryId);
+        await this.ensureCategoryAvailable(
+            userId,
+            dto.categoryId,
+            TransactionType.CREDIT_INSTALLMENT,
+        );
 
         const financialAccountId = await this.resolveFinancialAccountId(
             userId,

@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { createHash } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
+import { BulkReviewCategoryDto } from './dto/bulk-review-category.dto';
 import { UpdateImportedMovementDto } from './dto/update-imported-movement.dto';
 import { ReviewableImportedMovementStatus } from './dto/update-imported-movement-status.dto';
 import { CsvStatementParser } from './parsers/csv-statement.parser';
@@ -28,6 +29,7 @@ import {
   ImportedMovementReviewTarget,
   ImportedMovementReconciliationStatus,
   StatementImportBatchStatus,
+  CategoryKind,
   Prisma,
   TransactionType,
 } from '../../generated/prisma/client';
@@ -46,6 +48,7 @@ const REVIEW_CATEGORY_SELECT = {
   id: true,
   name: true,
   icon: true,
+  kind: true,
   isArchived: true,
 };
 
@@ -325,6 +328,10 @@ function reviewTypeToTransactionType(
   return typeByReviewType[normalizedRawType] ?? TransactionType.DEBIT;
 }
 
+function categoryKindForDirection(direction: ParsedStatementDirection) {
+  return direction === 'IN' ? CategoryKind.INCOME : CategoryKind.EXPENSE;
+}
+
 function centsToDecimal(cents: number) {
   return new Prisma.Decimal(cents).div(100);
 }
@@ -365,12 +372,18 @@ export class StatementImportsService {
     );
   }
 
-  private async ensureActiveReviewCategory(userId: string, categoryId: string) {
+  private async ensureActiveReviewCategory(
+    userId: string,
+    categoryId: string,
+    direction: ParsedStatementDirection,
+  ) {
+    const expectedKind = categoryKindForDirection(direction);
     const category = await this.prisma.category.findFirst({
       where: {
         id: categoryId,
         userId,
         isArchived: false,
+        kind: { in: [expectedKind, CategoryKind.BOTH] },
       },
       select: {
         id: true,
@@ -378,7 +391,11 @@ export class StatementImportsService {
     });
 
     if (!category) {
-      throw new NotFoundException('Categoria revisada nao encontrada.');
+      throw new NotFoundException(
+        direction === 'IN'
+          ? 'Categoria de receita revisada nao encontrada ou incompativel.'
+          : 'Categoria de despesa revisada nao encontrada ou incompativel.',
+      );
     }
 
     return category;
@@ -669,7 +686,11 @@ export class StatementImportsService {
       );
     }
 
-    await this.ensureActiveReviewCategory(userId, movement.reviewCategoryId);
+    await this.ensureActiveReviewCategory(
+      userId,
+      movement.reviewCategoryId,
+      movement.direction,
+    );
   }
 
   private async getTargetAccount(userId: string, financialAccountId?: string) {
@@ -782,6 +803,7 @@ export class StatementImportsService {
                     id: true,
                     name: true,
                     icon: true,
+                    kind: true,
                   },
                 },
               },
@@ -840,11 +862,13 @@ export class StatementImportsService {
           },
           select: {
             description: true,
+            type: true,
             category: {
               select: {
                 id: true,
                 name: true,
                 icon: true,
+                kind: true,
               },
             },
           },
@@ -957,8 +981,11 @@ export class StatementImportsService {
       );
       if (!descriptionKey) continue;
 
+      const direction =
+        transaction.type === TransactionType.INCOME ? 'IN' : 'OUT';
+      const suggestionKey = [descriptionKey, direction].join('|');
       const suggestionsByCategory =
-        categorySuggestions.get(descriptionKey) ?? new Map();
+        categorySuggestions.get(suggestionKey) ?? new Map();
       const current = suggestionsByCategory.get(transaction.category.id) ?? {
         categoryId: transaction.category.id,
         categoryName: transaction.category.name,
@@ -968,14 +995,20 @@ export class StatementImportsService {
 
       current.count += 1;
       suggestionsByCategory.set(transaction.category.id, current);
-      categorySuggestions.set(descriptionKey, suggestionsByCategory);
+      categorySuggestions.set(suggestionKey, suggestionsByCategory);
     }
 
-    const getCategorySuggestion = (description: string) => {
+    const getCategorySuggestion = (
+      description: string,
+      direction: ParsedStatementDirection,
+    ) => {
       const descriptionKey = normalizeReviewDescription(description);
-      const suggestionsByCategory = descriptionKey
-        ? categorySuggestions.get(descriptionKey)
-        : undefined;
+      if (!descriptionKey) {
+        return undefined;
+      }
+
+      const suggestionKey = [descriptionKey, direction].join('|');
+      const suggestionsByCategory = categorySuggestions.get(suggestionKey);
 
       if (!suggestionsByCategory) {
         return undefined;
@@ -1039,6 +1072,7 @@ export class StatementImportsService {
             reconciliationMatches,
             categorySuggestion: getCategorySuggestion(
               movement.normalizedDescription,
+              movement.direction,
             ),
             flags,
           };
@@ -1339,6 +1373,145 @@ export class StatementImportsService {
     };
   }
 
+  async bulkReviewCategory(
+    userId: string,
+    batchId: string,
+    dto: BulkReviewCategoryDto,
+  ) {
+    const movementIds = Array.from(new Set(dto.movementIds));
+
+    const batch = await this.prisma.statementImportBatch.findFirst({
+      where: {
+        id: batchId,
+        userId,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    if (!batch) {
+      throw new NotFoundException('Lote de importacao nao encontrado.');
+    }
+
+    const movements = await this.prisma.importedMovement.findMany({
+      where: {
+        id: { in: movementIds },
+        userId,
+        file: {
+          batchId,
+          userId,
+        },
+      },
+      select: {
+        id: true,
+        direction: true,
+        status: true,
+        reviewTarget: true,
+      },
+    });
+
+    if (movements.length !== movementIds.length) {
+      throw new NotFoundException(
+        'Um ou mais movimentos selecionados nao pertencem ao lote.',
+      );
+    }
+
+    const invalidMovement = movements.find(
+      (movement) =>
+        movement.status === ImportedMovementStatus.APPLIED ||
+        movement.status === ImportedMovementStatus.DUPLICATE ||
+        movement.reviewTarget !== ImportedMovementReviewTarget.TRANSACTION,
+    );
+
+    if (invalidMovement) {
+      throw new BadRequestException(
+        'Apenas transacoes importadas editaveis podem receber categoria em massa.',
+      );
+    }
+
+    const directions = Array.from(
+      new Set(movements.map((movement) => movement.direction)),
+    );
+
+    for (const direction of directions) {
+      await this.ensureActiveReviewCategory(
+        userId,
+        dto.reviewCategoryId,
+        direction,
+      );
+    }
+
+    const summary = await this.prisma.$transaction(async (tx) => {
+      const updatedMovements = await tx.importedMovement.updateMany({
+        where: {
+          id: { in: movementIds },
+          userId,
+          file: {
+            batchId,
+            userId,
+          },
+          status: {
+            notIn: [
+              ImportedMovementStatus.APPLIED,
+              ImportedMovementStatus.DUPLICATE,
+            ],
+          },
+          reviewTarget: ImportedMovementReviewTarget.TRANSACTION,
+        },
+        data: {
+          reviewCategoryId: dto.reviewCategoryId,
+          reviewTransferAccountId: null,
+          reviewTarget: ImportedMovementReviewTarget.TRANSACTION,
+          status: ImportedMovementStatus.NEEDS_REVIEW,
+          reconciliationStatus: ImportedMovementReconciliationStatus.PENDING,
+          reconciliationNote: null,
+          reconciliationReviewedAt: null,
+        },
+      });
+
+      if (updatedMovements.count !== movementIds.length) {
+        throw new BadRequestException(
+          'Movimentos selecionados foram alterados antes da categorizacao em massa.',
+        );
+      }
+
+      const statuses = await tx.importedMovement.findMany({
+        where: {
+          file: {
+            batchId,
+            userId,
+          },
+        },
+        select: {
+          status: true,
+        },
+      });
+      const batchStatus = nextBatchStatusAfterApply(
+        statuses.map((movement) => movement.status),
+      );
+
+      await tx.statementImportBatch.update({
+        where: {
+          id: batchId,
+        },
+        data: {
+          status: batchStatus,
+        },
+        select: {
+          id: true,
+        },
+      });
+
+      return {
+        updatedCount: updatedMovements.count,
+        batchStatus,
+      };
+    });
+
+    return summary;
+  }
+
   async updateMovement(
     userId: string,
     movementId: string,
@@ -1495,6 +1668,7 @@ export class StatementImportsService {
           const category = await this.ensureActiveReviewCategory(
             userId,
             dto.reviewCategoryId,
+            effectiveDirection,
           );
 
           data.reviewCategory = {

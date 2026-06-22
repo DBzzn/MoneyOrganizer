@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { TransactionsService } from './transactions.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { TransactionType } from '../../generated/prisma/client';
+import { CategoryKind, TransactionType } from '../../generated/prisma/client';
 
 describe('TransactionsService', () => {
   let service: TransactionsService;
@@ -77,6 +77,31 @@ describe('TransactionsService', () => {
 
   it('should be defined', () => {
     expect(service).toBeDefined();
+  });
+
+  it('rejects income transactions with an incompatible expense category', async () => {
+    prisma.category.findFirst.mockResolvedValue(null);
+
+    await expect(
+      service.create('user-1', {
+        type: TransactionType.INCOME,
+        amount: 5000,
+        date: '2026-06-20',
+        categoryId: 'category-salary',
+        financialAccountId: 'account-1',
+      }),
+    ).rejects.toThrow(BadRequestException);
+
+    expect(prisma.category.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: 'category-salary',
+        userId: 'user-1',
+        isArchived: false,
+        kind: { in: [CategoryKind.INCOME, CategoryKind.BOTH] },
+      },
+      select: { id: true },
+    });
+    expect(prisma.transaction.create).not.toHaveBeenCalled();
   });
 
   describe('remove', () => {
@@ -264,6 +289,7 @@ describe('TransactionsService', () => {
           id: true,
           name: true,
           icon: true,
+          kind: true,
         },
       });
     });

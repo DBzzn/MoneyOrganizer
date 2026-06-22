@@ -26,6 +26,7 @@ import { Request as ExpressRequest } from 'express';
 import { UpdateImportedMovementDto } from './dto/update-imported-movement.dto';
 import { UpdateImportedMovementStatusDto } from './dto/update-imported-movement-status.dto';
 import { UndoAppliedMovementsDto } from './dto/undo-applied-movements.dto';
+import { BulkReviewCategoryDto } from './dto/bulk-review-category.dto';
 import { StatementImportsService } from './statement-imports.service';
 import { UploadedStatementFile } from './types';
 
@@ -182,6 +183,26 @@ export class StatementImportsController {
       req.user.id,
       id,
       dto?.movementIds,
+    );
+  }
+
+  @ApiOperation({
+    summary: 'Aplicar categoria revisada a movimentos selecionados do lote',
+  })
+  @ApiResponse({ status: 200, description: 'Movimentos atualizados com sucesso' })
+  @ApiResponse({ status: 400, description: 'Selecao invalida para categoria em massa' })
+  @ApiResponse({ status: 401, description: 'Nao autenticado' })
+  @ApiResponse({ status: 404, description: 'Lote ou movimento nao encontrado' })
+  @Patch('batches/:id/movements/review-category')
+  bulkReviewCategory(
+    @Request() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Body() dto: BulkReviewCategoryDto,
+  ) {
+    return this.statementImportsService.bulkReviewCategory(
+      req.user.id,
+      id,
+      dto,
     );
   }
 

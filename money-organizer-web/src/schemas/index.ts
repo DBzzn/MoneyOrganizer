@@ -78,6 +78,8 @@ export const financialAccountSchema = z.object({
     isArchived: z.boolean().optional(),
 })
 
+export const categoryKindSchema = z.enum(['EXPENSE', 'INCOME', 'BOTH'])
+
 export const transferSchema = z.object({
     amount: z.number().min(0.01, 'O valor deve ser maior que zero!'),
     date: z.string().min(1, 'A data é obrigatória!'),

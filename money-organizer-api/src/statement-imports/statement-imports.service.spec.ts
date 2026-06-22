@@ -4,6 +4,7 @@ import {
   ImportedMovementStatus,
   ImportedMovementReconciliationStatus,
   ImportedMovementReviewTarget,
+  CategoryKind,
   Prisma,
   TransactionType,
 } from '../../generated/prisma/client';
@@ -357,6 +358,7 @@ describe('StatementImportsService', () => {
         id: 'category-1',
         userId: 'user-1',
         isArchived: false,
+        kind: { in: [CategoryKind.EXPENSE, CategoryKind.BOTH] },
       },
       select: {
         id: true,
@@ -378,6 +380,112 @@ describe('StatementImportsService', () => {
         }),
       }),
     );
+  });
+
+  it('applies a reviewed category to selected movements in one batch operation', async () => {
+    prisma.statementImportBatch.findFirst.mockResolvedValue({
+      id: 'batch-1',
+    });
+    prisma.importedMovement.findMany
+      .mockResolvedValueOnce([
+        {
+          id: 'movement-1',
+          direction: 'OUT',
+          status: ImportedMovementStatus.NEW,
+          reviewTarget: ImportedMovementReviewTarget.TRANSACTION,
+        },
+        {
+          id: 'movement-2',
+          direction: 'OUT',
+          status: ImportedMovementStatus.READY,
+          reviewTarget: ImportedMovementReviewTarget.TRANSACTION,
+        },
+      ])
+      .mockResolvedValueOnce([
+        { status: ImportedMovementStatus.NEEDS_REVIEW },
+        { status: ImportedMovementStatus.NEEDS_REVIEW },
+      ]);
+    prisma.category.findFirst.mockResolvedValue({
+      id: 'category-1',
+    });
+    prisma.importedMovement.updateMany.mockResolvedValue({
+      count: 2,
+    });
+    prisma.statementImportBatch.update.mockResolvedValue({
+      id: 'batch-1',
+    });
+
+    await expect(
+      service.bulkReviewCategory('user-1', 'batch-1', {
+        movementIds: ['movement-1', 'movement-2'],
+        reviewCategoryId: 'category-1',
+      }),
+    ).resolves.toEqual({
+      updatedCount: 2,
+      batchStatus: 'REVIEWING',
+    });
+
+    expect(prisma.category.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: 'category-1',
+        userId: 'user-1',
+        isArchived: false,
+        kind: { in: [CategoryKind.EXPENSE, CategoryKind.BOTH] },
+      },
+      select: {
+        id: true,
+      },
+    });
+    expect(prisma.importedMovement.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: { in: ['movement-1', 'movement-2'] },
+        userId: 'user-1',
+        file: {
+          batchId: 'batch-1',
+          userId: 'user-1',
+        },
+        status: {
+          notIn: [
+            ImportedMovementStatus.APPLIED,
+            ImportedMovementStatus.DUPLICATE,
+          ],
+        },
+        reviewTarget: ImportedMovementReviewTarget.TRANSACTION,
+      },
+      data: {
+        reviewCategoryId: 'category-1',
+        reviewTransferAccountId: null,
+        reviewTarget: ImportedMovementReviewTarget.TRANSACTION,
+        status: ImportedMovementStatus.NEEDS_REVIEW,
+        reconciliationStatus: ImportedMovementReconciliationStatus.PENDING,
+        reconciliationNote: null,
+        reconciliationReviewedAt: null,
+      },
+    });
+  });
+
+  it('rejects bulk category review when selected movements are not editable transactions', async () => {
+    prisma.statementImportBatch.findFirst.mockResolvedValue({
+      id: 'batch-1',
+    });
+    prisma.importedMovement.findMany.mockResolvedValue([
+      {
+        id: 'movement-1',
+        direction: 'OUT',
+        status: ImportedMovementStatus.APPLIED,
+        reviewTarget: ImportedMovementReviewTarget.TRANSACTION,
+      },
+    ]);
+
+    await expect(
+      service.bulkReviewCategory('user-1', 'batch-1', {
+        movementIds: ['movement-1'],
+        reviewCategoryId: 'category-1',
+      }),
+    ).rejects.toThrow(BadRequestException);
+
+    expect(prisma.category.findFirst).not.toHaveBeenCalled();
+    expect(prisma.importedMovement.updateMany).not.toHaveBeenCalled();
   });
 
   it('does not mark transaction review as ready without a reviewed category', async () => {
@@ -446,6 +554,7 @@ describe('StatementImportsService', () => {
         id: 'category-1',
         userId: 'user-1',
         isArchived: false,
+        kind: { in: [CategoryKind.EXPENSE, CategoryKind.BOTH] },
       },
       select: {
         id: true,

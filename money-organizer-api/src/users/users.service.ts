@@ -1,17 +1,21 @@
 ﻿import { ConflictException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { FinancialAccountType, Prisma } from '../../generated/prisma/client';
+import {
+  CategoryKind,
+  FinancialAccountType,
+  Prisma,
+} from '../../generated/prisma/client';
 import { CreateUserDto } from './dto/create-user.dto';
 import * as bcrypt from 'bcrypt';
 
 const DEFAULT_CATEGORIES = [
-  { name: 'Alimentação', icon: '🍔' },
-  { name: 'Transporte', icon: '🚗' },
-  { name: 'Moradia', icon: '🏠' },
-  { name: 'Saúde', icon: '💊' },
-  { name: 'Lazer', icon: '🎮' },
-  { name: 'Salário', icon: '💰' },
-  { name: 'Investimentos', icon: '📈' }
+  { name: 'Alimentação', icon: 'lucide:utensils', kind: CategoryKind.EXPENSE },
+  { name: 'Transporte', icon: 'lucide:bus', kind: CategoryKind.EXPENSE },
+  { name: 'Moradia', icon: 'lucide:house', kind: CategoryKind.EXPENSE },
+  { name: 'Saúde', icon: 'lucide:heart-pulse', kind: CategoryKind.EXPENSE },
+  { name: 'Lazer', icon: 'lucide:gamepad-2', kind: CategoryKind.EXPENSE },
+  { name: 'Salário', icon: 'lucide:badge-dollar-sign', kind: CategoryKind.INCOME },
+  { name: 'Investimentos', icon: 'lucide:chart-line', kind: CategoryKind.BOTH }
 ];
 
 @Injectable()

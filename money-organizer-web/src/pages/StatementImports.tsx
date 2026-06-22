@@ -1,6 +1,7 @@
 import {
   useEffect,
   useCallback,
+  memo,
   useMemo,
   useState,
   type ChangeEvent,
@@ -24,7 +25,9 @@ import {
   Fingerprint,
   Landmark,
   ListFilter,
+  ListChecks,
   Pencil,
+  Plus,
   RefreshCw,
   Trash2,
   type LucideIcon,
@@ -34,10 +37,11 @@ import {
 } from "lucide-react";
 import ConfirmModal from "../components/ConfirmModal";
 import { Layout } from "../components/Layout";
-import { getCategories } from "../api/categories";
+import { createCategory, getCategories } from "../api/categories";
 import { getFinancialAccounts } from "../api/financialAccounts";
 import {
   applyReadyImportedMovements,
+  bulkReviewImportedMovementCategory,
   createStatementImportBatch,
   deleteStatementImportBatch,
   getStatementImportBatch,
@@ -47,6 +51,7 @@ import {
   updateImportedMovementStatus,
 } from "../api/statementImports";
 import { formatStoredIconPrefix } from "../components/storedIconRegistry";
+import { StoredIconPicker } from "../components/StoredIcon";
 import type {
   Category,
   FinancialAccount,
@@ -67,7 +72,7 @@ import { formatCurrency, formatDate } from "../utils";
 type MovementStatusFilter = "ALL" | ImportedMovementStatus;
 type ReviewableMovementStatus = Extract<
   ImportedMovementStatus,
-  "NEW" | "IGNORED" | "READY"
+  "NEW" | "NEEDS_REVIEW" | "IGNORED" | "READY"
 >;
 type ReviewableReconciliationStatus = Exclude<
   ImportedMovementReconciliationStatus,
@@ -82,6 +87,12 @@ type MovementEditForm = {
   reviewCategoryId: string;
   reviewTransferAccountId: string;
   rawDescription: string;
+};
+
+type QuickCategoryContext = {
+  direction: StatementMovementDirection;
+  movementId?: string;
+  source: "movement" | "bulk";
 };
 
 type SafeReadyCandidate = {
@@ -195,12 +206,30 @@ const MOVEMENT_REVIEW_ACTIONS: Array<{
     icon: XCircle,
   },
   {
+    status: "NEEDS_REVIEW",
+    label: "Aviso",
+    title: "Marcar para revisar depois",
+    icon: AlertTriangle,
+  },
+  {
     status: "NEW",
     label: "Novo",
     title: "Voltar para novo",
     icon: RefreshCw,
   },
 ];
+
+type MovementMenuItem = {
+  key: string;
+  label: string;
+  description: string;
+  title: string;
+  icon: LucideIcon;
+  disabledReason: string | null;
+  isCurrent?: boolean;
+  onSelect: () => void;
+  tone: "default" | "success" | "warning" | "danger";
+};
 
 const TRANSFER_REVIEW_TYPE = "TRANSFERENCIA";
 
@@ -251,6 +280,17 @@ function apiErrorMessage(error: unknown, fallback: string): string {
   }
 
   return typeof message === "string" && message.trim() ? message : fallback;
+}
+
+async function preserveScrollPosition(action: () => Promise<void>) {
+  const scrollX = window.scrollX;
+  const scrollY = window.scrollY;
+
+  await action();
+
+  requestAnimationFrame(() => {
+    window.scrollTo(scrollX, scrollY);
+  });
 }
 
 function inputValueToCents(value: string): number | undefined {
@@ -328,6 +368,12 @@ function normalizeReviewTypeValue(value: string): string {
     .toUpperCase()
     .replace(/[^A-Z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "");
+}
+
+function getMovementDescriptionKey(movement: ImportedMovement): string {
+  return normalizeReviewTypeValue(
+    movement.normalizedDescription || movement.rawDescription,
+  );
 }
 
 function getReviewTypeOptions(
@@ -423,11 +469,50 @@ function formatCategoryLabel(category: Pick<Category, "name" | "icon">): string 
   return `${formatStoredIconPrefix(category.icon)}${category.name}`;
 }
 
+function categoryMatchesMovementDirection(
+  category: Category,
+  direction: StatementMovementDirection,
+): boolean {
+  if (direction === "IN") {
+    return category.kind === "INCOME" || category.kind === "BOTH";
+  }
+
+  return category.kind === "EXPENSE" || category.kind === "BOTH";
+}
+
+function categoryKindFromDirection(
+  direction: StatementMovementDirection,
+): Category["kind"] {
+  return direction === "IN" ? "INCOME" : "EXPENSE";
+}
+
+function categoryKindLabel(kind: Category["kind"]): string {
+  const labels: Record<Category["kind"], string> = {
+    EXPENSE: "Despesa",
+    INCOME: "Receita",
+    BOTH: "Mista",
+  };
+
+  return labels[kind];
+}
+
+function isBulkCategoryMovementEligible(movement: ImportedMovement): boolean {
+  return (
+    movement.reviewTarget === "TRANSACTION" &&
+    movement.status !== "APPLIED" &&
+    movement.status !== "DUPLICATE"
+  );
+}
+
 function getDefaultReviewCategoryId(
   categories: Category[],
   movement: ImportedMovement,
 ): string {
-  const activeCategories = categories.filter((category) => !category.isArchived);
+  const activeCategories = categories.filter(
+    (category) =>
+      !category.isArchived &&
+      categoryMatchesMovementDirection(category, movement.direction),
+  );
 
   if (
     movement.reviewCategoryId &&
@@ -1165,6 +1250,18 @@ export function StatementImports() {
   const [selectedUndoMovementIds, setSelectedUndoMovementIds] = useState<
     string[]
   >([]);
+  const [selectedReviewMovementIds, setSelectedReviewMovementIds] = useState<
+    string[]
+  >([]);
+  const [selectedBulkCategoryId, setSelectedBulkCategoryId] = useState("");
+  const [quickCategoryContext, setQuickCategoryContext] =
+    useState<QuickCategoryContext | null>(null);
+  const [quickCategoryName, setQuickCategoryName] = useState("");
+  const [quickCategoryIcon, setQuickCategoryIcon] = useState("");
+  const [isCreatingQuickCategory, setIsCreatingQuickCategory] = useState(false);
+  const [isApplyingBulkCategory, setIsApplyingBulkCategory] = useState(false);
+  const [isUpdatingSelectedReviewStatus, setIsUpdatingSelectedReviewStatus] =
+    useState(false);
   const [isLoadingAccounts, setIsLoadingAccounts] = useState(true);
   const [isLoadingBatches, setIsLoadingBatches] = useState(true);
   const [isLoadingBatch, setIsLoadingBatch] = useState(false);
@@ -1227,6 +1324,57 @@ export function StatementImports() {
     () => getUndoAppliedSummary(selectedUndoMovements),
     [selectedUndoMovements],
   );
+  const bulkCategoryMovementItems = useMemo(
+    () =>
+      currentBatch?.files.flatMap((file) =>
+        file.movements
+          .filter(isBulkCategoryMovementEligible)
+          .map((movement) => ({ file, movement })),
+      ) ?? [],
+    [currentBatch],
+  );
+  const selectedReviewMovementItems = useMemo(() => {
+    const selectedIds = new Set(selectedReviewMovementIds);
+
+    return bulkCategoryMovementItems.filter(({ movement }) =>
+      selectedIds.has(movement.id),
+    );
+  }, [bulkCategoryMovementItems, selectedReviewMovementIds]);
+  const selectedReviewDirections = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          selectedReviewMovementItems.map(({ movement }) => movement.direction),
+        ),
+      ),
+    [selectedReviewMovementItems],
+  );
+  const bulkCategoryOptions = useMemo(
+    () =>
+      activeCategories.filter((category) =>
+        selectedReviewMovementItems.every(({ movement }) =>
+          categoryMatchesMovementDirection(category, movement.direction),
+        ),
+      ),
+    [activeCategories, selectedReviewMovementItems],
+  );
+  const editingSimilarReviewMovementItems = useMemo(() => {
+    if (!editingMovement) {
+      return [];
+    }
+
+    const descriptionKey = getMovementDescriptionKey(editingMovement);
+    if (!descriptionKey) {
+      return [];
+    }
+
+    return bulkCategoryMovementItems.filter(({ movement }) => {
+      return (
+        movement.direction === editingMovement.direction &&
+        getMovementDescriptionKey(movement) === descriptionKey
+      );
+    });
+  }, [bulkCategoryMovementItems, editingMovement]);
   const totalBatchPages = Math.max(
     1,
     Math.ceil(batchSummaries.length / BATCHES_PER_PAGE),
@@ -1487,6 +1635,30 @@ export function StatementImports() {
     );
   }, [isUndoConfirmOpen, undoAppliedMovementDetails]);
 
+  useEffect(() => {
+    const availableIds = new Set(
+      bulkCategoryMovementItems.map(({ movement }) => movement.id),
+    );
+
+    setSelectedReviewMovementIds((current) =>
+      current.filter((movementId) => availableIds.has(movementId)),
+    );
+  }, [bulkCategoryMovementItems]);
+
+  useEffect(() => {
+    if (!selectedBulkCategoryId) {
+      return;
+    }
+
+    if (
+      !bulkCategoryOptions.some(
+        (category) => category.id === selectedBulkCategoryId,
+      )
+    ) {
+      setSelectedBulkCategoryId("");
+    }
+  }, [bulkCategoryOptions, selectedBulkCategoryId]);
+
   const refreshBatches = async (preferredBatchId?: string | null) => {
     try {
       setIsLoadingBatches(true);
@@ -1592,7 +1764,7 @@ export function StatementImports() {
     }
   };
 
-  const handleMovementStatusChange = async (
+  const handleMovementStatusChange = useCallback(async (
     movementId: string,
     status: ReviewableMovementStatus,
   ) => {
@@ -1626,9 +1798,9 @@ export function StatementImports() {
     } finally {
       setUpdatingMovementId(null);
     }
-  };
+  }, []);
 
-  const handleMovementReconciliationChange = async (
+  const handleMovementReconciliationChange = useCallback(async (
     movementId: string,
     reconciliationStatus: ReviewableReconciliationStatus,
   ) => {
@@ -1663,9 +1835,218 @@ export function StatementImports() {
     } finally {
       setUpdatingMovementId(null);
     }
+  }, []);
+
+  const handleReviewSelectionChange = useCallback((
+    movementId: string,
+    shouldSelect: boolean,
+  ) => {
+    setSelectedReviewMovementIds((current) => {
+      if (shouldSelect) {
+        return current.includes(movementId)
+          ? current
+          : [...current, movementId];
+      }
+
+      return current.filter((currentId) => currentId !== movementId);
+    });
+  }, []);
+
+  const handleReviewSelectMany = useCallback((
+    movementIds: string[],
+    shouldSelect: boolean,
+  ) => {
+    setSelectedReviewMovementIds((current) => {
+      const next = new Set(current);
+
+      movementIds.forEach((movementId) => {
+        if (shouldSelect) {
+          next.add(movementId);
+        } else {
+          next.delete(movementId);
+        }
+      });
+
+      return [...next];
+    });
+  }, []);
+
+  const handleSelectSimilarReviewMovements = () => {
+    if (!editingMovement || editingSimilarReviewMovementItems.length === 0) {
+      toast.error("Nao ha movimentos semelhantes editaveis para selecionar.");
+      return;
+    }
+
+    const movementIds = editingSimilarReviewMovementItems.map(
+      ({ movement }) => movement.id,
+    );
+
+    handleReviewSelectMany(movementIds, true);
+    toast.success(
+      `${movementIds.length} movimento(s) com a mesma descricao selecionado(s).`,
+    );
   };
 
-  const openMovementEditor = (
+  const handleSelectedReviewStatusChange = async (
+    status: Extract<ReviewableMovementStatus, "NEW" | "NEEDS_REVIEW" | "IGNORED">,
+  ) => {
+    if (!currentBatch || selectedReviewMovementItems.length === 0) {
+      toast.error("Selecione movimentos editaveis para atualizar.");
+      return;
+    }
+
+    let updatedCount = 0;
+
+    try {
+      setIsUpdatingSelectedReviewStatus(true);
+
+      for (const { movement } of selectedReviewMovementItems) {
+        await updateImportedMovementStatus(movement.id, status);
+        updatedCount += 1;
+      }
+
+      await preserveScrollPosition(() => loadBatch(currentBatch.id));
+      setSelectedReviewMovementIds([]);
+      setSelectedBulkCategoryId("");
+      toast.success(
+        `${updatedCount} movimento(s) marcado(s) como ${movementStatusLabel(status).toLowerCase()}.`,
+      );
+    } catch (error) {
+      await preserveScrollPosition(() => loadBatch(currentBatch.id));
+      toast.error(
+        `${updatedCount} movimento(s) atualizado(s). ${apiErrorMessage(
+          error,
+          "Erro ao atualizar selecionados.",
+        )}`,
+      );
+    } finally {
+      setIsUpdatingSelectedReviewStatus(false);
+    }
+  };
+
+  const openQuickCategoryDialog = (context: QuickCategoryContext) => {
+    setQuickCategoryContext(context);
+    setQuickCategoryName("");
+    setQuickCategoryIcon(
+      context.direction === "IN"
+        ? "lucide:badge-dollar-sign"
+        : "lucide:tag",
+    );
+  };
+
+  const closeQuickCategoryDialog = () => {
+    if (isCreatingQuickCategory) return;
+
+    setQuickCategoryContext(null);
+    setQuickCategoryName("");
+    setQuickCategoryIcon("");
+  };
+
+  const applyCategoryToSelectedReviewMovements = async (category: Category) => {
+    if (!currentBatch || selectedReviewMovementItems.length === 0) {
+      toast.error("Selecione movimentos de transacao para aplicar categoria.");
+      return;
+    }
+
+    const compatibleItems = selectedReviewMovementItems.filter(({ movement }) =>
+      categoryMatchesMovementDirection(category, movement.direction),
+    );
+
+    if (compatibleItems.length === 0) {
+      toast.error("Categoria incompatível com os movimentos selecionados.");
+      return;
+    }
+
+    try {
+      setIsApplyingBulkCategory(true);
+      const response = await bulkReviewImportedMovementCategory(
+        currentBatch.id,
+        compatibleItems.map(({ movement }) => movement.id),
+        category.id,
+      );
+
+      await preserveScrollPosition(() => loadBatch(currentBatch.id));
+      setSelectedReviewMovementIds([]);
+      setSelectedBulkCategoryId("");
+      toast.success(
+        `${response.data.updatedCount} movimento(s) atualizado(s) com ${category.name}.`,
+      );
+    } catch (error) {
+      await preserveScrollPosition(() => loadBatch(currentBatch.id));
+      toast.error(
+        apiErrorMessage(error, "Erro ao aplicar categoria aos selecionados."),
+      );
+    } finally {
+      setIsApplyingBulkCategory(false);
+    }
+  };
+
+  const handleApplyBulkCategory = async () => {
+    const category = bulkCategoryOptions.find(
+      (item) => item.id === selectedBulkCategoryId,
+    );
+
+    if (!category) {
+      toast.error("Selecione uma categoria compatível.");
+      return;
+    }
+
+    await applyCategoryToSelectedReviewMovements(category);
+  };
+
+  const handleQuickCategorySubmit = async (
+    event: FormEvent<HTMLFormElement>,
+  ) => {
+    event.preventDefault();
+
+    if (!quickCategoryContext) {
+      return;
+    }
+
+    const name = quickCategoryName.trim();
+    if (!name) {
+      toast.error("Informe o nome da categoria.");
+      return;
+    }
+
+    const kind = categoryKindFromDirection(quickCategoryContext.direction);
+
+    try {
+      setIsCreatingQuickCategory(true);
+      const response = await createCategory({
+        name,
+        icon: quickCategoryIcon,
+        kind,
+      });
+      const category = response.data;
+
+      setCategories((current) =>
+        [...current, category].sort((a, b) => a.name.localeCompare(b.name)),
+      );
+
+      if (
+        quickCategoryContext.source === "movement" &&
+        quickCategoryContext.movementId === editingMovement?.id
+      ) {
+        setMovementEditForm((current) =>
+          current ? { ...current, reviewCategoryId: category.id } : current,
+        );
+        toast.success("Categoria criada e selecionada.");
+      } else {
+        await applyCategoryToSelectedReviewMovements(category);
+      }
+
+      setQuickCategoryContext(null);
+      setQuickCategoryName("");
+      setQuickCategoryIcon("");
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "Erro ao criar categoria."));
+    } finally {
+      setIsCreatingQuickCategory(false);
+    }
+  };
+
+  const openMovementEditor = useCallback((
     movement: ImportedMovement,
     file: StatementImportFile,
   ) => {
@@ -1698,7 +2079,7 @@ export function StatementImports() {
           : "",
       rawDescription: movement.rawDescription,
     });
-  };
+  }, [activeAccounts, categories]);
 
   const closeMovementEditor = () => {
     if (isSavingMovement) return;
@@ -1723,11 +2104,19 @@ export function StatementImports() {
         const rawType = options.some((option) => option.value === current.rawType)
           ? current.rawType
           : options[0].value;
+        const currentCategory = categories.find(
+          (category) => category.id === current.reviewCategoryId,
+        );
 
         return {
           ...current,
           direction,
           rawType,
+          reviewCategoryId:
+            currentCategory &&
+            !categoryMatchesMovementDirection(currentCategory, direction)
+              ? ""
+              : current.reviewCategoryId,
         };
       }
 
@@ -1853,7 +2242,7 @@ export function StatementImports() {
       setEditingMovementFile(null);
       setMovementEditForm(null);
       if (currentBatch) {
-        await loadBatch(currentBatch.id);
+        await preserveScrollPosition(() => loadBatch(currentBatch.id));
       }
       toast.success("Movimento atualizado para revisao.");
     } catch (error) {
@@ -1878,7 +2267,7 @@ export function StatementImports() {
       setIsApplyConfirmOpen(false);
       const response = await applyReadyImportedMovements(currentBatch.id);
       setCurrentBatch(response.data.batch);
-      await refreshBatches(response.data.batch.id);
+      await preserveScrollPosition(() => refreshBatches(response.data.batch.id));
       toast.success(
         `${response.data.appliedCount} movimento(s) aplicado(s): ${response.data.transactionCount} transacao(oes), ${response.data.transferCount} transferencia(s).`,
       );
@@ -1942,7 +2331,7 @@ export function StatementImports() {
       );
       setCurrentBatch(response.data.batch);
       setSelectedUndoMovementIds([]);
-      await refreshBatches(response.data.batch.id);
+      await preserveScrollPosition(() => refreshBatches(response.data.batch.id));
       toast.success(
         `${response.data.undoneCount} movimento(s) desfeito(s): ${response.data.transactionCount} transacao(oes), ${response.data.transferCount} transferencia(s).`,
       );
@@ -1983,12 +2372,12 @@ export function StatementImports() {
         preparedCount += 1;
       }
 
-      await loadBatch(currentBatch.id);
+      await preserveScrollPosition(() => loadBatch(currentBatch.id));
       toast.success(
         `${preparedCount} movimento(s) seguro(s) marcado(s) como pronto(s).`,
       );
     } catch (error) {
-      await loadBatch(currentBatch.id);
+      await preserveScrollPosition(() => loadBatch(currentBatch.id));
       toast.error(
         `${preparedCount} movimento(s) preparado(s). ${apiErrorMessage(
           error,
@@ -2015,10 +2404,10 @@ export function StatementImports() {
         ignoredCount += 1;
       }
 
-      await loadBatch(currentBatch.id);
+      await preserveScrollPosition(() => loadBatch(currentBatch.id));
       toast.success(`${ignoredCount} duplicado(s) ignorado(s).`);
     } catch (error) {
-      await loadBatch(currentBatch.id);
+      await preserveScrollPosition(() => loadBatch(currentBatch.id));
       toast.error(
         `${ignoredCount} duplicado(s) ignorado(s). ${apiErrorMessage(
           error,
@@ -2368,7 +2757,7 @@ export function StatementImports() {
 
         {!isLoadingBatch && currentBatch && (
           <div className="space-y-5">
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
               {[
                 {
                   label: "Lote",
@@ -2392,6 +2781,12 @@ export function StatementImports() {
                   label: "Duplicidades",
                   value: String(totals.duplicateCount),
                   detail: `${centsToCurrency(totals.inCents)} / ${centsToCurrency(totals.outCents)}`,
+                  icon: AlertTriangle,
+                },
+                {
+                  label: "Avisos",
+                  value: String(movementStatusCounts.NEEDS_REVIEW),
+                  detail: "movimentos para revisar depois",
                   icon: AlertTriangle,
                 },
               ].map((card) => (
@@ -2725,6 +3120,42 @@ export function StatementImports() {
               </div>
             </div>
 
+            <BulkReviewCategoryPanel
+              totalEligibleCount={bulkCategoryMovementItems.length}
+              selectedCount={selectedReviewMovementItems.length}
+              selectedDirections={selectedReviewDirections}
+              categoryOptions={bulkCategoryOptions}
+              selectedCategoryId={selectedBulkCategoryId}
+              isApplying={isApplyingBulkCategory}
+              isUpdatingStatus={isUpdatingSelectedReviewStatus}
+              onCategoryChange={setSelectedBulkCategoryId}
+              onApply={() => void handleApplyBulkCategory()}
+              onIgnoreSelected={() =>
+                void handleSelectedReviewStatusChange("IGNORED")
+              }
+              onReviewSelected={() =>
+                void handleSelectedReviewStatusChange("NEEDS_REVIEW")
+              }
+              onResetSelected={() =>
+                void handleSelectedReviewStatusChange("NEW")
+              }
+              onCreateCategory={() => {
+                if (selectedReviewDirections.length === 1) {
+                  openQuickCategoryDialog({
+                    direction: selectedReviewDirections[0],
+                    source: "bulk",
+                  });
+                }
+              }}
+              onSelectAll={() =>
+                handleReviewSelectMany(
+                  bulkCategoryMovementItems.map(({ movement }) => movement.id),
+                  true,
+                )
+              }
+              onClear={() => setSelectedReviewMovementIds([])}
+            />
+
             <div className="space-y-5">
               {currentBatch.files.map((file) => (
                 <StatementImportFilePanel
@@ -2737,6 +3168,9 @@ export function StatementImports() {
                   }
                   onEditMovement={openMovementEditor}
                   updatingMovementId={updatingMovementId}
+                  selectedMovementIds={selectedReviewMovementIds}
+                  onMovementSelectionChange={handleReviewSelectionChange}
+                  onSelectManyMovements={handleReviewSelectMany}
                 />
               ))}
             </div>
@@ -2752,8 +3186,29 @@ export function StatementImports() {
             categories={activeCategories}
             isSaving={isSavingMovement}
             onChange={handleMovementEditChange}
+            similarMovementCount={editingSimilarReviewMovementItems.length}
+            onSelectSimilarMovements={handleSelectSimilarReviewMovements}
+            onCreateCategory={(direction) =>
+              openQuickCategoryDialog({
+                direction,
+                movementId: editingMovement.id,
+                source: "movement",
+              })
+            }
             onClose={closeMovementEditor}
             onSubmit={handleMovementEditSubmit}
+          />
+        )}
+        {quickCategoryContext && (
+          <QuickCategoryDialog
+            context={quickCategoryContext}
+            name={quickCategoryName}
+            icon={quickCategoryIcon}
+            isSaving={isCreatingQuickCategory}
+            onNameChange={setQuickCategoryName}
+            onIconChange={setQuickCategoryIcon}
+            onClose={closeQuickCategoryDialog}
+            onSubmit={handleQuickCategorySubmit}
           />
         )}
         <ConfirmModal
@@ -2817,6 +3272,347 @@ export function StatementImports() {
   );
 }
 
+function BulkReviewCategoryPanel({
+  totalEligibleCount,
+  selectedCount,
+  selectedDirections,
+  categoryOptions,
+  selectedCategoryId,
+  isApplying,
+  isUpdatingStatus,
+  onCategoryChange,
+  onApply,
+  onIgnoreSelected,
+  onReviewSelected,
+  onResetSelected,
+  onCreateCategory,
+  onSelectAll,
+  onClear,
+}: {
+  totalEligibleCount: number;
+  selectedCount: number;
+  selectedDirections: StatementMovementDirection[];
+  categoryOptions: Category[];
+  selectedCategoryId: string;
+  isApplying: boolean;
+  isUpdatingStatus: boolean;
+  onCategoryChange: (categoryId: string) => void;
+  onApply: () => void;
+  onIgnoreSelected: () => void;
+  onReviewSelected: () => void;
+  onResetSelected: () => void;
+  onCreateCategory: () => void;
+  onSelectAll: () => void;
+  onClear: () => void;
+}) {
+  const hasSelection = selectedCount > 0;
+  const hasMixedDirections = selectedDirections.length > 1;
+  const createDisabledReason = !hasSelection
+    ? "Selecione movimentos para criar uma categoria contextual."
+    : hasMixedDirections
+      ? "Para criar categoria rapida, selecione apenas entradas ou apenas saidas."
+      : null;
+  const applyDisabledReason = isApplying
+    ? "Aguarde a aplicacao da categoria terminar."
+    : isUpdatingStatus
+      ? "Aguarde a atualizacao dos selecionados terminar."
+    : !hasSelection
+      ? "Selecione movimentos para aplicar categoria."
+      : !selectedCategoryId
+        ? "Selecione uma categoria compativel."
+        : null;
+  const statusDisabledReason = isUpdatingStatus
+    ? "Aguarde a atualizacao dos selecionados terminar."
+    : isApplying
+      ? "Aguarde a aplicacao da categoria terminar."
+      : !hasSelection
+        ? "Selecione movimentos para atualizar status."
+        : null;
+
+  return (
+    <div
+      className="glass rounded-2xl p-4"
+      style={{
+        backgroundColor: "var(--color-bg-card)",
+        border: "1px solid var(--color-border)",
+      }}
+    >
+      <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <p
+              className="text-sm font-semibold"
+              style={{ color: "var(--color-text)" }}
+            >
+              Categorizar selecionados
+            </p>
+            <span
+              className="rounded-full border px-2 py-0.5 text-xs font-medium"
+              style={{
+                borderColor: "var(--color-border)",
+                color: "var(--color-text-muted)",
+              }}
+            >
+              {selectedCount} de {totalEligibleCount} editavel(is)
+            </span>
+          </div>
+          <p
+            className="mt-1 text-xs"
+            style={{ color: "var(--color-text-muted)" }}
+          >
+            Use as checkboxes dos movimentos para aplicar uma categoria sem sair
+            da revisao.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-[auto_auto_minmax(14rem,1fr)_auto_auto_auto_auto_auto]">
+          <button
+            type="button"
+            onClick={onSelectAll}
+            disabled={totalEligibleCount === 0 || isApplying || isUpdatingStatus}
+            className="h-10 rounded-lg border px-3 text-xs font-semibold transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+            style={{
+              borderColor: "var(--color-border)",
+              color: "var(--color-text)",
+            }}
+          >
+            Selecionar editaveis
+          </button>
+          <button
+            type="button"
+            onClick={onClear}
+            disabled={!hasSelection || isApplying || isUpdatingStatus}
+            className="h-10 rounded-lg border px-3 text-xs font-semibold transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+            style={{
+              borderColor: "var(--color-border)",
+              color: "var(--color-text)",
+            }}
+          >
+            Limpar
+          </button>
+          <select
+            value={selectedCategoryId}
+            onChange={(event) => onCategoryChange(event.target.value)}
+            disabled={!hasSelection || isApplying || isUpdatingStatus}
+            className="app-control h-10"
+          >
+            <option value="">
+              {hasMixedDirections
+                ? "Categorias mistas compativeis"
+                : "Categoria para selecionados"}
+            </option>
+            {categoryOptions.map((category) => (
+              <option key={category.id} value={category.id}>
+                {formatCategoryLabel(category)} - {categoryKindLabel(category.kind)}
+              </option>
+            ))}
+          </select>
+          <DisabledReasonTooltip reason={createDisabledReason}>
+            <button
+              type="button"
+              title={createDisabledReason ?? "Criar categoria"}
+              aria-label="Criar categoria"
+              onClick={onCreateCategory}
+              disabled={
+                Boolean(createDisabledReason) || isApplying || isUpdatingStatus
+              }
+              className="flex h-10 w-full items-center justify-center rounded-lg border border-blue-200 bg-blue-50 text-blue-700 transition hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60 sm:w-10"
+            >
+              <Plus size={17} />
+            </button>
+          </DisabledReasonTooltip>
+          <DisabledReasonTooltip reason={statusDisabledReason}>
+            <button
+              type="button"
+              title={statusDisabledReason ?? "Ignorar selecionados"}
+              onClick={onIgnoreSelected}
+              disabled={Boolean(statusDisabledReason)}
+              className="flex h-10 items-center justify-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-4 text-sm font-semibold text-amber-900 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:border-amber-100 disabled:bg-amber-50 disabled:text-amber-400"
+            >
+              {isUpdatingStatus ? (
+                <RefreshCw size={16} className="animate-spin" />
+              ) : (
+                <XCircle size={16} />
+              )}
+              Ignorar
+            </button>
+          </DisabledReasonTooltip>
+          <DisabledReasonTooltip reason={statusDisabledReason}>
+            <button
+              type="button"
+              title={statusDisabledReason ?? "Marcar selecionados com aviso"}
+              onClick={onReviewSelected}
+              disabled={Boolean(statusDisabledReason)}
+              className="flex h-10 items-center justify-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-4 text-sm font-semibold text-amber-900 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:border-amber-100 disabled:bg-amber-50 disabled:text-amber-400"
+            >
+              {isUpdatingStatus ? (
+                <RefreshCw size={16} className="animate-spin" />
+              ) : (
+                <AlertTriangle size={16} />
+              )}
+              Aviso
+            </button>
+          </DisabledReasonTooltip>
+          <DisabledReasonTooltip reason={statusDisabledReason}>
+            <button
+              type="button"
+              title={statusDisabledReason ?? "Voltar selecionados para novo"}
+              onClick={onResetSelected}
+              disabled={Boolean(statusDisabledReason)}
+              className="flex h-10 items-center justify-center gap-2 rounded-lg border px-4 text-sm font-semibold transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+              style={{
+                borderColor: "var(--color-border)",
+                color: "var(--color-text)",
+              }}
+            >
+              {isUpdatingStatus ? (
+                <RefreshCw size={16} className="animate-spin" />
+              ) : (
+                <RefreshCw size={16} />
+              )}
+              Novo
+            </button>
+          </DisabledReasonTooltip>
+          <DisabledReasonTooltip reason={applyDisabledReason}>
+            <button
+              type="button"
+              title={applyDisabledReason ?? "Aplicar categoria"}
+              onClick={onApply}
+              disabled={Boolean(applyDisabledReason)}
+              className="flex h-10 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-400"
+            >
+              {isApplying ? (
+                <RefreshCw size={16} className="animate-spin" />
+              ) : (
+                <CheckCircle2 size={16} />
+              )}
+              {isApplying ? "Aplicando..." : "Aplicar"}
+            </button>
+          </DisabledReasonTooltip>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function QuickCategoryDialog({
+  context,
+  name,
+  icon,
+  isSaving,
+  onNameChange,
+  onIconChange,
+  onClose,
+  onSubmit,
+}: {
+  context: QuickCategoryContext;
+  name: string;
+  icon: string;
+  isSaving: boolean;
+  onNameChange: (name: string) => void;
+  onIconChange: (icon: string) => void;
+  onClose: () => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}) {
+  const kind = categoryKindFromDirection(context.direction);
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/75 p-4 backdrop-blur-sm sm:items-center">
+      <form
+        onSubmit={onSubmit}
+        className="w-full max-w-md rounded-2xl border p-5 shadow-2xl"
+        style={{
+          backgroundColor: "var(--color-bg-solid)",
+          borderColor: "var(--color-border)",
+        }}
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <h2
+              className="text-lg font-semibold"
+              style={{ color: "var(--color-text)" }}
+            >
+              Nova categoria
+            </h2>
+            <p
+              className="mt-1 text-sm"
+              style={{ color: "var(--color-text-muted)" }}
+            >
+              Natureza: {categoryKindLabel(kind)}
+            </p>
+          </div>
+          <button
+            type="button"
+            title="Fechar"
+            aria-label="Fechar"
+            onClick={onClose}
+            disabled={isSaving}
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+            style={{
+              borderColor: "var(--color-border)",
+              color: "var(--color-text)",
+            }}
+          >
+            <XCircle size={16} />
+          </button>
+        </div>
+
+        <div className="mt-5 space-y-4">
+          <div>
+            <label
+              className="mb-1 block text-sm font-medium"
+              style={{ color: "var(--color-text)" }}
+            >
+              Nome
+            </label>
+            <input
+              type="text"
+              value={name}
+              onChange={(event) => onNameChange(event.target.value)}
+              className="app-control"
+              maxLength={80}
+              autoFocus
+              required
+            />
+          </div>
+
+          <div>
+            <label
+              className="mb-1 block text-sm font-medium"
+              style={{ color: "var(--color-text)" }}
+            >
+              Icone
+            </label>
+            <StoredIconPicker value={icon} onChange={onIconChange} />
+          </div>
+        </div>
+
+        <div className="mt-5 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={isSaving}
+            className="rounded-lg border px-4 py-2 text-sm font-medium transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+            style={{
+              borderColor: "var(--color-border)",
+              color: "var(--color-text)",
+            }}
+          >
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            disabled={isSaving}
+            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-400"
+          >
+            {isSaving ? "Criando..." : "Criar categoria"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
 function MovementEditDialog({
   movement,
   file,
@@ -2825,6 +3621,9 @@ function MovementEditDialog({
   categories,
   isSaving,
   onChange,
+  similarMovementCount,
+  onSelectSimilarMovements,
+  onCreateCategory,
   onClose,
   onSubmit,
 }: {
@@ -2838,6 +3637,9 @@ function MovementEditDialog({
     field: K,
     value: MovementEditForm[K],
   ) => void;
+  similarMovementCount: number;
+  onSelectSimilarMovements: () => void;
+  onCreateCategory: (direction: StatementMovementDirection) => void;
   onClose: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
@@ -2847,6 +3649,9 @@ function MovementEditDialog({
   );
   const transferAccounts = accounts.filter(
     (account) => !account.isArchived && account.id !== file.financialAccountId,
+  );
+  const reviewCategories = categories.filter((category) =>
+    categoryMatchesMovementDirection(category, form.direction),
   );
   const transferAccountLabel =
     form.direction === "IN" ? "Conta de origem" : "Conta de destino";
@@ -3012,20 +3817,64 @@ function MovementEditDialog({
             >
               Categoria revisada
             </label>
-            <select
-              value={form.reviewCategoryId}
-              onChange={(event) =>
-                onChange("reviewCategoryId", event.target.value)
-              }
-              className="app-control"
+            <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+              <select
+                value={form.reviewCategoryId}
+                onChange={(event) =>
+                  onChange("reviewCategoryId", event.target.value)
+                }
+                className="app-control"
+              >
+                <option value="">Selecione uma categoria</option>
+                {reviewCategories.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {formatCategoryLabel(category)}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                title="Criar categoria"
+                aria-label="Criar categoria"
+                onClick={() => onCreateCategory(form.direction)}
+                disabled={isSaving}
+                className="flex h-11 w-11 items-center justify-center rounded-lg border border-blue-200 bg-blue-50 text-blue-700 transition hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <Plus size={17} />
+              </button>
+            </div>
+            <div
+              className="mt-3 flex flex-col gap-2 rounded-xl border p-3 sm:flex-row sm:items-center sm:justify-between"
+              style={{
+                borderColor: "var(--color-border)",
+                backgroundColor: "var(--color-bg)",
+              }}
             >
-              <option value="">Selecione uma categoria</option>
-              {categories.map((category) => (
-                <option key={category.id} value={category.id}>
-                  {formatCategoryLabel(category)}
-                </option>
-              ))}
-            </select>
+              <div className="min-w-0">
+                <p
+                  className="text-xs font-semibold"
+                  style={{ color: "var(--color-text)" }}
+                >
+                  Mesma descricao
+                </p>
+                <p
+                  className="mt-0.5 text-xs"
+                  style={{ color: "var(--color-text-muted)" }}
+                >
+                  {similarMovementCount} movimento(s) editavel(is) com a mesma
+                  descricao e direcao.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={onSelectSimilarMovements}
+                disabled={isSaving || similarMovementCount === 0}
+                className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 text-xs font-semibold text-blue-700 transition hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <ListChecks size={15} />
+                Selecionar similares
+              </button>
+            </div>
           </div>
         )}
 
@@ -3189,13 +4038,16 @@ function MovementReviewHints({ movement }: { movement: ImportedMovement }) {
   );
 }
 
-function StatementImportFilePanel({
+const StatementImportFilePanel = memo(function StatementImportFilePanel({
   file,
   movementStatusFilter,
   onMovementStatusChange,
   onMovementReconciliationChange,
   onEditMovement,
   updatingMovementId,
+  selectedMovementIds,
+  onMovementSelectionChange,
+  onSelectManyMovements,
 }: {
   file: StatementImportFile;
   movementStatusFilter: MovementStatusFilter;
@@ -3209,7 +4061,14 @@ function StatementImportFilePanel({
   ) => void;
   onEditMovement: (movement: ImportedMovement, file: StatementImportFile) => void;
   updatingMovementId: string | null;
+  selectedMovementIds: string[];
+  onMovementSelectionChange: (
+    movementId: string,
+    shouldSelect: boolean,
+  ) => void;
+  onSelectManyMovements: (movementIds: string[], shouldSelect: boolean) => void;
 }) {
+  const selectedIds = new Set(selectedMovementIds);
   const warnings = getWarnings(file);
   const duplicateMovements = file.movements.filter(
     (movement) => movement.status === "DUPLICATE",
@@ -3247,6 +4106,15 @@ function StatementImportFilePanel({
     (movementPage - 1) * MOVEMENTS_PER_PAGE,
     movementPage * MOVEMENTS_PER_PAGE,
   );
+  const visibleEligibleMovementIds = visibleMovements
+    .filter(isBulkCategoryMovementEligible)
+    .map((movement) => movement.id);
+  const selectedVisibleEligibleCount = visibleEligibleMovementIds.filter(
+    (movementId) => selectedIds.has(movementId),
+  ).length;
+  const visibleEligibleChecked =
+    visibleEligibleMovementIds.length > 0 &&
+    selectedVisibleEligibleCount === visibleEligibleMovementIds.length;
 
   return (
     <div
@@ -3305,6 +4173,45 @@ function StatementImportFilePanel({
         />
       </div>
 
+      {visibleEligibleMovementIds.length > 0 && (
+        <div
+          className="mt-4 flex flex-col gap-3 rounded-xl border p-3 sm:flex-row sm:items-center sm:justify-between"
+          style={{
+            borderColor: "var(--color-border)",
+            backgroundColor: "var(--color-bg)",
+          }}
+        >
+          <label className="flex min-w-0 items-center gap-3">
+            <input
+              type="checkbox"
+              checked={visibleEligibleChecked}
+              onChange={(event) =>
+                onSelectManyMovements(
+                  visibleEligibleMovementIds,
+                  event.target.checked,
+                )
+              }
+              className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            />
+            <span className="min-w-0">
+              <span
+                className="block text-sm font-semibold"
+                style={{ color: "var(--color-text)" }}
+              >
+                Selecionar transacoes editaveis deste filtro
+              </span>
+              <span
+                className="block text-xs"
+                style={{ color: "var(--color-text-muted)" }}
+              >
+                {selectedVisibleEligibleCount} de{" "}
+                {visibleEligibleMovementIds.length} selecionada(s)
+              </span>
+            </span>
+          </label>
+        </div>
+      )}
+
       {warnings.length > 0 && (
         <div className="mt-4 space-y-2">
           {warnings.map((warning) => (
@@ -3356,14 +4263,23 @@ function StatementImportFilePanel({
                   onEditMovement(selectedMovement, file)
                 }
                 isUpdating={updatingMovementId === movement.id}
+                isSelected={selectedIds.has(movement.id)}
+                canSelect={isBulkCategoryMovementEligible(movement)}
+                onSelectionChange={onMovementSelectionChange}
               />
             ))}
           </div>
 
           <div className="mt-5 hidden overflow-x-auto md:block">
-            <table className="w-full min-w-[1120px]">
+            <table className="w-full min-w-[1180px]">
               <thead>
                 <tr style={{ borderBottom: "1px solid var(--color-border)" }}>
+                  <th
+                    className="w-12 px-4 py-3 text-left text-sm font-semibold"
+                    style={{ color: "var(--color-text-muted)" }}
+                  >
+                    Sel.
+                  </th>
                   <th
                     className="px-4 py-3 text-left text-sm font-semibold"
                     style={{ color: "var(--color-text-muted)" }}
@@ -3415,17 +4331,40 @@ function StatementImportFilePanel({
                 </tr>
               </thead>
               <tbody>
-                {paginatedMovements.map((movement) => (
-                  <tr
-                    key={movement.id}
-                    style={{ borderBottom: "1px solid var(--color-border)" }}
-                  >
-                    <td
-                      className="whitespace-nowrap px-4 py-3 text-sm"
-                      style={{ color: "var(--color-text-muted)" }}
+                {paginatedMovements.map((movement) => {
+                  const canSelectMovement =
+                    isBulkCategoryMovementEligible(movement);
+
+                  return (
+                    <tr
+                      key={movement.id}
+                      style={{ borderBottom: "1px solid var(--color-border)" }}
                     >
-                      {formatDate(movement.date)}
-                    </td>
+                      <td className="px-4 py-3">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(movement.id)}
+                          onChange={(event) =>
+                            onMovementSelectionChange(
+                              movement.id,
+                              event.target.checked,
+                            )
+                          }
+                          disabled={!canSelectMovement}
+                          title={
+                            canSelectMovement
+                              ? "Selecionar para categorizar"
+                              : "Somente transacoes editaveis podem ser categorizadas em massa"
+                          }
+                          className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-40"
+                        />
+                      </td>
+                      <td
+                        className="whitespace-nowrap px-4 py-3 text-sm"
+                        style={{ color: "var(--color-text-muted)" }}
+                      >
+                        {formatDate(movement.date)}
+                      </td>
                     <td className="px-4 py-3">
                       <span
                         className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium ${statusClass(movement.status)}`}
@@ -3494,14 +4433,15 @@ function StatementImportFilePanel({
                         {directionLabel(movement.direction)}
                       </span>
                     </td>
-                    <td
-                      className="whitespace-nowrap px-4 py-3 text-right text-sm font-semibold"
-                      style={{ color: "var(--color-text)" }}
-                    >
-                      {centsToCurrency(movement.amountCents)}
-                    </td>
-                  </tr>
-                ))}
+                      <td
+                        className="whitespace-nowrap px-4 py-3 text-right text-sm font-semibold"
+                        style={{ color: "var(--color-text)" }}
+                      >
+                        {centsToCurrency(movement.amountCents)}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -3525,7 +4465,7 @@ function StatementImportFilePanel({
       )}
     </div>
   );
-}
+});
 
 function InfoPill({ label, value }: { label: string; value: string }) {
   return (
@@ -4311,31 +5251,7 @@ function ApplyReadyConfirmationGrid({
   );
 }
 
-function movementActionClass(
-  status: ReviewableMovementStatus,
-  isActive: boolean,
-  isBlocked = false,
-): string {
-  if (isActive) {
-    return "border-blue-600 bg-blue-600 text-white";
-  }
-
-  if (isBlocked) {
-    return "border-yellow-200 bg-yellow-50 text-yellow-700";
-  }
-
-  if (status === "READY") {
-    return "border-green-200 bg-green-50 text-green-700 hover:bg-green-100";
-  }
-
-  if (status === "IGNORED") {
-    return "border-red-200 bg-red-50 text-red-700 hover:bg-red-100";
-  }
-
-  return "border-gray-200 bg-gray-50 text-gray-700 hover:bg-gray-100";
-}
-
-function MovementStatusActions({
+const MovementStatusActions = memo(function MovementStatusActions({
   movement,
   readinessIssue,
   onStatusChange,
@@ -4356,6 +5272,8 @@ function MovementStatusActions({
   onEditMovement: (movement: ImportedMovement) => void;
   isUpdating: boolean;
 }) {
+  const [isStatusMenuOpen, setIsStatusMenuOpen] = useState(false);
+
   if (movement.status === "APPLIED") {
     const appliedLink = getAppliedMovementLink(movement);
     const appliedTitle = movement.appliedAt
@@ -4386,8 +5304,162 @@ function MovementStatusActions({
     ? "Aguarde a atualizacao do movimento terminar."
     : null;
 
+  const movementStatusButtonClass =
+    movement.status === "READY"
+      ? "border-green-200 bg-green-50 text-green-700 hover:bg-green-100"
+      : movement.status === "IGNORED"
+        ? "border-red-200 bg-red-50 text-red-700 hover:bg-red-100"
+        : movement.status === "NEEDS_REVIEW"
+          ? "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
+          : movement.status === "DUPLICATE"
+            ? "border-yellow-200 bg-yellow-50 text-yellow-700 hover:bg-yellow-100"
+            : "border-gray-200 bg-gray-50 text-gray-700 hover:bg-gray-100";
+
+  const statusItems: MovementMenuItem[] = MOVEMENT_REVIEW_ACTIONS.map(
+    (action) => {
+      const isActive = movement.status === action.status;
+      const isReadyBlocked =
+        action.status === "READY" && Boolean(readinessIssue);
+      const disabledReason = isUpdating
+        ? "Aguarde a atualizacao do movimento terminar."
+        : isActive
+          ? `Movimento ja esta como ${movementStatusLabel(action.status).toLowerCase()}.`
+          : isReadyBlocked
+            ? readinessIssue
+            : null;
+
+      return {
+        key: action.status,
+        label: action.label,
+        description:
+          action.status === "READY"
+            ? "Liberar para aplicacao"
+            : action.status === "IGNORED"
+              ? "Nao importar este movimento"
+              : action.status === "NEEDS_REVIEW"
+                ? "Sinalizar para voltar depois"
+                : "Reabrir como movimento novo",
+        title: action.title,
+        icon: action.icon,
+        disabledReason,
+        isCurrent: isActive,
+        onSelect: () => onStatusChange(movement.id, action.status),
+        tone:
+          action.status === "READY"
+            ? "success"
+            : action.status === "IGNORED"
+              ? "danger"
+              : action.status === "NEEDS_REVIEW"
+                ? "warning"
+                : "default",
+      };
+    },
+  );
+
+  const reconciliationItems: MovementMenuItem[] = hasLedgerReconciliationMatch(
+    movement,
+  )
+    ? [
+        {
+          key: "reconciliation-unique",
+          label: "Confirmar novo",
+          description: "Nao duplicar com o ledger",
+          title: "Confirmar que nao duplica o ledger",
+          icon: CheckCircle2,
+          disabledReason: isUpdating
+            ? "Aguarde a atualizacao do movimento terminar."
+            : movement.reconciliationStatus === "CONFIRMED_UNIQUE"
+              ? "Movimento ja foi confirmado como novo."
+              : null,
+          isCurrent: movement.reconciliationStatus === "CONFIRMED_UNIQUE",
+          onSelect: () =>
+            onReconciliationChange(movement.id, "CONFIRMED_UNIQUE"),
+          tone: "success",
+        },
+        {
+          key: "reconciliation-duplicate",
+          label: "Ignorar duplicado",
+          description: "Confirmar duplicidade",
+          title: "Confirmar duplicidade e ignorar",
+          icon: XCircle,
+          disabledReason: isUpdating
+            ? "Aguarde a atualizacao do movimento terminar."
+            : movement.reconciliationStatus === "CONFIRMED_DUPLICATE"
+              ? "Movimento ja foi confirmado como duplicidade."
+              : null,
+          isCurrent: movement.reconciliationStatus === "CONFIRMED_DUPLICATE",
+          onSelect: () =>
+            onReconciliationChange(movement.id, "CONFIRMED_DUPLICATE"),
+          tone: "danger",
+        },
+      ]
+    : [];
+
+  const renderMenuItem = (item: MovementMenuItem) => {
+    const Icon = item.icon;
+    const toneClass =
+      item.tone === "success"
+        ? "text-green-800 hover:bg-green-50"
+        : item.tone === "danger"
+          ? "text-red-800 hover:bg-red-50"
+          : item.tone === "warning"
+            ? "text-amber-800 hover:bg-amber-50"
+            : "text-gray-700 hover:bg-gray-50";
+    const iconClass =
+      item.tone === "success"
+        ? "bg-green-100 text-green-700"
+        : item.tone === "danger"
+          ? "bg-red-100 text-red-700"
+          : item.tone === "warning"
+            ? "bg-amber-100 text-amber-700"
+            : "bg-gray-100 text-gray-700";
+    const disabledClass = item.disabledReason
+      ? "opacity-60"
+      : "hover:shadow-sm";
+
+    return (
+      <button
+        key={item.key}
+        type="button"
+        title={item.disabledReason ?? item.title}
+        disabled={Boolean(item.disabledReason)}
+        onClick={() => {
+          if (item.disabledReason) {
+            return;
+          }
+
+          setIsStatusMenuOpen(false);
+          item.onSelect();
+        }}
+        className={`flex w-full items-start gap-3 rounded-lg px-3 py-2.5 text-left transition disabled:cursor-not-allowed ${toneClass} ${disabledClass}`}
+      >
+        <span
+          className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${iconClass}`}
+        >
+          <Icon size={16} />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="flex items-center gap-2">
+            <span className="text-sm font-semibold">{item.label}</span>
+            {item.isCurrent && (
+              <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-blue-700">
+                Atual
+              </span>
+            )}
+          </span>
+          <span
+            className="mt-0.5 block text-xs leading-5"
+            style={{ color: "var(--color-text-muted)" }}
+          >
+            {item.isCurrent ? item.description : item.disabledReason ?? item.description}
+          </span>
+        </span>
+      </button>
+    );
+  };
+
   return (
-    <div className="flex flex-wrap gap-2">
+    <div className="flex flex-wrap items-center gap-2">
       <DisabledReasonTooltip reason={editDisabledReason}>
         <button
           type="button"
@@ -4401,116 +5473,118 @@ function MovementStatusActions({
         </button>
       </DisabledReasonTooltip>
 
-      {hasLedgerReconciliationMatch(movement) && (
-        <>
-          <DisabledReasonTooltip
-            reason={
-              isUpdating
-                ? "Aguarde a atualizacao do movimento terminar."
-                : movement.reconciliationStatus === "CONFIRMED_UNIQUE"
-                  ? "Movimento ja foi confirmado como novo."
-                  : null
-            }
-          >
-            <button
-              type="button"
-              title={
-                isUpdating
-                  ? "Aguarde a atualizacao do movimento terminar."
-                  : movement.reconciliationStatus === "CONFIRMED_UNIQUE"
-                    ? "Movimento ja foi confirmado como novo."
-                    : "Confirmar que nao duplica o ledger"
-              }
-              aria-label="Confirmar que nao duplica o ledger"
-              onClick={() =>
-                onReconciliationChange(movement.id, "CONFIRMED_UNIQUE")
-              }
-              disabled={
-                isUpdating ||
-                movement.reconciliationStatus === "CONFIRMED_UNIQUE"
-              }
-              className="flex h-9 w-9 items-center justify-center rounded-lg border border-green-200 bg-green-50 text-green-700 transition hover:bg-green-100 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <CheckCircle2 size={16} />
-            </button>
-          </DisabledReasonTooltip>
-          <DisabledReasonTooltip
-            reason={
-              isUpdating
-                ? "Aguarde a atualizacao do movimento terminar."
-                : movement.reconciliationStatus === "CONFIRMED_DUPLICATE"
-                  ? "Movimento ja foi confirmado como duplicidade."
-                  : null
-            }
-          >
-            <button
-              type="button"
-              title={
-                isUpdating
-                  ? "Aguarde a atualizacao do movimento terminar."
-                  : movement.reconciliationStatus === "CONFIRMED_DUPLICATE"
-                    ? "Movimento ja foi confirmado como duplicidade."
-                    : "Confirmar duplicidade e ignorar"
-              }
-              aria-label="Confirmar duplicidade e ignorar"
-              onClick={() =>
-                onReconciliationChange(movement.id, "CONFIRMED_DUPLICATE")
-              }
-              disabled={
-                isUpdating ||
-                movement.reconciliationStatus === "CONFIRMED_DUPLICATE"
-              }
-              className="flex h-9 w-9 items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <XCircle size={16} />
-            </button>
-          </DisabledReasonTooltip>
-        </>
-      )}
+      <div
+        className="relative"
+        onBlur={(event) => {
+          if (
+            !event.currentTarget.contains(event.relatedTarget as Node | null)
+          ) {
+            setIsStatusMenuOpen(false);
+          }
+        }}
+      >
+        <button
+          type="button"
+          title="Alterar status do movimento"
+          aria-label="Alterar status do movimento"
+          aria-expanded={isStatusMenuOpen}
+          onClick={() => setIsStatusMenuOpen((current) => !current)}
+          disabled={isUpdating}
+          className={`inline-flex h-9 min-w-[8.5rem] items-center justify-between gap-2 rounded-lg border px-3 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-60 ${movementStatusButtonClass}`}
+        >
+          {isUpdating ? (
+            <RefreshCw size={15} className="animate-spin" />
+          ) : (
+            <StatusIcon status={movement.status} />
+          )}
+          <span className="flex-1 text-left">
+            {movementStatusLabel(movement.status)}
+          </span>
+          <ChevronDown
+            size={14}
+            className={`transition ${isStatusMenuOpen ? "rotate-180" : ""}`}
+          />
+        </button>
 
-      {MOVEMENT_REVIEW_ACTIONS.map((action) => {
-        const Icon = action.icon;
-        const isActive = movement.status === action.status;
-        const isReadyBlocked =
-          action.status === "READY" && Boolean(readinessIssue);
-        const disabledReason = isUpdating
-          ? "Aguarde a atualizacao do movimento terminar."
-          : isActive
-            ? `Movimento ja esta como ${movementStatusLabel(action.status).toLowerCase()}.`
-            : isReadyBlocked
-              ? readinessIssue
-              : null;
-
-        return (
-          <DisabledReasonTooltip key={action.status} reason={disabledReason}>
-            <button
-              type="button"
-              title={disabledReason ?? action.title}
-              aria-label={action.title}
-              onClick={() => onStatusChange(movement.id, action.status)}
-              disabled={isUpdating || isActive || isReadyBlocked}
-              className={`flex h-9 w-9 items-center justify-center rounded-lg border transition disabled:cursor-not-allowed disabled:opacity-60 ${movementActionClass(action.status, isActive, isReadyBlocked)}`}
+        {isStatusMenuOpen && (
+          <div
+            className="absolute left-1/2 z-30 mt-2 w-80 max-w-[calc(100vw-2rem)] -translate-x-1/2 overflow-visible rounded-xl border shadow-2xl"
+            style={{
+              borderColor: "var(--color-border)",
+              backgroundColor: "var(--color-bg-solid)",
+              boxShadow: "0 20px 45px rgba(15, 23, 42, 0.22)",
+            }}
+          >
+            <span
+              className="absolute left-1/2 top-0 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rotate-45 border-l border-t"
+              style={{
+                borderColor: "var(--color-border)",
+                backgroundColor: "var(--color-bg-solid)",
+              }}
+            />
+            <div
+              className="overflow-hidden rounded-t-xl border-b px-4 py-3"
+              style={{
+                borderColor: "var(--color-border)",
+                backgroundColor: "var(--color-bg-solid)",
+              }}
             >
-              {isUpdating ? (
-                <RefreshCw size={16} className="animate-spin" />
-              ) : (
-                <Icon size={16} />
-              )}
-            </button>
-          </DisabledReasonTooltip>
-        );
-      })}
+              <p
+                className="text-sm font-semibold"
+                style={{ color: "var(--color-text)" }}
+              >
+                Movimento
+              </p>
+              <p
+                className="mt-0.5 text-xs"
+                style={{ color: "var(--color-text-muted)" }}
+              >
+                Status atual: {movementStatusLabel(movement.status)}
+              </p>
+            </div>
+
+            <div className="p-2">
+              <p
+                className="px-2 pb-1 pt-1 text-[11px] font-semibold uppercase tracking-wide"
+                style={{ color: "var(--color-text-muted)" }}
+              >
+                Status
+              </p>
+              {statusItems.map(renderMenuItem)}
+            </div>
+
+            {reconciliationItems.length > 0 && (
+              <div className="px-2 pb-2">
+                <div
+                  className="mb-1 border-t"
+                  style={{ borderColor: "var(--color-border)" }}
+                />
+                <p
+                  className="px-2 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide"
+                  style={{ color: "var(--color-text-muted)" }}
+                >
+                  Conciliacao
+                </p>
+                {reconciliationItems.map(renderMenuItem)}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
-}
+});
 
-function MovementCard({
+const MovementCard = memo(function MovementCard({
   movement,
   readinessIssue,
   onStatusChange,
   onReconciliationChange,
   onEditMovement,
   isUpdating,
+  isSelected,
+  canSelect,
+  onSelectionChange,
 }: {
   movement: ImportedMovement;
   readinessIssue: string | null;
@@ -4524,6 +5598,9 @@ function MovementCard({
   ) => void;
   onEditMovement: (movement: ImportedMovement) => void;
   isUpdating: boolean;
+  isSelected: boolean;
+  canSelect: boolean;
+  onSelectionChange: (movementId: string, shouldSelect: boolean) => void;
 }) {
   return (
     <div
@@ -4534,7 +5611,22 @@ function MovementCard({
       }}
     >
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
+        <div className="flex min-w-0 items-start gap-3">
+          <input
+            type="checkbox"
+            checked={isSelected}
+            onChange={(event) =>
+              onSelectionChange(movement.id, event.target.checked)
+            }
+            disabled={!canSelect}
+            title={
+              canSelect
+                ? "Selecionar para categorizar"
+                : "Somente transacoes editaveis podem ser categorizadas em massa"
+            }
+            className="mt-1 h-4 w-4 shrink-0 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-40"
+          />
+          <div className="min-w-0">
           <p
             className="break-words text-sm font-semibold"
             style={{ color: "var(--color-text)" }}
@@ -4563,6 +5655,7 @@ function MovementCard({
           >
             {formatDate(movement.date)}
           </p>
+          </div>
         </div>
         <span
           className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${statusClass(movement.status)}`}
@@ -4610,4 +5703,4 @@ function MovementCard({
       </div>
     </div>
   );
-}
+});

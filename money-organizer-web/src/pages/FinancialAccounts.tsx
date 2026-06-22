@@ -28,7 +28,7 @@ import {
 } from '../schemas'
 import { formatCurrency, formatDate, transactionTypeLabel } from '../utils'
 import { StoredIcon, StoredIconPicker } from '../components/StoredIcon'
-import { formatStoredIconPrefix } from '../components/storedIconRegistry'
+import { formatStoredIconPrefix, getStoredIconOption } from '../components/storedIconRegistry'
 
 const ACCOUNT_TYPE_LABELS: Record<FinancialAccountType, string> = {
     BANK_ACCOUNT: 'Conta bancária',
@@ -62,10 +62,12 @@ const DEFAULT_ADJUSTMENT_FORM_VALUES: BalanceAdjustmentFormData = {
 }
 
 function sanitizeAccountPayload(data: FinancialAccountFormData) {
+    const icon = data.icon?.trim()
+
     return {
         ...data,
         institutionName: data.institutionName?.trim() || undefined,
-        icon: data.icon?.trim() || undefined,
+        icon: icon && getStoredIconOption(icon) ? icon : '',
         color: data.color?.trim() || undefined,
     }
 }

@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsBoolean, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsBoolean, IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
+import { CategoryKind } from '../../../generated/prisma/client';
 
 export class UpdateCategoryDto {
   @ApiProperty({
@@ -12,7 +13,7 @@ export class UpdateCategoryDto {
   name?: string;
 
   @ApiProperty({
-    description: 'Icone da categoria, como emoji ou chave lucide:*',
+    description: 'Icone da categoria em uma chave lucide:* selecionada no app',
     example: 'lucide:graduation-cap',
     required: false,
   })
@@ -20,6 +21,16 @@ export class UpdateCategoryDto {
   @MaxLength(64)
   @IsOptional()
   icon?: string;
+
+  @ApiProperty({
+    description: 'Natureza financeira permitida para a categoria',
+    enum: CategoryKind,
+    example: CategoryKind.INCOME,
+    required: false,
+  })
+  @IsEnum(CategoryKind)
+  @IsOptional()
+  kind?: CategoryKind;
 
   @ApiProperty({
     description: 'Indica se a categoria esta arquivada',

@@ -23,6 +23,7 @@ const CATEGORY_SUMMARY_SELECT = {
   id: true,
   name: true,
   icon: true,
+  kind: true,
   isArchived: true,
 };
 

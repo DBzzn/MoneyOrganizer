@@ -9,6 +9,7 @@ export interface Category {
   id: string;
   name: string;
   icon?: string;
+  kind: "EXPENSE" | "INCOME" | "BOTH";
   isArchived: boolean;
   createdAt: string;
 }
@@ -109,7 +110,7 @@ export interface Reminder {
     "id" | "name" | "type" | "institutionName" | "icon" | "color" | "isArchived"
   > | null;
   categoryId?: string | null;
-  category?: Pick<Category, "id" | "name" | "icon" | "isArchived"> | null;
+  category?: Pick<Category, "id" | "name" | "icon" | "kind" | "isArchived"> | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -209,7 +210,7 @@ export interface ImportedMovement {
   status: ImportedMovementStatus;
   reviewTarget: ImportedMovementReviewTarget;
   reviewCategoryId?: string | null;
-  reviewCategory?: Pick<Category, "id" | "name" | "icon" | "isArchived"> | null;
+  reviewCategory?: Pick<Category, "id" | "name" | "icon" | "kind" | "isArchived"> | null;
   reviewTransferAccountId?: string | null;
   reviewTransferAccount?: Pick<
     FinancialAccount,
@@ -368,7 +369,7 @@ export interface AccountLedgerItem {
   affectsCurrentBalance: boolean;
   isPending: boolean;
   transactionType?: TransactionType;
-  category?: Pick<Category, "id" | "name" | "icon" | "isArchived">;
+  category?: Pick<Category, "id" | "name" | "icon" | "kind" | "isArchived">;
   relatedAccount?: Pick<
     FinancialAccount,
     "id" | "name" | "icon" | "color" | "isArchived"
