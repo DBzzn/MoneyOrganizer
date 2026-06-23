@@ -66,10 +66,14 @@ function sortAccountsByCurrentBalance(accounts: FinancialAccount[]): FinancialAc
     })
 }
 
+function canShowAsExpenseCategory(item: CategoryTotal): boolean {
+    return item.categoryKind !== 'INCOME'
+}
+
 function mergeCategoryTotals(groups: CategoryTotal[][]): CategoryTotal[] {
     const totals = new Map<string, CategoryTotal>()
 
-    groups.flat().forEach((item) => {
+    groups.flat().filter(canShowAsExpenseCategory).forEach((item) => {
         const current = totals.get(item.categoryId)
         const nextAmount = Number(current?.totalAmount ?? 0) + Number(item.totalAmount)
         const nextCount = (current?.transactionCount ?? 0) + item.transactionCount

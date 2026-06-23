@@ -257,8 +257,8 @@ describe('TransactionsService', () => {
         },
       ]);
       prisma.category.findMany.mockResolvedValue([
-        { id: 'category-1', name: 'Alimentação', icon: '🍔' },
-        { id: 'category-2', name: 'Saúde', icon: '💊' },
+        { id: 'category-1', name: 'Alimentação', icon: '🍔', kind: CategoryKind.EXPENSE },
+        { id: 'category-2', name: 'Saúde', icon: '💊', kind: CategoryKind.BOTH },
       ]);
 
       await expect(
@@ -268,6 +268,7 @@ describe('TransactionsService', () => {
           categoryId: 'category-2',
           categoryName: 'Saúde',
           categoryIcon: '💊',
+          categoryKind: CategoryKind.BOTH,
           totalAmount: '150.00',
           transactionCount: 2,
         },
@@ -275,6 +276,7 @@ describe('TransactionsService', () => {
           categoryId: 'category-1',
           categoryName: 'Alimentação',
           categoryIcon: '🍔',
+          categoryKind: CategoryKind.EXPENSE,
           totalAmount: '45.67',
           transactionCount: 1,
         },

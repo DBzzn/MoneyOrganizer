@@ -109,6 +109,10 @@ function isExpenseTransaction(transaction: Transaction): boolean {
   return EXPENSE_TRANSACTION_TYPES.includes(transaction.type)
 }
 
+function isExpenseCategoryTransaction(transaction: Transaction): boolean {
+  return isExpenseTransaction(transaction) && transaction.category.kind !== 'INCOME'
+}
+
 function getAccountBalance(account: FinancialAccount): number {
   return Number(account.currentBalance) || 0
 }
@@ -193,7 +197,7 @@ function getDominantExpenseCategory(transactions: Transaction[]) {
     total: number
   }>()
 
-  transactions.filter(isExpenseTransaction).forEach((transaction) => {
+  transactions.filter(isExpenseCategoryTransaction).forEach((transaction) => {
     const current = totals.get(transaction.categoryId) ?? {
       name: transaction.category.name,
       icon: transaction.category.icon,
@@ -214,7 +218,7 @@ function getExpenseCategoryChartData(transactions: Transaction[]) {
     total: number
   }>()
 
-  transactions.filter(isExpenseTransaction).forEach((transaction) => {
+  transactions.filter(isExpenseCategoryTransaction).forEach((transaction) => {
     const current = totals.get(transaction.categoryId) ?? {
       name: transaction.category.name,
       icon: transaction.category.icon,
@@ -379,7 +383,7 @@ export function Dashboard() {
   const negativeAccountCount = selectedAccounts.filter((account) => getAccountBalance(account) < 0).length
   const selectedMonthLabel = getMonthLabel(selectedMonth)
   const expenseUsagePercent = monthlyIncome > 0 ? (monthlyExpenses / monthlyIncome) * 100 : null
-  const topExpenses = getTopTransactions(transactions, isExpenseTransaction, 5)
+  const topExpenses = getTopTransactions(transactions, isExpenseCategoryTransaction, 5)
   const topIncome = getTopTransactions(transactions, (transaction) => transaction.type === 'INCOME', 3)
   const dominantExpenseCategory = getDominantExpenseCategory(transactions)
   const pendingReminders = reminders

@@ -35,6 +35,7 @@ import {
   type LucideIcon,
   Undo2,
   Upload,
+  X,
   XCircle,
 } from "lucide-react";
 import ConfirmModal from "../components/ConfirmModal";
@@ -234,6 +235,7 @@ type MovementMenuItem = {
 };
 
 type MovementStatusMenuPosition = {
+  mode: "popover" | "sheet";
   left: number;
   top: number;
   placement: "top" | "bottom";
@@ -1262,6 +1264,9 @@ export function StatementImports() {
   const [selectedReviewMovementIds, setSelectedReviewMovementIds] = useState<
     string[]
   >([]);
+  const [expandedImportFileIds, setExpandedImportFileIds] = useState<string[]>(
+    [],
+  );
   const [selectedBulkCategoryId, setSelectedBulkCategoryId] = useState("");
   const [quickCategoryContext, setQuickCategoryContext] =
     useState<QuickCategoryContext | null>(null);
@@ -1397,6 +1402,14 @@ export function StatementImports() {
   const currentBatchStillListed =
     !currentBatch ||
     batchSummaries.some((summary) => summary.id === currentBatch.id);
+  const expandedImportFileIdSet = useMemo(
+    () => new Set(expandedImportFileIds),
+    [expandedImportFileIds],
+  );
+  const allCurrentBatchFilesExpanded = currentBatch
+    ? currentBatch.files.length > 0 &&
+      currentBatch.files.every((file) => expandedImportFileIdSet.has(file.id))
+    : false;
   const batchRangeStart =
     batchSummaries.length === 0
       ? 0
@@ -1405,6 +1418,54 @@ export function StatementImports() {
     effectiveBatchPage * BATCHES_PER_PAGE,
     batchSummaries.length,
   );
+  useEffect(() => {
+    if (!currentBatch) {
+      setExpandedImportFileIds([]);
+      return;
+    }
+
+    setExpandedImportFileIds((currentIds) => {
+      const batchFileIds = new Set(currentBatch.files.map((file) => file.id));
+      const validIds = currentIds.filter((id) => batchFileIds.has(id));
+
+      if (validIds.length > 0) {
+        if (
+          validIds.length === currentIds.length &&
+          validIds.every((id, index) => id === currentIds[index])
+        ) {
+          return currentIds;
+        }
+
+        return validIds;
+      }
+
+      const firstFileWithMovements =
+        currentBatch.files.find((file) => file.movements.length > 0) ??
+        currentBatch.files[0];
+
+      return firstFileWithMovements ? [firstFileWithMovements.id] : [];
+    });
+  }, [currentBatch]);
+
+  const toggleImportFileExpansion = useCallback((fileId: string) => {
+    setExpandedImportFileIds((currentIds) =>
+      currentIds.includes(fileId)
+        ? currentIds.filter((id) => id !== fileId)
+        : [...currentIds, fileId],
+    );
+  }, []);
+
+  const setAllImportFilesExpanded = useCallback(
+    (shouldExpand: boolean) => {
+      setExpandedImportFileIds(
+        shouldExpand && currentBatch
+          ? currentBatch.files.map((file) => file.id)
+          : [],
+      );
+    },
+    [currentBatch],
+  );
+
   const readyReconciliationBlockCount = useMemo(() => {
     const movements =
       currentBatch?.files.flatMap((file) => file.movements) ?? [];
@@ -3165,11 +3226,52 @@ export function StatementImports() {
               onClear={() => setSelectedReviewMovementIds([])}
             />
 
-            <div className="space-y-5">
+            <div className="space-y-3">
+              <div
+                className="glass flex flex-col gap-3 rounded-2xl p-4 sm:flex-row sm:items-center sm:justify-between"
+                style={{
+                  backgroundColor: "var(--color-bg-card)",
+                  border: "1px solid var(--color-border)",
+                }}
+              >
+                <div className="min-w-0">
+                  <div
+                    className="flex items-center gap-2 text-sm font-semibold"
+                    style={{ color: "var(--color-text)" }}
+                  >
+                    <Files size={16} style={{ color: "var(--color-brand)" }} />
+                    Arquivos do lote
+                  </div>
+                  <p
+                    className="mt-1 text-xs"
+                    style={{ color: "var(--color-text-muted)" }}
+                  >
+                    {expandedImportFileIds.length} de {currentBatch.files.length} arquivo(s) aberto(s)
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setAllImportFilesExpanded(!allCurrentBatchFilesExpanded)
+                  }
+                  className="app-icon-control inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-medium sm:w-auto"
+                >
+                  <ChevronDown
+                    size={16}
+                    className={`transition ${
+                      allCurrentBatchFilesExpanded ? "rotate-180" : ""
+                    }`}
+                  />
+                  {allCurrentBatchFilesExpanded ? "Recolher todos" : "Expandir todos"}
+                </button>
+              </div>
+
               {currentBatch.files.map((file) => (
                 <StatementImportFilePanel
                   key={file.id}
                   file={file}
+                  isExpanded={expandedImportFileIdSet.has(file.id)}
+                  onToggle={() => toggleImportFileExpansion(file.id)}
                   movementStatusFilter={movementStatusFilter}
                   onMovementStatusChange={handleMovementStatusChange}
                   onMovementReconciliationChange={
@@ -4049,6 +4151,8 @@ function MovementReviewHints({ movement }: { movement: ImportedMovement }) {
 
 const StatementImportFilePanel = memo(function StatementImportFilePanel({
   file,
+  isExpanded,
+  onToggle,
   movementStatusFilter,
   onMovementStatusChange,
   onMovementReconciliationChange,
@@ -4059,6 +4163,8 @@ const StatementImportFilePanel = memo(function StatementImportFilePanel({
   onSelectManyMovements,
 }: {
   file: StatementImportFile;
+  isExpanded: boolean;
+  onToggle: () => void;
   movementStatusFilter: MovementStatusFilter;
   onMovementStatusChange: (
     movementId: string,
@@ -4157,12 +4263,26 @@ const StatementImportFilePanel = memo(function StatementImportFilePanel({
           </p>
         </div>
 
-        <div
-          className="flex min-w-0 items-center gap-2 text-xs"
-          style={{ color: "var(--color-text-muted)" }}
-        >
-          <Fingerprint size={14} className="shrink-0" />
-          <span className="truncate">{file.fileHash}</span>
+        <div className="flex min-w-0 flex-col gap-2 sm:items-end">
+          <div
+            className="flex min-w-0 items-center gap-2 text-xs"
+            style={{ color: "var(--color-text-muted)" }}
+          >
+            <Fingerprint size={14} className="shrink-0" />
+            <span className="truncate">{file.fileHash}</span>
+          </div>
+          <button
+            type="button"
+            onClick={onToggle}
+            aria-expanded={isExpanded}
+            className="app-icon-control inline-flex w-full items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-medium sm:w-auto"
+          >
+            <ChevronDown
+              size={16}
+              className={`transition ${isExpanded ? "rotate-180" : ""}`}
+            />
+            {isExpanded ? "Recolher movimentos" : "Revisar movimentos"}
+          </button>
         </div>
       </div>
 
@@ -4182,6 +4302,8 @@ const StatementImportFilePanel = memo(function StatementImportFilePanel({
         />
       </div>
 
+      {isExpanded ? (
+        <>
       {visibleEligibleMovementIds.length > 0 && (
         <div
           className="mt-4 flex flex-col gap-3 rounded-xl border p-3 sm:flex-row sm:items-center sm:justify-between"
@@ -4471,6 +4593,20 @@ const StatementImportFilePanel = memo(function StatementImportFilePanel({
             />
           )}
         </>
+      )}
+        </>
+      ) : (
+        <div
+          className="mt-5 rounded-xl border p-4 text-sm"
+          style={{
+            borderColor: "var(--color-border)",
+            backgroundColor: "var(--color-bg)",
+            color: "var(--color-text-muted)",
+          }}
+        >
+          Movimentos recolhidos. Abra este arquivo para revisar os{" "}
+          {visibleMovements.length} movimento(s) do filtro atual.
+        </div>
       )}
     </div>
   );
@@ -5298,6 +5434,17 @@ const MovementStatusActions = memo(function MovementStatusActions({
       return;
     }
 
+    if (window.innerWidth < 768) {
+      setStatusMenuPosition({
+        mode: "sheet",
+        left: window.innerWidth / 2,
+        top: window.innerHeight,
+        placement: "bottom",
+        maxHeight: Math.max(360, window.innerHeight - 64),
+      });
+      return;
+    }
+
     const rect = button.getBoundingClientRect();
     const menuWidth = 320;
     const viewportMargin = 16;
@@ -5318,7 +5465,7 @@ const MovementStatusActions = memo(function MovementStatusActions({
         ? Math.max(220, spaceBelow - 24)
         : Math.max(220, spaceAbove - 24);
 
-    setStatusMenuPosition({ left, top, placement, maxHeight });
+    setStatusMenuPosition({ mode: "popover", left, top, placement, maxHeight });
   }, []);
 
   useEffect(() => {
@@ -5327,6 +5474,11 @@ const MovementStatusActions = memo(function MovementStatusActions({
     }
 
     const handleViewportChange = () => updateStatusMenuPosition();
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        closeStatusMenu();
+      }
+    };
     const handlePointerDown = (event: MouseEvent) => {
       const target = event.target as Node;
 
@@ -5343,13 +5495,28 @@ const MovementStatusActions = memo(function MovementStatusActions({
     window.addEventListener("resize", handleViewportChange);
     window.addEventListener("scroll", handleViewportChange, true);
     document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
 
     return () => {
       window.removeEventListener("resize", handleViewportChange);
       window.removeEventListener("scroll", handleViewportChange, true);
       document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
     };
   }, [closeStatusMenu, isStatusMenuOpen, updateStatusMenuPosition]);
+
+  useEffect(() => {
+    if (!isStatusMenuOpen || statusMenuPosition?.mode !== "sheet") {
+      return;
+    }
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [isStatusMenuOpen, statusMenuPosition?.mode]);
 
   if (movement.status === "APPLIED") {
     const appliedLink = getAppliedMovementLink(movement);
@@ -5535,85 +5702,123 @@ const MovementStatusActions = memo(function MovementStatusActions({
     );
   };
 
+  const renderMenuContent = (showCloseButton: boolean) => (
+    <div className="max-h-full overflow-y-auto rounded-xl">
+      <div
+        className="flex items-start justify-between gap-3 border-b px-4 py-3"
+        style={{
+          borderColor: "var(--color-border)",
+          backgroundColor: "var(--color-bg-solid)",
+        }}
+      >
+        <div className="min-w-0">
+          <p
+            className="text-sm font-semibold"
+            style={{ color: "var(--color-text)" }}
+          >
+            Movimento
+          </p>
+          <p
+            className="mt-0.5 text-xs"
+            style={{ color: "var(--color-text-muted)" }}
+          >
+            Status atual: {movementStatusLabel(movement.status)}
+          </p>
+        </div>
+        {showCloseButton && (
+          <button
+            type="button"
+            onClick={closeStatusMenu}
+            aria-label="Fechar menu de status"
+            title="Fechar"
+            className="app-icon-control flex h-9 w-9 shrink-0 items-center justify-center rounded-lg"
+          >
+            <X size={16} />
+          </button>
+        )}
+      </div>
+
+      <div className="p-2">
+        <p
+          className="px-2 pb-1 pt-1 text-[11px] font-semibold uppercase tracking-wide"
+          style={{ color: "var(--color-text-muted)" }}
+        >
+          Status
+        </p>
+        {statusItems.map(renderMenuItem)}
+      </div>
+
+      {reconciliationItems.length > 0 && (
+        <div className="px-2 pb-2">
+          <div
+            className="mb-1 border-t"
+            style={{ borderColor: "var(--color-border)" }}
+          />
+          <p
+            className="px-2 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide"
+            style={{ color: "var(--color-text-muted)" }}
+          >
+            Conciliacao
+          </p>
+          {reconciliationItems.map(renderMenuItem)}
+        </div>
+      )}
+    </div>
+  );
+
   const statusMenu =
     isStatusMenuOpen && statusMenuPosition
       ? createPortal(
-          <div
-            ref={statusMenuRef}
-            className="fixed z-[9999] w-80 max-w-[calc(100vw-2rem)] overflow-visible rounded-xl border shadow-2xl"
-            style={{
-              left: statusMenuPosition.left,
-              top: statusMenuPosition.top,
-              maxHeight: statusMenuPosition.maxHeight,
-              transform:
-                statusMenuPosition.placement === "bottom"
-                  ? "translateX(-50%)"
-                  : "translate(-50%, -100%)",
-              borderColor: "var(--color-border)",
-              backgroundColor: "var(--color-bg-solid)",
-              boxShadow: "0 24px 60px rgba(15, 23, 42, 0.30)",
-            }}
-          >
-            <span
-              className={`absolute left-1/2 h-3 w-3 -translate-x-1/2 rotate-45 ${
-                statusMenuPosition.placement === "bottom"
-                  ? "top-0 -translate-y-1/2 border-l border-t"
-                  : "bottom-0 translate-y-1/2 border-b border-r"
-              }`}
+          statusMenuPosition.mode === "sheet" ? (
+            <div className="fixed inset-0 z-[9999] flex items-end bg-black/40 px-3 pb-3 pt-16 md:hidden">
+              <div
+                ref={statusMenuRef}
+                role="dialog"
+                aria-modal="true"
+                aria-label="Alterar status do movimento"
+                className="w-full overflow-hidden rounded-t-2xl border shadow-2xl"
+                style={{
+                  maxHeight: statusMenuPosition.maxHeight,
+                  borderColor: "var(--color-border)",
+                  backgroundColor: "var(--color-bg-solid)",
+                  boxShadow: "0 -24px 60px rgba(15, 23, 42, 0.35)",
+                }}
+              >
+                <div className="mx-auto mt-2 h-1 w-12 rounded-full bg-slate-300" />
+                {renderMenuContent(true)}
+              </div>
+            </div>
+          ) : (
+            <div
+              ref={statusMenuRef}
+              className="fixed z-[9999] w-80 max-w-[calc(100vw-2rem)] overflow-visible rounded-xl border shadow-2xl"
               style={{
+                left: statusMenuPosition.left,
+                top: statusMenuPosition.top,
+                maxHeight: statusMenuPosition.maxHeight,
+                transform:
+                  statusMenuPosition.placement === "bottom"
+                    ? "translateX(-50%)"
+                    : "translate(-50%, -100%)",
                 borderColor: "var(--color-border)",
                 backgroundColor: "var(--color-bg-solid)",
+                boxShadow: "0 24px 60px rgba(15, 23, 42, 0.30)",
               }}
-            />
-            <div className="max-h-full overflow-y-auto rounded-xl">
-              <div
-                className="border-b px-4 py-3"
+            >
+              <span
+                className={`absolute left-1/2 h-3 w-3 -translate-x-1/2 rotate-45 ${
+                  statusMenuPosition.placement === "bottom"
+                    ? "top-0 -translate-y-1/2 border-l border-t"
+                    : "bottom-0 translate-y-1/2 border-b border-r"
+                }`}
                 style={{
                   borderColor: "var(--color-border)",
                   backgroundColor: "var(--color-bg-solid)",
                 }}
-              >
-                <p
-                  className="text-sm font-semibold"
-                  style={{ color: "var(--color-text)" }}
-                >
-                  Movimento
-                </p>
-                <p
-                  className="mt-0.5 text-xs"
-                  style={{ color: "var(--color-text-muted)" }}
-                >
-                  Status atual: {movementStatusLabel(movement.status)}
-                </p>
-              </div>
-
-              <div className="p-2">
-                <p
-                  className="px-2 pb-1 pt-1 text-[11px] font-semibold uppercase tracking-wide"
-                  style={{ color: "var(--color-text-muted)" }}
-                >
-                  Status
-                </p>
-                {statusItems.map(renderMenuItem)}
-              </div>
-
-              {reconciliationItems.length > 0 && (
-                <div className="px-2 pb-2">
-                  <div
-                    className="mb-1 border-t"
-                    style={{ borderColor: "var(--color-border)" }}
-                  />
-                  <p
-                    className="px-2 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide"
-                    style={{ color: "var(--color-text-muted)" }}
-                  >
-                    Conciliacao
-                  </p>
-                  {reconciliationItems.map(renderMenuItem)}
-                </div>
-              )}
+              />
+              {renderMenuContent(false)}
             </div>
-          </div>,
+          ),
           document.body,
         )
       : null;

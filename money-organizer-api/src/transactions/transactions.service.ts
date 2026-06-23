@@ -430,6 +430,7 @@ export class TransactionsService {
                 categoryId: agg.categoryId,
                 categoryName: category?.name || 'Categoria não encontrada',
                 categoryIcon: category?.icon || null,
+                categoryKind: category?.kind || null,
                 totalAmount: agg._sum.amount?.toString() || '0',
                 transactionCount: agg._count.id,
             };

@@ -434,6 +434,7 @@ export interface CategoryTotal {
   categoryId: string;
   categoryName: string;
   categoryIcon?: string;
+  categoryKind?: Category["kind"] | null;
   totalAmount: string;
   transactionCount: number;
 }
