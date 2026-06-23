@@ -4,10 +4,12 @@ import {
   memo,
   useMemo,
   useState,
+  useRef,
   type ChangeEvent,
   type FormEvent,
   type ReactNode,
 } from "react";
+import { createPortal } from "react-dom";
 import { Link, useSearchParams } from "react-router-dom";
 import { toast } from "react-hot-toast";
 import {
@@ -229,6 +231,13 @@ type MovementMenuItem = {
   isCurrent?: boolean;
   onSelect: () => void;
   tone: "default" | "success" | "warning" | "danger";
+};
+
+type MovementStatusMenuPosition = {
+  left: number;
+  top: number;
+  placement: "top" | "bottom";
+  maxHeight: number;
 };
 
 const TRANSFER_REVIEW_TYPE = "TRANSFERENCIA";
@@ -5273,6 +5282,74 @@ const MovementStatusActions = memo(function MovementStatusActions({
   isUpdating: boolean;
 }) {
   const [isStatusMenuOpen, setIsStatusMenuOpen] = useState(false);
+  const [statusMenuPosition, setStatusMenuPosition] =
+    useState<MovementStatusMenuPosition | null>(null);
+  const statusButtonRef = useRef<HTMLButtonElement | null>(null);
+  const statusMenuRef = useRef<HTMLDivElement | null>(null);
+
+  const closeStatusMenu = useCallback(() => {
+    setIsStatusMenuOpen(false);
+    setStatusMenuPosition(null);
+  }, []);
+
+  const updateStatusMenuPosition = useCallback(() => {
+    const button = statusButtonRef.current;
+    if (!button) {
+      return;
+    }
+
+    const rect = button.getBoundingClientRect();
+    const menuWidth = 320;
+    const viewportMargin = 16;
+    const preferredLeft = rect.left + rect.width / 2;
+    const minLeft = viewportMargin + menuWidth / 2;
+    const maxLeft = window.innerWidth - viewportMargin - menuWidth / 2;
+    const left =
+      minLeft > maxLeft
+        ? window.innerWidth / 2
+        : Math.min(Math.max(preferredLeft, minLeft), maxLeft);
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const spaceAbove = rect.top;
+    const placement =
+      spaceBelow < 320 && spaceAbove > spaceBelow ? "top" : "bottom";
+    const top = placement === "bottom" ? rect.bottom + 8 : rect.top - 8;
+    const maxHeight =
+      placement === "bottom"
+        ? Math.max(220, spaceBelow - 24)
+        : Math.max(220, spaceAbove - 24);
+
+    setStatusMenuPosition({ left, top, placement, maxHeight });
+  }, []);
+
+  useEffect(() => {
+    if (!isStatusMenuOpen) {
+      return;
+    }
+
+    const handleViewportChange = () => updateStatusMenuPosition();
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+
+      if (
+        statusButtonRef.current?.contains(target) ||
+        statusMenuRef.current?.contains(target)
+      ) {
+        return;
+      }
+
+      closeStatusMenu();
+    };
+
+    window.addEventListener("resize", handleViewportChange);
+    window.addEventListener("scroll", handleViewportChange, true);
+    document.addEventListener("mousedown", handlePointerDown);
+
+    return () => {
+      window.removeEventListener("resize", handleViewportChange);
+      window.removeEventListener("scroll", handleViewportChange, true);
+      document.removeEventListener("mousedown", handlePointerDown);
+    };
+  }, [closeStatusMenu, isStatusMenuOpen, updateStatusMenuPosition]);
 
   if (movement.status === "APPLIED") {
     const appliedLink = getAppliedMovementLink(movement);
@@ -5428,7 +5505,7 @@ const MovementStatusActions = memo(function MovementStatusActions({
             return;
           }
 
-          setIsStatusMenuOpen(false);
+          closeStatusMenu();
           item.onSelect();
         }}
         className={`flex w-full items-start gap-3 rounded-lg px-3 py-2.5 text-left transition disabled:cursor-not-allowed ${toneClass} ${disabledClass}`}
@@ -5458,6 +5535,89 @@ const MovementStatusActions = memo(function MovementStatusActions({
     );
   };
 
+  const statusMenu =
+    isStatusMenuOpen && statusMenuPosition
+      ? createPortal(
+          <div
+            ref={statusMenuRef}
+            className="fixed z-[9999] w-80 max-w-[calc(100vw-2rem)] overflow-visible rounded-xl border shadow-2xl"
+            style={{
+              left: statusMenuPosition.left,
+              top: statusMenuPosition.top,
+              maxHeight: statusMenuPosition.maxHeight,
+              transform:
+                statusMenuPosition.placement === "bottom"
+                  ? "translateX(-50%)"
+                  : "translate(-50%, -100%)",
+              borderColor: "var(--color-border)",
+              backgroundColor: "var(--color-bg-solid)",
+              boxShadow: "0 24px 60px rgba(15, 23, 42, 0.30)",
+            }}
+          >
+            <span
+              className={`absolute left-1/2 h-3 w-3 -translate-x-1/2 rotate-45 ${
+                statusMenuPosition.placement === "bottom"
+                  ? "top-0 -translate-y-1/2 border-l border-t"
+                  : "bottom-0 translate-y-1/2 border-b border-r"
+              }`}
+              style={{
+                borderColor: "var(--color-border)",
+                backgroundColor: "var(--color-bg-solid)",
+              }}
+            />
+            <div className="max-h-full overflow-y-auto rounded-xl">
+              <div
+                className="border-b px-4 py-3"
+                style={{
+                  borderColor: "var(--color-border)",
+                  backgroundColor: "var(--color-bg-solid)",
+                }}
+              >
+                <p
+                  className="text-sm font-semibold"
+                  style={{ color: "var(--color-text)" }}
+                >
+                  Movimento
+                </p>
+                <p
+                  className="mt-0.5 text-xs"
+                  style={{ color: "var(--color-text-muted)" }}
+                >
+                  Status atual: {movementStatusLabel(movement.status)}
+                </p>
+              </div>
+
+              <div className="p-2">
+                <p
+                  className="px-2 pb-1 pt-1 text-[11px] font-semibold uppercase tracking-wide"
+                  style={{ color: "var(--color-text-muted)" }}
+                >
+                  Status
+                </p>
+                {statusItems.map(renderMenuItem)}
+              </div>
+
+              {reconciliationItems.length > 0 && (
+                <div className="px-2 pb-2">
+                  <div
+                    className="mb-1 border-t"
+                    style={{ borderColor: "var(--color-border)" }}
+                  />
+                  <p
+                    className="px-2 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide"
+                    style={{ color: "var(--color-text-muted)" }}
+                  >
+                    Conciliacao
+                  </p>
+                  {reconciliationItems.map(renderMenuItem)}
+                </div>
+              )}
+            </div>
+          </div>,
+          document.body,
+        )
+      : null;
+
   return (
     <div className="flex flex-wrap items-center gap-2">
       <DisabledReasonTooltip reason={editDisabledReason}>
@@ -5473,22 +5633,22 @@ const MovementStatusActions = memo(function MovementStatusActions({
         </button>
       </DisabledReasonTooltip>
 
-      <div
-        className="relative"
-        onBlur={(event) => {
-          if (
-            !event.currentTarget.contains(event.relatedTarget as Node | null)
-          ) {
-            setIsStatusMenuOpen(false);
-          }
-        }}
-      >
+      <div className="relative">
         <button
+          ref={statusButtonRef}
           type="button"
           title="Alterar status do movimento"
           aria-label="Alterar status do movimento"
           aria-expanded={isStatusMenuOpen}
-          onClick={() => setIsStatusMenuOpen((current) => !current)}
+          onClick={() => {
+            if (isStatusMenuOpen) {
+              closeStatusMenu();
+              return;
+            }
+
+            updateStatusMenuPosition();
+            setIsStatusMenuOpen(true);
+          }}
           disabled={isUpdating}
           className={`inline-flex h-9 min-w-[8.5rem] items-center justify-between gap-2 rounded-lg border px-3 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-60 ${movementStatusButtonClass}`}
         >
@@ -5505,72 +5665,8 @@ const MovementStatusActions = memo(function MovementStatusActions({
             className={`transition ${isStatusMenuOpen ? "rotate-180" : ""}`}
           />
         </button>
-
-        {isStatusMenuOpen && (
-          <div
-            className="absolute left-1/2 z-30 mt-2 w-80 max-w-[calc(100vw-2rem)] -translate-x-1/2 overflow-visible rounded-xl border shadow-2xl"
-            style={{
-              borderColor: "var(--color-border)",
-              backgroundColor: "var(--color-bg-solid)",
-              boxShadow: "0 20px 45px rgba(15, 23, 42, 0.22)",
-            }}
-          >
-            <span
-              className="absolute left-1/2 top-0 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rotate-45 border-l border-t"
-              style={{
-                borderColor: "var(--color-border)",
-                backgroundColor: "var(--color-bg-solid)",
-              }}
-            />
-            <div
-              className="overflow-hidden rounded-t-xl border-b px-4 py-3"
-              style={{
-                borderColor: "var(--color-border)",
-                backgroundColor: "var(--color-bg-solid)",
-              }}
-            >
-              <p
-                className="text-sm font-semibold"
-                style={{ color: "var(--color-text)" }}
-              >
-                Movimento
-              </p>
-              <p
-                className="mt-0.5 text-xs"
-                style={{ color: "var(--color-text-muted)" }}
-              >
-                Status atual: {movementStatusLabel(movement.status)}
-              </p>
-            </div>
-
-            <div className="p-2">
-              <p
-                className="px-2 pb-1 pt-1 text-[11px] font-semibold uppercase tracking-wide"
-                style={{ color: "var(--color-text-muted)" }}
-              >
-                Status
-              </p>
-              {statusItems.map(renderMenuItem)}
-            </div>
-
-            {reconciliationItems.length > 0 && (
-              <div className="px-2 pb-2">
-                <div
-                  className="mb-1 border-t"
-                  style={{ borderColor: "var(--color-border)" }}
-                />
-                <p
-                  className="px-2 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide"
-                  style={{ color: "var(--color-text-muted)" }}
-                >
-                  Conciliacao
-                </p>
-                {reconciliationItems.map(renderMenuItem)}
-              </div>
-            )}
-          </div>
-        )}
       </div>
+      {statusMenu}
     </div>
   );
 });
