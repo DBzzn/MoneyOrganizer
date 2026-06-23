@@ -103,6 +103,11 @@ type SafeReadyCandidate = {
   reviewCategoryId: string;
 };
 
+type CategorySuggestionCandidate = {
+  movement: ImportedMovement;
+  category: Category;
+};
+
 type ApplyReadySummary = {
   totalCount: number;
   transactionCount: number;
@@ -1274,6 +1279,8 @@ export function StatementImports() {
   const [quickCategoryIcon, setQuickCategoryIcon] = useState("");
   const [isCreatingQuickCategory, setIsCreatingQuickCategory] = useState(false);
   const [isApplyingBulkCategory, setIsApplyingBulkCategory] = useState(false);
+  const [isApplyingCategorySuggestions, setIsApplyingCategorySuggestions] =
+    useState(false);
   const [isUpdatingSelectedReviewStatus, setIsUpdatingSelectedReviewStatus] =
     useState(false);
   const [isLoadingAccounts, setIsLoadingAccounts] = useState(true);
@@ -1371,6 +1378,37 @@ export function StatementImports() {
         ),
       ),
     [activeCategories, selectedReviewMovementItems],
+  );
+  const categorySuggestionCandidates = useMemo<CategorySuggestionCandidate[]>(
+    () =>
+      currentBatch?.files.flatMap((file) =>
+        file.movements.flatMap((movement) => {
+          const suggestion = movement.reviewHints?.categorySuggestion;
+
+          if (
+            !suggestion ||
+            !isBulkCategoryMovementEligible(movement) ||
+            movement.reviewTarget !== "TRANSACTION" ||
+            movement.reviewCategoryId === suggestion.categoryId
+          ) {
+            return [];
+          }
+
+          const category = activeCategories.find(
+            (item) => item.id === suggestion.categoryId,
+          );
+
+          if (
+            !category ||
+            !categoryMatchesMovementDirection(category, movement.direction)
+          ) {
+            return [];
+          }
+
+          return [{ movement, category }];
+        }),
+      ) ?? [],
+    [activeCategories, currentBatch],
   );
   const editingSimilarReviewMovementItems = useMemo(() => {
     if (!editingMovement) {
@@ -1906,6 +1944,102 @@ export function StatementImports() {
       setUpdatingMovementId(null);
     }
   }, []);
+
+  const handleApplyCategorySuggestion = useCallback(async (
+    movement: ImportedMovement,
+  ) => {
+    const suggestion = movement.reviewHints?.categorySuggestion;
+
+    if (!suggestion) {
+      return;
+    }
+
+    if (!isBulkCategoryMovementEligible(movement)) {
+      toast.error("Somente transacoes editaveis aceitam sugestao de categoria.");
+      return;
+    }
+
+    const category = activeCategories.find(
+      (item) => item.id === suggestion.categoryId,
+    );
+
+    if (!category || !categoryMatchesMovementDirection(category, movement.direction)) {
+      toast.error("Sugestao indisponivel ou incompativel com o movimento.");
+      return;
+    }
+
+    if (movement.reviewCategoryId === suggestion.categoryId) {
+      toast.success("Essa sugestao ja esta aplicada.");
+      return;
+    }
+
+    try {
+      setUpdatingMovementId(movement.id);
+      const response = await updateImportedMovement(movement.id, {
+        reviewTarget: "TRANSACTION",
+        reviewCategoryId: suggestion.categoryId,
+        reviewTransferAccountId: null,
+      });
+
+      setCurrentBatch((batch) => {
+        if (!batch) {
+          return batch;
+        }
+
+        return {
+          ...batch,
+          files: batch.files.map((file) => ({
+            ...file,
+            movements: file.movements.map((currentMovement) =>
+              currentMovement.id === movement.id
+                ? { ...response.data, reviewHints: currentMovement.reviewHints }
+                : currentMovement,
+            ),
+          })),
+        };
+      });
+
+      toast.success(`Categoria sugerida aplicada: ${category.name}.`);
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "Erro ao aplicar sugestao."));
+    } finally {
+      setUpdatingMovementId(null);
+    }
+  }, [activeCategories]);
+
+  const handleApplyCategorySuggestions = async () => {
+    if (!currentBatch || categorySuggestionCandidates.length === 0) {
+      toast.error("Nenhuma sugestao segura para aplicar.");
+      return;
+    }
+
+    try {
+      setIsApplyingCategorySuggestions(true);
+
+      for (const candidate of categorySuggestionCandidates) {
+        const suggestion = candidate.movement.reviewHints?.categorySuggestion;
+
+        if (!suggestion) {
+          continue;
+        }
+
+        await updateImportedMovement(candidate.movement.id, {
+          reviewTarget: "TRANSACTION",
+          reviewCategoryId: suggestion.categoryId,
+          reviewTransferAccountId: null,
+        });
+      }
+
+      await preserveScrollPosition(() => loadBatch(currentBatch.id));
+      toast.success(
+        `${categorySuggestionCandidates.length} sugestao(oes) aplicada(s).`,
+      );
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "Erro ao aplicar sugestoes."));
+    } finally {
+      setIsApplyingCategorySuggestions(false);
+    }
+  };
 
   const handleReviewSelectionChange = useCallback((
     movementId: string,
@@ -3197,9 +3331,12 @@ export function StatementImports() {
               categoryOptions={bulkCategoryOptions}
               selectedCategoryId={selectedBulkCategoryId}
               isApplying={isApplyingBulkCategory}
+              suggestedCategoryCount={categorySuggestionCandidates.length}
+              isApplyingSuggestions={isApplyingCategorySuggestions}
               isUpdatingStatus={isUpdatingSelectedReviewStatus}
               onCategoryChange={setSelectedBulkCategoryId}
               onApply={() => void handleApplyBulkCategory()}
+              onApplySuggestions={() => void handleApplyCategorySuggestions()}
               onIgnoreSelected={() =>
                 void handleSelectedReviewStatusChange("IGNORED")
               }
@@ -3277,6 +3414,7 @@ export function StatementImports() {
                   onMovementReconciliationChange={
                     handleMovementReconciliationChange
                   }
+                  onApplyCategorySuggestion={handleApplyCategorySuggestion}
                   onEditMovement={openMovementEditor}
                   updatingMovementId={updatingMovementId}
                   selectedMovementIds={selectedReviewMovementIds}
@@ -3390,9 +3528,12 @@ function BulkReviewCategoryPanel({
   categoryOptions,
   selectedCategoryId,
   isApplying,
+  suggestedCategoryCount,
+  isApplyingSuggestions,
   isUpdatingStatus,
   onCategoryChange,
   onApply,
+  onApplySuggestions,
   onIgnoreSelected,
   onReviewSelected,
   onResetSelected,
@@ -3406,9 +3547,12 @@ function BulkReviewCategoryPanel({
   categoryOptions: Category[];
   selectedCategoryId: string;
   isApplying: boolean;
+  suggestedCategoryCount: number;
+  isApplyingSuggestions: boolean;
   isUpdatingStatus: boolean;
   onCategoryChange: (categoryId: string) => void;
   onApply: () => void;
+  onApplySuggestions: () => void;
   onIgnoreSelected: () => void;
   onReviewSelected: () => void;
   onResetSelected: () => void;
@@ -3427,6 +3571,8 @@ function BulkReviewCategoryPanel({
     ? "Aguarde a aplicacao da categoria terminar."
     : isUpdatingStatus
       ? "Aguarde a atualizacao dos selecionados terminar."
+      : isApplyingSuggestions
+        ? "Aguarde a aplicacao das sugestoes terminar."
     : !hasSelection
       ? "Selecione movimentos para aplicar categoria."
       : !selectedCategoryId
@@ -3436,8 +3582,17 @@ function BulkReviewCategoryPanel({
     ? "Aguarde a atualizacao dos selecionados terminar."
     : isApplying
       ? "Aguarde a aplicacao da categoria terminar."
+      : isApplyingSuggestions
+        ? "Aguarde a aplicacao das sugestoes terminar."
       : !hasSelection
         ? "Selecione movimentos para atualizar status."
+        : null;
+  const suggestionsDisabledReason = isApplyingSuggestions
+    ? "Aguarde a aplicacao das sugestoes terminar."
+    : isApplying || isUpdatingStatus
+      ? "Aguarde a atualizacao atual terminar."
+      : suggestedCategoryCount === 0
+        ? "Nenhuma sugestao segura pendente neste lote."
         : null;
 
   return (
@@ -3476,11 +3631,16 @@ function BulkReviewCategoryPanel({
           </p>
         </div>
 
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-[auto_auto_minmax(14rem,1fr)_auto_auto_auto_auto_auto]">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-[auto_auto_auto_minmax(14rem,1fr)_auto_auto_auto_auto_auto]">
           <button
             type="button"
             onClick={onSelectAll}
-            disabled={totalEligibleCount === 0 || isApplying || isUpdatingStatus}
+            disabled={
+              totalEligibleCount === 0 ||
+              isApplying ||
+              isApplyingSuggestions ||
+              isUpdatingStatus
+            }
             className="h-10 rounded-lg border px-3 text-xs font-semibold transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
             style={{
               borderColor: "var(--color-border)",
@@ -3492,7 +3652,12 @@ function BulkReviewCategoryPanel({
           <button
             type="button"
             onClick={onClear}
-            disabled={!hasSelection || isApplying || isUpdatingStatus}
+            disabled={
+              !hasSelection ||
+              isApplying ||
+              isApplyingSuggestions ||
+              isUpdatingStatus
+            }
             className="h-10 rounded-lg border px-3 text-xs font-semibold transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
             style={{
               borderColor: "var(--color-border)",
@@ -3501,10 +3666,31 @@ function BulkReviewCategoryPanel({
           >
             Limpar
           </button>
+          <DisabledReasonTooltip reason={suggestionsDisabledReason}>
+            <button
+              type="button"
+              title={suggestionsDisabledReason ?? "Aplicar sugestoes de categoria"}
+              onClick={onApplySuggestions}
+              disabled={Boolean(suggestionsDisabledReason)}
+              className="flex h-10 items-center justify-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 text-xs font-semibold text-blue-700 transition hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isApplyingSuggestions ? (
+                <RefreshCw size={15} className="animate-spin" />
+              ) : (
+                <ListChecks size={15} />
+              )}
+              Sugestoes ({suggestedCategoryCount})
+            </button>
+          </DisabledReasonTooltip>
           <select
             value={selectedCategoryId}
             onChange={(event) => onCategoryChange(event.target.value)}
-            disabled={!hasSelection || isApplying || isUpdatingStatus}
+            disabled={
+              !hasSelection ||
+              isApplying ||
+              isApplyingSuggestions ||
+              isUpdatingStatus
+            }
             className="app-control h-10"
           >
             <option value="">
@@ -3525,7 +3711,10 @@ function BulkReviewCategoryPanel({
               aria-label="Criar categoria"
               onClick={onCreateCategory}
               disabled={
-                Boolean(createDisabledReason) || isApplying || isUpdatingStatus
+                Boolean(createDisabledReason) ||
+                isApplying ||
+                isApplyingSuggestions ||
+                isUpdatingStatus
               }
               className="flex h-10 w-full items-center justify-center rounded-lg border border-blue-200 bg-blue-50 text-blue-700 transition hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60 sm:w-10"
             >
@@ -4083,7 +4272,15 @@ function MovementEditDialog({
   );
 }
 
-function MovementReviewHints({ movement }: { movement: ImportedMovement }) {
+function MovementReviewHints({
+  movement,
+  isApplyingCategorySuggestion = false,
+  onApplyCategorySuggestion,
+}: {
+  movement: ImportedMovement;
+  isApplyingCategorySuggestion?: boolean;
+  onApplyCategorySuggestion?: (movement: ImportedMovement) => void;
+}) {
   const hints = movement.reviewHints;
 
   if (
@@ -4098,6 +4295,13 @@ function MovementReviewHints({ movement }: { movement: ImportedMovement }) {
       </span>
     );
   }
+
+  const categorySuggestion = hints.categorySuggestion;
+  const canApplyCategorySuggestion =
+    Boolean(categorySuggestion && onApplyCategorySuggestion) &&
+    isBulkCategoryMovementEligible(movement) &&
+    movement.reviewTarget === "TRANSACTION" &&
+    movement.reviewCategoryId !== categorySuggestion?.categoryId;
 
   return (
     <div className="flex max-w-xs flex-wrap gap-1.5">
@@ -4120,14 +4324,30 @@ function MovementReviewHints({ movement }: { movement: ImportedMovement }) {
         </span>
       )}
 
-      {hints.categorySuggestion && (
-        <span
-          className="rounded-full border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700"
-          title={`${hints.categorySuggestion.basedOnCount} ocorrencia(s) por descricao`}
-        >
-          {formatStoredIconPrefix(hints.categorySuggestion.categoryIcon)}
-          {hints.categorySuggestion.categoryName}
-        </span>
+      {categorySuggestion && (
+        canApplyCategorySuggestion ? (
+          <button
+            type="button"
+            onClick={() => onApplyCategorySuggestion?.(movement)}
+            disabled={isApplyingCategorySuggestion}
+            className="rounded-full border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 transition hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
+            title={`${categorySuggestion.basedOnCount} ocorrencia(s) por descricao. Aplicar categoria sugerida.`}
+          >
+            {isApplyingCategorySuggestion ? (
+              <RefreshCw size={12} className="mr-1 inline animate-spin" />
+            ) : null}
+            {formatStoredIconPrefix(categorySuggestion.categoryIcon)}
+            {categorySuggestion.categoryName}
+          </button>
+        ) : (
+          <span
+            className="rounded-full border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700"
+            title={`${categorySuggestion.basedOnCount} ocorrencia(s) por descricao`}
+          >
+            {formatStoredIconPrefix(categorySuggestion.categoryIcon)}
+            {categorySuggestion.categoryName}
+          </span>
+        )
       )}
 
       {hints.flags
@@ -4156,6 +4376,7 @@ const StatementImportFilePanel = memo(function StatementImportFilePanel({
   movementStatusFilter,
   onMovementStatusChange,
   onMovementReconciliationChange,
+  onApplyCategorySuggestion,
   onEditMovement,
   updatingMovementId,
   selectedMovementIds,
@@ -4174,6 +4395,7 @@ const StatementImportFilePanel = memo(function StatementImportFilePanel({
     movementId: string,
     status: ReviewableReconciliationStatus,
   ) => void;
+  onApplyCategorySuggestion: (movement: ImportedMovement) => void;
   onEditMovement: (movement: ImportedMovement, file: StatementImportFile) => void;
   updatingMovementId: string | null;
   selectedMovementIds: string[];
@@ -4390,6 +4612,7 @@ const StatementImportFilePanel = memo(function StatementImportFilePanel({
                 readinessIssue={getMovementReadinessIssue(movement, file)}
                 onStatusChange={onMovementStatusChange}
                 onReconciliationChange={onMovementReconciliationChange}
+                onApplyCategorySuggestion={onApplyCategorySuggestion}
                 onEditMovement={(selectedMovement) =>
                   onEditMovement(selectedMovement, file)
                 }
@@ -4554,7 +4777,13 @@ const StatementImportFilePanel = memo(function StatementImportFilePanel({
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      <MovementReviewHints movement={movement} />
+                      <MovementReviewHints
+                        movement={movement}
+                        isApplyingCategorySuggestion={
+                          updatingMovementId === movement.id
+                        }
+                        onApplyCategorySuggestion={onApplyCategorySuggestion}
+                      />
                     </td>
                     <td className="px-4 py-3">
                       <span
@@ -5881,6 +6110,7 @@ const MovementCard = memo(function MovementCard({
   readinessIssue,
   onStatusChange,
   onReconciliationChange,
+  onApplyCategorySuggestion,
   onEditMovement,
   isUpdating,
   isSelected,
@@ -5897,6 +6127,7 @@ const MovementCard = memo(function MovementCard({
     movementId: string,
     status: ReviewableReconciliationStatus,
   ) => void;
+  onApplyCategorySuggestion: (movement: ImportedMovement) => void;
   onEditMovement: (movement: ImportedMovement) => void;
   isUpdating: boolean;
   isSelected: boolean;
@@ -5971,7 +6202,11 @@ const MovementCard = memo(function MovementCard({
         {movement.rawDescription || "Sem descricao"}
       </p>
       <div className="mt-3">
-        <MovementReviewHints movement={movement} />
+        <MovementReviewHints
+          movement={movement}
+          isApplyingCategorySuggestion={isUpdating}
+          onApplyCategorySuggestion={onApplyCategorySuggestion}
+        />
       </div>
       {readinessIssue && (
         <p className="mt-3 rounded-lg bg-yellow-50 px-3 py-2 text-xs font-medium text-yellow-700">
