@@ -41,6 +41,7 @@ export class AuthService {
         name: true,
         email: true,
         id: true,
+        createdAt: true,
       }
     })
     return user;

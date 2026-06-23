@@ -36,6 +36,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(response.data as User)
     }
 
+    const refreshUser = async () => {
+        const response = await getMe()
+        setUser(response.data as User)
+        return response.data as User
+    }
+
     const signOut = () => {
         localStorage.removeItem('token')
         setToken(null)
@@ -43,7 +49,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     
     return (
-        <AuthContext.Provider value={{ user, token, isLoading, signIn, signOut }}>            
+        <AuthContext.Provider value={{ user, token, isLoading, signIn, signOut, refreshUser }}>
             {children}
         </AuthContext.Provider>
     )

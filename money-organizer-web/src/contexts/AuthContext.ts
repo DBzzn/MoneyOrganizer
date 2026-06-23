@@ -7,7 +7,7 @@ interface AuthContextData {
     isLoading: boolean
     signIn: (token: string) => Promise<void>
     signOut: () => void
+    refreshUser: () => Promise<User | null>
 }
 
 export const AuthContext = createContext<AuthContextData>({} as AuthContextData)
-

@@ -1,5 +1,5 @@
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 import {
     LayoutDashboard,
     Tag,
@@ -214,6 +214,15 @@ export function Sidebar({ isOpen, isMobile, onNavigate, onToggle }: SidebarProps
     const { isDark, toggleTheme } = useTheme()
     const { signOut, user } = useAuth()
     const [hoveringTheme, setHoveringTheme] = useState(false)
+    const [isDraggingMobileNav, setIsDraggingMobileNav] = useState(false)
+    const mobileNavRef = useRef<HTMLDivElement | null>(null)
+    const wasMobileNavDraggingRef = useRef(false)
+    const mobileNavDragRef = useRef({
+        active: false,
+        pointerId: 0,
+        startX: 0,
+        scrollLeft: 0,
+    })
     const navigate = useNavigate()
     const location = useLocation()
     const greeting = useMemo(() => {
@@ -226,9 +235,67 @@ export function Sidebar({ isOpen, isMobile, onNavigate, onToggle }: SidebarProps
             localStorage.setItem('username', user.name)
         }
     }, [user])
+
+    useEffect(() => {
+        if (!isMobile || isOpen) return
+
+        const activeItem = mobileNavRef.current?.querySelector<HTMLElement>('[aria-current="page"]')
+        activeItem?.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' })
+    }, [isMobile, isOpen, location.pathname])
+
     const handleSignOut = () => {
         signOut()
         navigate('/login')
+    }
+
+    const handleMobileNavPointerDown = (event: PointerEvent<HTMLDivElement>) => {
+        if (event.button !== 0) return
+
+        const nav = mobileNavRef.current
+        if (!nav) return
+
+        mobileNavDragRef.current = {
+            active: true,
+            pointerId: event.pointerId,
+            startX: event.clientX,
+            scrollLeft: nav.scrollLeft,
+        }
+        wasMobileNavDraggingRef.current = false
+        setIsDraggingMobileNav(true)
+        nav.setPointerCapture(event.pointerId)
+    }
+
+    const handleMobileNavPointerMove = (event: PointerEvent<HTMLDivElement>) => {
+        const drag = mobileNavDragRef.current
+
+        if (!drag.active || drag.pointerId !== event.pointerId || !mobileNavRef.current) return
+
+        const deltaX = event.clientX - drag.startX
+
+        if (Math.abs(deltaX) > 4) {
+            wasMobileNavDraggingRef.current = true
+            event.preventDefault()
+        }
+
+        mobileNavRef.current.scrollLeft = drag.scrollLeft - deltaX
+    }
+
+    const stopMobileNavDrag = (event: PointerEvent<HTMLDivElement>) => {
+        const drag = mobileNavDragRef.current
+
+        if (!drag.active || drag.pointerId !== event.pointerId) return
+
+        mobileNavDragRef.current = {
+            active: false,
+            pointerId: 0,
+            startX: 0,
+            scrollLeft: 0,
+        }
+        setIsDraggingMobileNav(false)
+
+        if (mobileNavRef.current?.hasPointerCapture(event.pointerId)) {
+            mobileNavRef.current.releasePointerCapture(event.pointerId)
+        }
     }
 
 
@@ -236,7 +303,7 @@ export function Sidebar({ isOpen, isMobile, onNavigate, onToggle }: SidebarProps
         <>
             {isMobile && !isOpen && (
                 <div
-                    className="fixed bottom-4 left-1/2 z-50 flex max-w-[calc(100vw-2rem)] -translate-x-1/2 gap-1 overflow-x-auto rounded-2xl p-1.5 glass"
+                    className="fixed bottom-3 left-1/2 z-50 flex w-[min(calc(100vw-1.5rem),17rem)] -translate-x-1/2 items-center gap-2 overflow-hidden rounded-[1.35rem] p-1.5 shadow-xl glass"
                     style={{
                         backgroundColor: 'var(--color-bg-card)',
                         border: '1px solid var(--color-border)',
@@ -247,24 +314,43 @@ export function Sidebar({ isOpen, isMobile, onNavigate, onToggle }: SidebarProps
                         aria-label="Expandir menu"
                         title="Expandir menu"
                         onClick={onToggle}
-                        className="app-icon-control flex h-10 w-10 items-center justify-center rounded-xl"
+                        className="app-icon-control flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl"
                     >
-                        <PanelLeftOpen size={18} />
+                        <PanelLeftOpen size={22} />
                     </button>
-                    <div className="mx-1 w-px shrink-0" style={{ backgroundColor: 'var(--color-border)' }} />
 
-                    {navItems.map((item) => (
-                        <NavLink
-                            key={item.to}
-                            to={item.to}
-                            aria-label={item.Label}
-                            title={item.Label}
-                            onClick={onNavigate}
-                            className="nav-item flex h-10 w-10 items-center justify-center rounded-xl transition"
-                        >
-                            <item.icon size={18} />
-                        </NavLink>
-                    ))}
+                    <div
+                        ref={mobileNavRef}
+                        role="navigation"
+                        aria-label="Navegacao principal"
+                        onPointerDown={handleMobileNavPointerDown}
+                        onPointerMove={handleMobileNavPointerMove}
+                        onPointerUp={stopMobileNavDrag}
+                        onPointerCancel={stopMobileNavDrag}
+                        onClickCapture={(event) => {
+                            if (!wasMobileNavDraggingRef.current) return
+
+                            event.preventDefault()
+                            event.stopPropagation()
+                            wasMobileNavDraggingRef.current = false
+                        }}
+                        className={`mobile-bottom-nav-scroll flex snap-x snap-mandatory gap-2 overflow-x-auto overscroll-x-contain scroll-smooth px-1 pb-1 pt-1 select-none ${
+                            isDraggingMobileNav ? 'cursor-grabbing' : 'cursor-grab'
+                        } min-w-0 flex-1`}
+                    >
+                        {navItems.map((item) => (
+                            <NavLink
+                                key={item.to}
+                                to={item.to}
+                                aria-label={item.Label}
+                                title={item.Label}
+                                onClick={onNavigate}
+                                className="nav-item flex h-14 w-14 shrink-0 snap-center items-center justify-center rounded-2xl transition"
+                            >
+                                <item.icon size={22} />
+                            </NavLink>
+                        ))}
+                    </div>
                 </div>
             )}
 

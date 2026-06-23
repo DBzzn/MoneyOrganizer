@@ -113,6 +113,16 @@ html,
         color: var(--color-navtxt-on);
     }
 
+.mobile-bottom-nav-scroll {
+    touch-action: pan-x;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+}
+
+.mobile-bottom-nav-scroll::-webkit-scrollbar {
+    display: none;
+}
+
 .btn-signout {
     color: var(--color-text-muted);
     background-color: transparent;

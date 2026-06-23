@@ -1,21 +1,34 @@
-import { useMemo, useState, type ReactNode } from 'react'
-import { Link } from 'react-router-dom'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import axios from 'axios'
+import { toast } from 'react-hot-toast'
 import {
+  AlertTriangle,
   Bell,
   CircleHelp,
   Database,
+  Eraser,
   FileUp,
-  LockKeyhole,
+  Loader2,
   Moon,
-  ShieldCheck,
+  Save,
   SlidersHorizontal,
   Sun,
   Tag,
+  Trash2,
+  UserRound,
   WalletCards,
   X,
   type LucideIcon,
 } from 'lucide-react'
+import ConfirmModal from '../components/ConfirmModal'
 import { Layout } from '../components/Layout'
+import {
+  clearUserData,
+  deleteMyAccount,
+  updateUserPassword,
+  updateUserProfile,
+} from '../api/users'
 import { useAuth } from '../contexts/useAuth'
 import { useTheme } from '../contexts/useTheme'
 
@@ -29,13 +42,65 @@ function readContextHelpPreference() {
   return localStorage.getItem(HELP_PREF_KEY) !== 'off'
 }
 
+function apiErrorMessage(error: unknown, fallback: string) {
+  if (axios.isAxiosError(error)) {
+    const message = error.response?.data?.message
+
+    if (Array.isArray(message)) {
+      return message[0] ?? fallback
+    }
+
+    if (typeof message === 'string') {
+      return message
+    }
+  }
+
+  return fallback
+}
+
 type StatusTone = 'green' | 'yellow' | 'blue' | 'gray'
+type SavingAction = 'name' | 'email' | 'password' | null
+type DangerAction = 'clear' | 'delete'
 
 const statusToneClassName: Record<StatusTone, string> = {
   green: 'border-emerald-200 bg-emerald-50 text-emerald-700',
   yellow: 'border-yellow-200 bg-yellow-50 text-yellow-700',
   blue: 'border-blue-200 bg-blue-50 text-blue-700',
   gray: 'border-slate-200 bg-slate-50 text-slate-700',
+}
+
+const dangerCopy: Record<
+  DangerAction,
+  {
+    title: string
+    message: string
+    confirmLabel: string
+    buttonClassName: string
+    details: string[]
+  }
+> = {
+  clear: {
+    title: 'Limpar todos os dados',
+    message: 'Digite sua senha para confirmar a limpeza da sua conta.',
+    confirmLabel: 'Limpar dados',
+    buttonClassName: 'bg-amber-600 hover:bg-amber-700',
+    details: [
+      'Remove transações, transferências, ajustes, lembretes, imports, categorias e contas.',
+      'Mantém seu usuário, email, nome e senha.',
+      'Cria novamente as categorias padrão e a Conta inicial.',
+    ],
+  },
+  delete: {
+    title: 'Excluir todos os meus dados',
+    message: 'Digite sua senha para confirmar a exclusão definitiva da sua conta.',
+    confirmLabel: 'Excluir conta',
+    buttonClassName: 'bg-red-600 hover:bg-red-700',
+    details: [
+      'Remove todos os dados financeiros e históricos do usuário.',
+      'Remove também seu usuário do banco de dados.',
+      'Depois da confirmação, sua sessão será encerrada.',
+    ],
+  },
 }
 
 function SettingsCard({
@@ -74,7 +139,7 @@ function SettingsCard({
           </p>
         </div>
       </div>
-      <div className="mt-5 space-y-3">{children}</div>
+      <div className="mt-5 space-y-4">{children}</div>
     </section>
   )
 }
@@ -181,13 +246,64 @@ function StatusRow({
   )
 }
 
+function FieldGroup({
+  label,
+  children,
+}: {
+  label: string
+  children: ReactNode
+}) {
+  return (
+    <div>
+      <label className="mb-1 block text-sm font-medium">{label}</label>
+      {children}
+    </div>
+  )
+}
+
+function SaveButton({
+  label,
+  isLoading,
+}: {
+  label: string
+  isLoading: boolean
+}) {
+  return (
+    <button
+      type="submit"
+      disabled={isLoading}
+      className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-400 sm:w-auto"
+    >
+      {isLoading ? <Loader2 size={17} className="animate-spin" /> : <Save size={17} />}
+      {isLoading ? 'Salvando...' : label}
+    </button>
+  )
+}
+
 export function Settings() {
   const { isDark, toggleTheme } = useTheme()
-  const { user } = useAuth()
+  const { user, refreshUser, signOut } = useAuth()
+  const navigate = useNavigate()
   const [showContextHelp, setShowContextHelp] = useState(readContextHelpPreference)
   const [isHelpOpen, setIsHelpOpen] = useState(false)
+  const [savingAction, setSavingAction] = useState<SavingAction>(null)
+  const [name, setName] = useState(user?.name ?? '')
+  const [email, setEmail] = useState(user?.email ?? '')
+  const [emailPassword, setEmailPassword] = useState('')
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmNewPassword, setConfirmNewPassword] = useState('')
+  const [dangerAction, setDangerAction] = useState<DangerAction | null>(null)
+  const [dangerPassword, setDangerPassword] = useState('')
+  const [isDangerSubmitting, setIsDangerSubmitting] = useState(false)
   const displayName = useMemo(() => user?.name?.trim() || 'Usuario', [user?.name])
   const displayEmail = user?.email ?? 'Sem email carregado'
+  const activeDangerCopy = dangerAction ? dangerCopy[dangerAction] : null
+
+  useEffect(() => {
+    setName(user?.name ?? '')
+    setEmail(user?.email ?? '')
+  }, [user?.email, user?.name])
 
   const handleContextHelpChange = () => {
     setShowContextHelp((current) => {
@@ -195,6 +311,128 @@ export function Settings() {
       localStorage.setItem(HELP_PREF_KEY, next ? 'on' : 'off')
       return next
     })
+  }
+
+  const handleNameSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+
+    if (!name.trim()) {
+      toast.error('Informe um nome válido.')
+      return
+    }
+
+    setSavingAction('name')
+    try {
+      await updateUserProfile({ name: name.trim() })
+      await refreshUser()
+      toast.success('Nome atualizado.')
+    } catch (error) {
+      toast.error(apiErrorMessage(error, 'Erro ao atualizar o nome.'))
+    } finally {
+      setSavingAction(null)
+    }
+  }
+
+  const handleEmailSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+
+    if (!email.trim()) {
+      toast.error('Informe um email válido.')
+      return
+    }
+
+    if (!emailPassword) {
+      toast.error('Digite sua senha atual para alterar o email.')
+      return
+    }
+
+    setSavingAction('email')
+    try {
+      await updateUserProfile({
+        email: email.trim(),
+        currentPassword: emailPassword,
+      })
+      await refreshUser()
+      setEmailPassword('')
+      toast.success('Email atualizado.')
+    } catch (error) {
+      toast.error(apiErrorMessage(error, 'Erro ao atualizar o email.'))
+    } finally {
+      setSavingAction(null)
+    }
+  }
+
+  const handlePasswordSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+
+    if (newPassword.length < 6) {
+      toast.error('A nova senha deve ter no mínimo 6 caracteres.')
+      return
+    }
+
+    if (newPassword !== confirmNewPassword) {
+      toast.error('A confirmação da nova senha não confere.')
+      return
+    }
+
+    setSavingAction('password')
+    try {
+      await updateUserPassword({
+        currentPassword,
+        newPassword,
+      })
+      setCurrentPassword('')
+      setNewPassword('')
+      setConfirmNewPassword('')
+      toast.success('Senha atualizada.')
+    } catch (error) {
+      toast.error(apiErrorMessage(error, 'Erro ao atualizar a senha.'))
+    } finally {
+      setSavingAction(null)
+    }
+  }
+
+  const closeDangerModal = () => {
+    if (isDangerSubmitting) {
+      return
+    }
+
+    setDangerAction(null)
+    setDangerPassword('')
+  }
+
+  const handleDangerConfirm = async () => {
+    if (!dangerAction) {
+      return
+    }
+
+    if (!dangerPassword) {
+      toast.error('Digite sua senha para confirmar.')
+      return
+    }
+
+    setIsDangerSubmitting(true)
+    try {
+      if (dangerAction === 'clear') {
+        const response = await clearUserData({ password: dangerPassword })
+        setDangerAction(null)
+        setDangerPassword('')
+        toast.success(response.data.message)
+        navigate('/dashboard')
+        return
+      }
+
+      const response = await deleteMyAccount({ password: dangerPassword })
+      setDangerAction(null)
+      setDangerPassword('')
+      toast.success(response.data.message)
+      signOut()
+      navigate('/login')
+    } catch (error) {
+      toast.error(apiErrorMessage(error, 'Erro ao confirmar a ação.'))
+    } finally {
+      setIsDangerSubmitting(false)
+    }
   }
 
   return (
@@ -218,12 +456,12 @@ export function Settings() {
           </button>
         </header>
 
-        <div className="grid gap-5 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,0.85fr)]">
           <div className="space-y-5">
             <SettingsCard
               title="Conta"
-              description="Sessao autenticada e identidade usada nas operacoes."
-              icon={LockKeyhole}
+              description="Identidade, acesso e dados vinculados ao usuário autenticado."
+              icon={UserRound}
             >
               <div
                 className="rounded-xl border p-4"
@@ -237,8 +475,127 @@ export function Settings() {
                   {displayEmail}
                 </p>
               </div>
+
+              <form onSubmit={handleNameSubmit} className="border-t pt-4" style={{ borderColor: 'var(--color-border-soft)' }}>
+                <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+                  <FieldGroup label="Nome">
+                    <input
+                      value={name}
+                      onChange={(event) => setName(event.target.value)}
+                      type="text"
+                      className="app-control w-full"
+                      placeholder="Seu nome"
+                    />
+                  </FieldGroup>
+                  <SaveButton label="Salvar nome" isLoading={savingAction === 'name'} />
+                </div>
+              </form>
+
+              <form onSubmit={handleEmailSubmit} className="border-t pt-4" style={{ borderColor: 'var(--color-border-soft)' }}>
+                <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.8fr)_auto] lg:items-end">
+                  <FieldGroup label="Email">
+                    <input
+                      value={email}
+                      onChange={(event) => setEmail(event.target.value)}
+                      type="email"
+                      className="app-control w-full"
+                      placeholder="seu@email.com"
+                    />
+                  </FieldGroup>
+                  <FieldGroup label="Senha atual">
+                    <input
+                      value={emailPassword}
+                      onChange={(event) => setEmailPassword(event.target.value)}
+                      type="password"
+                      className="app-control w-full"
+                      placeholder="Sua senha atual"
+                    />
+                  </FieldGroup>
+                  <SaveButton label="Salvar email" isLoading={savingAction === 'email'} />
+                </div>
+              </form>
+
+              <form onSubmit={handlePasswordSubmit} className="border-t pt-4" style={{ borderColor: 'var(--color-border-soft)' }}>
+                <div className="grid gap-3 lg:grid-cols-3">
+                  <FieldGroup label="Senha atual">
+                    <input
+                      value={currentPassword}
+                      onChange={(event) => setCurrentPassword(event.target.value)}
+                      type="password"
+                      className="app-control w-full"
+                      placeholder="Senha atual"
+                    />
+                  </FieldGroup>
+                  <FieldGroup label="Nova senha">
+                    <input
+                      value={newPassword}
+                      onChange={(event) => setNewPassword(event.target.value)}
+                      type="password"
+                      className="app-control w-full"
+                      placeholder="Nova senha"
+                    />
+                  </FieldGroup>
+                  <FieldGroup label="Confirmar nova senha">
+                    <input
+                      value={confirmNewPassword}
+                      onChange={(event) => setConfirmNewPassword(event.target.value)}
+                      type="password"
+                      className="app-control w-full"
+                      placeholder="Confirme a nova senha"
+                    />
+                  </FieldGroup>
+                </div>
+                <div className="mt-3 flex justify-end">
+                  <SaveButton label="Salvar senha" isLoading={savingAction === 'password'} />
+                </div>
+              </form>
             </SettingsCard>
 
+            <SettingsCard
+              title="Dados da conta"
+              description="Ações irreversíveis protegidas por confirmação de senha."
+              icon={Trash2}
+            >
+              <div className="grid gap-3 md:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() => setDangerAction('clear')}
+                  className="flex min-h-28 flex-col items-start justify-between rounded-xl border p-4 text-left transition hover:opacity-90"
+                  style={{
+                    borderColor: 'var(--color-border-soft)',
+                    backgroundColor: 'var(--color-bg-input)',
+                  }}
+                >
+                  <span className="flex items-center gap-2 text-sm font-semibold text-amber-700">
+                    <Eraser size={18} />
+                    LIMPAR TODOS OS MEUS DADOS
+                  </span>
+                  <span className="mt-3 text-xs leading-5" style={{ color: 'var(--color-text-muted)' }}>
+                    Mantém o usuário e recria a base inicial da conta.
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDangerAction('delete')}
+                  className="flex min-h-28 flex-col items-start justify-between rounded-xl border p-4 text-left transition hover:opacity-90"
+                  style={{
+                    borderColor: 'rgba(239, 68, 68, 0.45)',
+                    backgroundColor: 'var(--color-bg-input)',
+                  }}
+                >
+                  <span className="flex items-center gap-2 text-sm font-semibold text-red-600">
+                    <Trash2 size={18} />
+                    EXCLUIR TODOS OS MEUS DADOS
+                  </span>
+                  <span className="mt-3 text-xs leading-5" style={{ color: 'var(--color-text-muted)' }}>
+                    Remove os dados e também exclui o usuário do banco.
+                  </span>
+                </button>
+              </div>
+            </SettingsCard>
+          </div>
+
+          <div className="space-y-5">
             <SettingsCard
               title="Aparencia"
               description="Preferencias locais salvas neste navegador."
@@ -257,9 +614,7 @@ export function Settings() {
                 onChange={handleContextHelpChange}
               />
             </SettingsCard>
-          </div>
 
-          <div className="space-y-5">
             <SettingsCard
               title="Modulos"
               description="Estado funcional dos fluxos principais do produto."
@@ -305,35 +660,55 @@ export function Settings() {
                 to="/reminders"
               />
             </SettingsCard>
-
-            <SettingsCard
-              title="Seguranca"
-              description="Regras de operacao financeira que continuam preservadas."
-              icon={ShieldCheck}
-            >
-              <div className="grid gap-3 sm:grid-cols-2">
-                {[
-                  'Saldo muda somente em apply confirmado.',
-                  'Movimento aplicado exige undo antes de edicao.',
-                  'Pix externo nao vira transferencia sozinho.',
-                  'Dados ficam vinculados ao usuario autenticado.',
-                ].map((item) => (
-                  <div
-                    key={item}
-                    className="rounded-xl border p-3 text-sm leading-6"
-                    style={{
-                      borderColor: 'var(--color-border-soft)',
-                      backgroundColor: 'var(--color-bg-input)',
-                    }}
-                  >
-                    {item}
-                  </div>
-                ))}
-              </div>
-            </SettingsCard>
           </div>
         </div>
       </div>
+
+      {activeDangerCopy && (
+        <ConfirmModal
+          isOpen
+          title={activeDangerCopy.title}
+          message={activeDangerCopy.message}
+          confirmLabel={isDangerSubmitting ? 'Confirmando...' : activeDangerCopy.confirmLabel}
+          confirmButtonClassName={activeDangerCopy.buttonClassName}
+          confirmDisabled={isDangerSubmitting || !dangerPassword}
+          confirmDisabledReason="Digite sua senha para confirmar."
+          onCancel={closeDangerModal}
+          onConfirm={handleDangerConfirm}
+          maxWidthClassName="max-w-xl"
+        >
+          <div
+            className="mb-4 rounded-xl border p-4"
+            style={{
+              borderColor: dangerAction === 'delete' ? 'rgba(239, 68, 68, 0.45)' : 'rgba(217, 119, 6, 0.45)',
+              backgroundColor: 'var(--color-bg-input)',
+            }}
+          >
+            <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
+              <AlertTriangle
+                size={18}
+                className={dangerAction === 'delete' ? 'text-red-600' : 'text-amber-700'}
+              />
+              <span>VOCE DESEJA MESMO ISSO?</span>
+            </div>
+            <ul className="space-y-2 text-sm leading-6" style={{ color: 'var(--color-text-muted)' }}>
+              {activeDangerCopy.details.map((detail) => (
+                <li key={detail}>{detail}</li>
+              ))}
+            </ul>
+          </div>
+          <FieldGroup label="Senha atual">
+            <input
+              value={dangerPassword}
+              onChange={(event) => setDangerPassword(event.target.value)}
+              type="password"
+              className="app-control w-full"
+              placeholder="Digite sua senha"
+              autoFocus
+            />
+          </FieldGroup>
+        </ConfirmModal>
+      )}
 
       {isHelpOpen && (
         <div className="fixed inset-0 z-[9999] flex items-end bg-black/50 p-3 sm:items-center sm:justify-center">
