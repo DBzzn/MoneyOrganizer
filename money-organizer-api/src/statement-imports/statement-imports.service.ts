@@ -332,6 +332,15 @@ function categoryKindForDirection(direction: ParsedStatementDirection) {
   return direction === 'IN' ? CategoryKind.INCOME : CategoryKind.EXPENSE;
 }
 
+function categoryKindMatchesDirection(
+  kind: CategoryKind,
+  direction: ParsedStatementDirection,
+) {
+  const expectedKind = categoryKindForDirection(direction);
+
+  return kind === expectedKind || kind === CategoryKind.BOTH;
+}
+
 function centsToDecimal(cents: number) {
   return new Prisma.Decimal(cents).div(100);
 }
@@ -782,8 +791,13 @@ export class StatementImportsService {
     startDate.setHours(0, 0, 0, 0);
     endDate.setHours(23, 59, 59, 999);
 
-    const [transactions, transfers, adjustments, categoryHistory] =
-      await Promise.all([
+    const [
+      transactions,
+      transfers,
+      adjustments,
+      transactionCategoryHistory,
+      importedMovementCategoryHistory,
+    ] = await Promise.all([
         accountIds.length > 0
           ? this.prisma.transaction.findMany({
               where: {
@@ -804,6 +818,7 @@ export class StatementImportsService {
                     name: true,
                     icon: true,
                     kind: true,
+                    isArchived: true,
                   },
                 },
               },
@@ -873,6 +888,35 @@ export class StatementImportsService {
             },
           },
           orderBy: { createdAt: 'desc' },
+          take: 500,
+        }),
+        this.prisma.importedMovement.findMany({
+          where: {
+            userId,
+            reviewTarget: ImportedMovementReviewTarget.TRANSACTION,
+            reviewCategoryId: { not: null },
+            status: {
+              notIn: [
+                ImportedMovementStatus.DUPLICATE,
+                ImportedMovementStatus.IGNORED,
+              ],
+            },
+          },
+          select: {
+            direction: true,
+            rawDescription: true,
+            normalizedDescription: true,
+            reviewCategory: {
+              select: {
+                id: true,
+                name: true,
+                icon: true,
+                kind: true,
+                isArchived: true,
+              },
+            },
+          },
+          orderBy: { updatedAt: 'desc' },
           take: 500,
         }),
       ]);
@@ -975,27 +1019,62 @@ export class StatementImportsService {
       >
     >();
 
-    for (const transaction of categoryHistory) {
-      const descriptionKey = normalizeReviewDescription(
-        transaction.description,
-      );
-      if (!descriptionKey) continue;
+    const addCategorySuggestionHistory = (
+      description: string | null | undefined,
+      direction: ParsedStatementDirection,
+      category: {
+        id: string;
+        name: string;
+        icon: string | null;
+        kind: CategoryKind;
+        isArchived?: boolean;
+      },
+    ) => {
+      if (
+        category.isArchived ||
+        !categoryKindMatchesDirection(category.kind, direction)
+      ) {
+        return;
+      }
 
-      const direction =
-        transaction.type === TransactionType.INCOME ? 'IN' : 'OUT';
+      const descriptionKey = normalizeReviewDescription(description);
+      if (!descriptionKey) {
+        return;
+      }
+
       const suggestionKey = [descriptionKey, direction].join('|');
       const suggestionsByCategory =
         categorySuggestions.get(suggestionKey) ?? new Map();
-      const current = suggestionsByCategory.get(transaction.category.id) ?? {
-        categoryId: transaction.category.id,
-        categoryName: transaction.category.name,
-        categoryIcon: transaction.category.icon,
+      const current = suggestionsByCategory.get(category.id) ?? {
+        categoryId: category.id,
+        categoryName: category.name,
+        categoryIcon: category.icon,
         count: 0,
       };
 
       current.count += 1;
-      suggestionsByCategory.set(transaction.category.id, current);
+      suggestionsByCategory.set(category.id, current);
       categorySuggestions.set(suggestionKey, suggestionsByCategory);
+    };
+
+    for (const transaction of transactionCategoryHistory) {
+      addCategorySuggestionHistory(
+        transaction.description,
+        transaction.type === TransactionType.INCOME ? 'IN' : 'OUT',
+        transaction.category,
+      );
+    }
+
+    for (const movement of importedMovementCategoryHistory) {
+      if (!movement.reviewCategory) {
+        continue;
+      }
+
+      addCategorySuggestionHistory(
+        movement.normalizedDescription || movement.rawDescription,
+        movement.direction,
+        movement.reviewCategory,
+      );
     }
 
     const getCategorySuggestion = (

@@ -113,6 +113,7 @@ describe('StatementImportsService', () => {
     prisma.transaction.findMany.mockResolvedValue([]);
     prisma.transfer.findMany.mockResolvedValue([]);
     prisma.balanceAdjustment.findMany.mockResolvedValue([]);
+    prisma.importedMovement.findMany.mockResolvedValue([]);
     prisma.importedMovement.count.mockResolvedValue(0);
 
     const module: TestingModule = await Test.createTestingModule({
@@ -1132,6 +1133,8 @@ describe('StatementImportsService', () => {
             id: 'category-1',
             name: 'Doacoes',
             icon: null,
+            kind: CategoryKind.EXPENSE,
+            isArchived: false,
           },
         },
       ])
@@ -1142,6 +1145,8 @@ describe('StatementImportsService', () => {
             id: 'category-1',
             name: 'Doacoes',
             icon: null,
+            kind: CategoryKind.EXPENSE,
+            isArchived: false,
           },
         },
       ]);
@@ -1178,6 +1183,134 @@ describe('StatementImportsService', () => {
       }),
     );
     expect(prisma.transaction.findMany).toHaveBeenCalledTimes(2);
+  });
+
+  it('suggests categories from already reviewed imported movements', async () => {
+    const movementDate = new Date(2026, 1, 22, 12);
+    prisma.statementImportBatch.findFirst.mockResolvedValue({
+      id: 'batch-1',
+      status: 'REVIEWING',
+      createdAt: new Date(2026, 1, 22, 13),
+      updatedAt: new Date(2026, 1, 22, 13),
+      files: [
+        {
+          id: 'file-1',
+          financialAccountId: 'account-1',
+          movements: [
+            {
+              id: 'movement-1',
+              date: movementDate,
+              direction: 'OUT',
+              amountCents: 3990,
+              rawDescription: 'Netflix.com',
+              normalizedDescription: 'NETFLIX COM',
+              reconciliationStatus:
+                ImportedMovementReconciliationStatus.PENDING,
+            },
+          ],
+        },
+      ],
+    });
+    prisma.importedMovement.findMany.mockResolvedValue([
+      {
+        direction: 'OUT',
+        rawDescription: 'Netflix.com',
+        normalizedDescription: 'NETFLIX COM',
+        reviewCategory: {
+          id: 'category-streaming',
+          name: 'Streaming',
+          icon: 'Tv',
+          kind: CategoryKind.EXPENSE,
+          isArchived: false,
+        },
+      },
+    ]);
+
+    const batch = await service.findBatch('user-1', 'batch-1');
+    const hints = (batch.files[0].movements[0] as any).reviewHints;
+
+    expect(hints.categorySuggestion).toMatchObject({
+      categoryId: 'category-streaming',
+      categoryName: 'Streaming',
+      categoryIcon: 'Tv',
+      basedOnCount: 1,
+    });
+    expect(prisma.importedMovement.findMany).toHaveBeenCalledWith({
+      where: {
+        userId: 'user-1',
+        reviewTarget: ImportedMovementReviewTarget.TRANSACTION,
+        reviewCategoryId: { not: null },
+        status: {
+          notIn: [
+            ImportedMovementStatus.DUPLICATE,
+            ImportedMovementStatus.IGNORED,
+          ],
+        },
+      },
+      select: {
+        direction: true,
+        rawDescription: true,
+        normalizedDescription: true,
+        reviewCategory: {
+          select: {
+            id: true,
+            name: true,
+            icon: true,
+            kind: true,
+            isArchived: true,
+          },
+        },
+      },
+      orderBy: { updatedAt: 'desc' },
+      take: 500,
+    });
+  });
+
+  it('does not suggest imported review categories with incompatible kind', async () => {
+    const movementDate = new Date(2026, 1, 23, 12);
+    prisma.statementImportBatch.findFirst.mockResolvedValue({
+      id: 'batch-1',
+      status: 'REVIEWING',
+      createdAt: new Date(2026, 1, 23, 13),
+      updatedAt: new Date(2026, 1, 23, 13),
+      files: [
+        {
+          id: 'file-1',
+          financialAccountId: 'account-1',
+          movements: [
+            {
+              id: 'movement-1',
+              date: movementDate,
+              direction: 'OUT',
+              amountCents: 120000,
+              rawDescription: 'Salario mensal',
+              normalizedDescription: 'SALARIO MENSAL',
+              reconciliationStatus:
+                ImportedMovementReconciliationStatus.PENDING,
+            },
+          ],
+        },
+      ],
+    });
+    prisma.importedMovement.findMany.mockResolvedValue([
+      {
+        direction: 'OUT',
+        rawDescription: 'Salario mensal',
+        normalizedDescription: 'SALARIO MENSAL',
+        reviewCategory: {
+          id: 'category-income',
+          name: 'Salario',
+          icon: 'Briefcase',
+          kind: CategoryKind.INCOME,
+          isArchived: false,
+        },
+      },
+    ]);
+
+    const batch = await service.findBatch('user-1', 'batch-1');
+    const hints = (batch.files[0].movements[0] as any).reviewHints;
+
+    expect(hints.categorySuggestion).toBeUndefined();
   });
 
   it('removes a non-applied import batch scoped to the user', async () => {

@@ -14,7 +14,8 @@ import {
     CircleDollarSign,
     WalletCards,
     PanelLeftClose,
-    PanelLeftOpen
+    PanelLeftOpen,
+    Settings
 } from "lucide-react";
 import { useAuth } from "../contexts/useAuth";
 import { useTheme } from '../contexts/useTheme'
@@ -34,10 +35,11 @@ const navItems = [
     { to: '/transfers', icon: Repeat2, Label: 'Transferências' },
     { to: '/reminders', icon: Bell, Label: 'Lembretes' },
     { to: '/statement-imports', icon: FileUp, Label: 'Importar' },
+    { to: '/settings', icon: Settings, Label: 'Configuracoes' },
     { to: '/reports', icon: NotebookPen, Label: 'Relatórios' },
 ]
 
-const routeKeys = ['/dashboard', '/accounts', '/categories', '/transactions', '/transfers', '/reminders', '/statement-imports', '/reports'] as const
+const routeKeys = ['/dashboard', '/accounts', '/categories', '/transactions', '/transfers', '/reminders', '/statement-imports', '/reports', '/settings'] as const
 
 type RouteKey = typeof routeKeys[number] | 'default'
 type TimeBucket = 'dawn' | 'morningWeekday' | 'morningWeekend' | 'afternoon' | 'evening'
@@ -136,6 +138,13 @@ const pageNudges: Record<RouteKey, string[]> = {
         'Mês bem contado fala melhor.',
         'Vida real não fecha igual planilha.',
         'Do achismo para o chão.',
+    ],
+    '/settings': [
+        'Preferencia boa reduz atrito.',
+        'O app tambem precisa caber em voce.',
+        'Controle pequeno, rotina melhor.',
+        'Regra clara evita surpresa.',
+        'Ajuste fino sem mexer no saldo.',
     ],
     default: [
         'Pequeno ajuste, cabeça leve.',

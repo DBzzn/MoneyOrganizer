@@ -17,6 +17,7 @@ const Reports = lazy(() => import('./pages/Reports').then((module) => ({ default
 const FinancialAccounts = lazy(() => import('./pages/FinancialAccounts').then((module) => ({ default: module.FinancialAccounts })))
 const Reminders = lazy(() => import('./pages/Reminders').then((module) => ({ default: module.Reminders })))
 const StatementImports = lazy(() => import('./pages/StatementImports').then((module) => ({ default: module.StatementImports })))
+const Settings = lazy(() => import('./pages/Settings').then((module) => ({ default: module.Settings })))
 
 function RouteLoading() {
     return (
@@ -80,6 +81,12 @@ export default function App() {
                     <Route path="/reports" element={
                         <PrivateRoute>
                             <Reports />
+                        </PrivateRoute>
+                    }
+                    />
+                    <Route path="/settings" element={
+                        <PrivateRoute>
+                            <Settings />
                         </PrivateRoute>
                     }
                     />
