@@ -131,10 +131,10 @@ describe('UsersService', () => {
     });
   });
 
-  it('requires the current password before changing email', async () => {
+  it('requires the current password before changing profile data', async () => {
     await expect(
       service.updateProfile('user-1', {
-        email: 'new@example.com',
+        name: 'New Name',
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
 

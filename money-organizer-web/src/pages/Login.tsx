@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../contexts/useAuth'
 import { login } from '../api/auth'
 import { loginSchema } from '../schemas'
@@ -12,8 +12,11 @@ import { useTheme } from '../contexts/useTheme'
 export function Login() {
   const { signIn } = useAuth()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const { isDark, toggleTheme } = useTheme()
   const [serverError, setServerError] = useState<string | null>(null)
+  const sessionExpired = searchParams.get('reason') === 'session-expired'
+  const nextPath = searchParams.get('next')
 
   const {
     register,
@@ -29,17 +32,26 @@ export function Login() {
     try {
       const response = await login(data)
       await signIn(response.data.access_token)
-      navigate('/dashboard')
+      navigate(nextPath?.startsWith('/') && !nextPath.startsWith('//') ? nextPath : '/dashboard')
     } catch {
       setServerError('Email ou senha inválidos!')
     }
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4"
-      style={{ backgroundColor: 'var(--color-bg)' }}>
+    <div className="login-scene relative flex min-h-screen items-center justify-center overflow-hidden p-4">
+      <div className="login-geometry-bg" aria-hidden="true">
+        <span className="login-lane login-lane-a" />
+        <span className="login-lane login-lane-b" />
+        <span className="login-shape login-square login-shape-a" />
+        <span className="login-shape login-square login-shape-b" />
+        <span className="login-shape login-diamond login-shape-c" />
+        <span className="login-shape login-triangle login-shape-d" />
+        <span className="login-mini-card login-mini-card-a" />
+        <span className="login-mini-card login-mini-card-b" />
+      </div>
 
-      <div className="rounded-2xl shadow-sm w-full max-w-md p-8"
+      <div className="glass-heavy relative z-10 w-full max-w-md rounded-2xl p-8 shadow-sm"
         style={{ backgroundColor: 'var(--color-bg-card)', border: '1px solid var(--color-border)' }}>
         <div className='flex items-start justify-between'>
           <div className="mb-8">
@@ -94,6 +106,17 @@ export function Login() {
           {serverError && (
             <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3">
               <p className="text-red-600 text-sm">{serverError}</p>
+            </div>
+          )}
+
+          {sessionExpired && !serverError && (
+            <div
+              className="rounded-lg border px-4 py-3"
+              style={{ backgroundColor: 'var(--color-bg-input)', borderColor: 'var(--color-border-soft)' }}
+            >
+              <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
+                Sua sessão expirou. Entre novamente para continuar.
+              </p>
             </div>
           )}
 

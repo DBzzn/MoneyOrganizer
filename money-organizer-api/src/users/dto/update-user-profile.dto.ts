@@ -21,7 +21,7 @@ export class UpdateUserProfileDto {
   email?: string;
 
   @ApiPropertyOptional({
-    description: 'Senha atual, obrigatória para alterar email',
+    description: 'Senha atual, obrigatória para confirmar alterações de perfil',
   })
   @IsOptional()
   @IsString()

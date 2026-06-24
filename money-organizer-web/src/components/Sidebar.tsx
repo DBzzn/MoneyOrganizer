@@ -249,7 +249,10 @@ export function Sidebar({ isOpen, isMobile, onNavigate, onToggle }: SidebarProps
     }
 
     const handleMobileNavPointerDown = (event: PointerEvent<HTMLDivElement>) => {
-        if (event.button !== 0) return
+        if (event.pointerType !== 'mouse' || event.button !== 0) {
+            wasMobileNavDraggingRef.current = false
+            return
+        }
 
         const nav = mobileNavRef.current
         if (!nav) return

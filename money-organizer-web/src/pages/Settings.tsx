@@ -59,7 +59,7 @@ function apiErrorMessage(error: unknown, fallback: string) {
 }
 
 type StatusTone = 'green' | 'yellow' | 'blue' | 'gray'
-type SavingAction = 'name' | 'email' | 'password' | null
+type SavingAction = 'account' | null
 type DangerAction = 'clear' | 'delete'
 
 const statusToneClassName: Record<StatusTone, string> = {
@@ -289,10 +289,10 @@ export function Settings() {
   const [savingAction, setSavingAction] = useState<SavingAction>(null)
   const [name, setName] = useState(user?.name ?? '')
   const [email, setEmail] = useState(user?.email ?? '')
-  const [emailPassword, setEmailPassword] = useState('')
-  const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmNewPassword, setConfirmNewPassword] = useState('')
+  const [isAccountConfirmOpen, setIsAccountConfirmOpen] = useState(false)
+  const [accountConfirmPassword, setAccountConfirmPassword] = useState('')
   const [dangerAction, setDangerAction] = useState<DangerAction | null>(null)
   const [dangerPassword, setDangerPassword] = useState('')
   const [isDangerSubmitting, setIsDangerSubmitting] = useState(false)
@@ -313,80 +313,106 @@ export function Settings() {
     })
   }
 
-  const handleNameSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
+  const getAccountChanges = () => {
+    const trimmedName = name.trim()
+    const normalizedEmail = email.trim().toLowerCase()
+    const currentName = user?.name?.trim() ?? ''
+    const currentEmail = user?.email?.trim().toLowerCase() ?? ''
+    const profileChanged = trimmedName !== currentName || normalizedEmail !== currentEmail
+    const passwordChanged = newPassword.length > 0 || confirmNewPassword.length > 0
 
-    if (!name.trim()) {
+    return {
+      currentEmail,
+      currentName,
+      normalizedEmail,
+      passwordChanged,
+      profileChanged,
+      trimmedName,
+    }
+  }
+
+  const handleAccountSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const { normalizedEmail, passwordChanged, profileChanged, trimmedName } = getAccountChanges()
+
+    if (!trimmedName) {
       toast.error('Informe um nome válido.')
       return
     }
 
-    setSavingAction('name')
-    try {
-      await updateUserProfile({ name: name.trim() })
-      await refreshUser()
-      toast.success('Nome atualizado.')
-    } catch (error) {
-      toast.error(apiErrorMessage(error, 'Erro ao atualizar o nome.'))
-    } finally {
-      setSavingAction(null)
-    }
-  }
-
-  const handleEmailSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-
-    if (!email.trim()) {
+    if (!normalizedEmail) {
       toast.error('Informe um email válido.')
       return
     }
 
-    if (!emailPassword) {
-      toast.error('Digite sua senha atual para alterar o email.')
-      return
-    }
-
-    setSavingAction('email')
-    try {
-      await updateUserProfile({
-        email: email.trim(),
-        currentPassword: emailPassword,
-      })
-      await refreshUser()
-      setEmailPassword('')
-      toast.success('Email atualizado.')
-    } catch (error) {
-      toast.error(apiErrorMessage(error, 'Erro ao atualizar o email.'))
-    } finally {
-      setSavingAction(null)
-    }
-  }
-
-  const handlePasswordSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-
-    if (newPassword.length < 6) {
+    if (passwordChanged && newPassword.length < 6) {
       toast.error('A nova senha deve ter no mínimo 6 caracteres.')
       return
     }
 
-    if (newPassword !== confirmNewPassword) {
+    if (passwordChanged && newPassword !== confirmNewPassword) {
       toast.error('A confirmação da nova senha não confere.')
       return
     }
 
-    setSavingAction('password')
+    if (!profileChanged && !passwordChanged) {
+      toast('Nenhuma alteração para salvar.')
+      return
+    }
+
+    setAccountConfirmPassword('')
+    setIsAccountConfirmOpen(true)
+  }
+
+  const closeAccountConfirmModal = () => {
+    if (savingAction === 'account') {
+      return
+    }
+
+    setIsAccountConfirmOpen(false)
+    setAccountConfirmPassword('')
+  }
+
+  const handleAccountConfirm = async () => {
+    if (!accountConfirmPassword) {
+      toast.error('Digite sua senha para confirmar.')
+      return
+    }
+
+    const {
+      currentEmail,
+      currentName,
+      normalizedEmail,
+      passwordChanged,
+      profileChanged,
+      trimmedName,
+    } = getAccountChanges()
+
+    setSavingAction('account')
     try {
-      await updateUserPassword({
-        currentPassword,
-        newPassword,
-      })
-      setCurrentPassword('')
+      if (profileChanged) {
+        await updateUserProfile({
+          ...(trimmedName !== currentName ? { name: trimmedName } : {}),
+          ...(normalizedEmail !== currentEmail ? { email: normalizedEmail } : {}),
+          currentPassword: accountConfirmPassword,
+        })
+      }
+
+      if (passwordChanged) {
+        await updateUserPassword({
+          currentPassword: accountConfirmPassword,
+          newPassword,
+        })
+      }
+
+      await refreshUser()
+      setIsAccountConfirmOpen(false)
+      setAccountConfirmPassword('')
       setNewPassword('')
       setConfirmNewPassword('')
-      toast.success('Senha atualizada.')
+      toast.success('Configurações salvas.')
     } catch (error) {
-      toast.error(apiErrorMessage(error, 'Erro ao atualizar a senha.'))
+      toast.error(apiErrorMessage(error, 'Erro ao salvar as configurações.'))
     } finally {
       setSavingAction(null)
     }
@@ -476,8 +502,8 @@ export function Settings() {
                 </p>
               </div>
 
-              <form onSubmit={handleNameSubmit} className="border-t pt-4" style={{ borderColor: 'var(--color-border-soft)' }}>
-                <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+              <form onSubmit={handleAccountSubmit} className="border-t pt-4" style={{ borderColor: 'var(--color-border-soft)' }}>
+                <div className="grid gap-3 lg:grid-cols-2">
                   <FieldGroup label="Nome">
                     <input
                       value={name}
@@ -487,12 +513,6 @@ export function Settings() {
                       placeholder="Seu nome"
                     />
                   </FieldGroup>
-                  <SaveButton label="Salvar nome" isLoading={savingAction === 'name'} />
-                </div>
-              </form>
-
-              <form onSubmit={handleEmailSubmit} className="border-t pt-4" style={{ borderColor: 'var(--color-border-soft)' }}>
-                <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.8fr)_auto] lg:items-end">
                   <FieldGroup label="Email">
                     <input
                       value={email}
@@ -502,37 +522,14 @@ export function Settings() {
                       placeholder="seu@email.com"
                     />
                   </FieldGroup>
-                  <FieldGroup label="Senha atual">
-                    <input
-                      value={emailPassword}
-                      onChange={(event) => setEmailPassword(event.target.value)}
-                      type="password"
-                      className="app-control w-full"
-                      placeholder="Sua senha atual"
-                    />
-                  </FieldGroup>
-                  <SaveButton label="Salvar email" isLoading={savingAction === 'email'} />
-                </div>
-              </form>
-
-              <form onSubmit={handlePasswordSubmit} className="border-t pt-4" style={{ borderColor: 'var(--color-border-soft)' }}>
-                <div className="grid gap-3 lg:grid-cols-3">
-                  <FieldGroup label="Senha atual">
-                    <input
-                      value={currentPassword}
-                      onChange={(event) => setCurrentPassword(event.target.value)}
-                      type="password"
-                      className="app-control w-full"
-                      placeholder="Senha atual"
-                    />
-                  </FieldGroup>
                   <FieldGroup label="Nova senha">
                     <input
                       value={newPassword}
                       onChange={(event) => setNewPassword(event.target.value)}
                       type="password"
                       className="app-control w-full"
-                      placeholder="Nova senha"
+                      placeholder="Opcional"
+                      autoComplete="new-password"
                     />
                   </FieldGroup>
                   <FieldGroup label="Confirmar nova senha">
@@ -541,12 +538,13 @@ export function Settings() {
                       onChange={(event) => setConfirmNewPassword(event.target.value)}
                       type="password"
                       className="app-control w-full"
-                      placeholder="Confirme a nova senha"
+                      placeholder="Repita a nova senha"
+                      autoComplete="new-password"
                     />
                   </FieldGroup>
                 </div>
-                <div className="mt-3 flex justify-end">
-                  <SaveButton label="Salvar senha" isLoading={savingAction === 'password'} />
+                <div className="mt-4 flex justify-end">
+                  <SaveButton label="Salvar alterações" isLoading={savingAction === 'account'} />
                 </div>
               </form>
             </SettingsCard>
@@ -663,6 +661,31 @@ export function Settings() {
           </div>
         </div>
       </div>
+
+      <ConfirmModal
+        isOpen={isAccountConfirmOpen}
+        title="Confirmar alterações"
+        message="Digite sua senha atual para salvar as alterações da conta."
+        confirmLabel={savingAction === 'account' ? 'Salvando...' : 'Salvar'}
+        confirmButtonClassName="bg-blue-600 hover:bg-blue-700"
+        confirmDisabled={savingAction === 'account' || !accountConfirmPassword}
+        confirmDisabledReason="Digite sua senha para confirmar."
+        onCancel={closeAccountConfirmModal}
+        onConfirm={handleAccountConfirm}
+        maxWidthClassName="max-w-md"
+      >
+        <FieldGroup label="Senha atual">
+          <input
+            value={accountConfirmPassword}
+            onChange={(event) => setAccountConfirmPassword(event.target.value)}
+            type="password"
+            className="app-control w-full"
+            placeholder="Digite sua senha"
+            autoComplete="current-password"
+            autoFocus
+          />
+        </FieldGroup>
+      </ConfirmModal>
 
       {activeDangerCopy && (
         <ConfirmModal

@@ -163,21 +163,21 @@ export class UsersService {
     }
 
     if (normalizedEmail && normalizedEmail !== currentUser.email) {
-      if (!dto.currentPassword) {
-        throw new BadRequestException('Digite sua senha atual para alterar o email.');
-      }
-
-      const passwordMatch = await bcrypt.compare(dto.currentPassword, currentUser.password);
-
-      if (!passwordMatch) {
-        throw new UnauthorizedException('Senha atual inválida.');
-      }
-
       data.email = normalizedEmail;
     }
 
     if (Object.keys(data).length === 0) {
       throw new BadRequestException('Nenhuma alteração informada.');
+    }
+
+    if (!dto.currentPassword) {
+      throw new BadRequestException('Digite sua senha atual para confirmar as alterações.');
+    }
+
+    const passwordMatch = await bcrypt.compare(dto.currentPassword, currentUser.password);
+
+    if (!passwordMatch) {
+      throw new UnauthorizedException('Senha atual inválida.');
     }
 
     try {

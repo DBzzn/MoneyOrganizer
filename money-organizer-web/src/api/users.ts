@@ -4,7 +4,7 @@ import type { User } from '../types'
 export interface UpdateUserProfilePayload {
   name?: string
   email?: string
-  currentPassword?: string
+  currentPassword: string
 }
 
 export interface UpdateUserPasswordPayload {
