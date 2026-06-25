@@ -315,6 +315,245 @@ html,
     }
 }
 
+/* ─── REGISTER MOTION BACKDROP ─── */
+.register-scene {
+    background: transparent;
+}
+
+.register-motion-bg {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+.register-track,
+.register-ledger-card,
+.register-step,
+.register-balance-strip {
+    position: absolute;
+    display: block;
+}
+
+.register-track {
+    width: 2px;
+    height: 130vh;
+    top: -15vh;
+    border-radius: 999px;
+    background:
+        linear-gradient(
+            180deg,
+            transparent,
+            color-mix(in srgb, var(--color-brand) 45%, transparent),
+            color-mix(in srgb, var(--color-income) 35%, transparent),
+            transparent
+        );
+    opacity: 0.74;
+    animation: register-track-glow 7s ease-in-out infinite;
+}
+
+.register-track-a {
+    left: 22%;
+    transform: rotate(13deg);
+}
+
+.register-track-b {
+    right: 18%;
+    transform: rotate(-10deg);
+    animation-delay: -3s;
+}
+
+.register-ledger-card {
+    width: 168px;
+    height: 108px;
+    border: 1px solid var(--color-border-soft);
+    border-radius: 16px;
+    background:
+        linear-gradient(135deg, var(--color-bg-card), var(--color-bg-input)),
+        var(--color-bg-card);
+    box-shadow: 0 24px 64px rgba(15, 23, 42, 0.16);
+    opacity: 0.7;
+    animation: register-card-orbit 11s ease-in-out infinite;
+}
+
+.register-ledger-card::before,
+.register-ledger-card::after {
+    content: "";
+    position: absolute;
+    left: 18px;
+    right: 18px;
+    height: 9px;
+    border-radius: 999px;
+}
+
+.register-ledger-card::before {
+    top: 22px;
+    background: var(--color-balance-bg);
+}
+
+.register-ledger-card::after {
+    top: 50px;
+    right: 56px;
+    background: var(--color-income-bg);
+}
+
+.register-ledger-card-a {
+    top: 17%;
+    left: 8%;
+    transform: rotate(-7deg);
+}
+
+.register-ledger-card-b {
+    right: 7%;
+    bottom: 15%;
+    transform: rotate(8deg);
+    animation-delay: -5s;
+}
+
+.register-step {
+    width: 76px;
+    height: 76px;
+    border: 1px solid var(--color-border);
+    border-radius: 22px;
+    background: var(--color-bg-input);
+    box-shadow: 0 20px 50px rgba(15, 23, 42, 0.14);
+    opacity: 0.76;
+    animation: register-step-rise 8.5s ease-in-out infinite;
+}
+
+.register-step::before {
+    content: "";
+    position: absolute;
+    inset: 22px 19px;
+    width: 34px;
+    height: 18px;
+    border-bottom: 4px solid var(--color-income);
+    border-left: 4px solid var(--color-income);
+    transform: rotate(-45deg);
+}
+
+.register-step-a {
+    left: 17%;
+    bottom: 20%;
+}
+
+.register-step-b {
+    top: 13%;
+    right: 25%;
+    animation-delay: -2s;
+}
+
+.register-step-c {
+    right: 14%;
+    top: 48%;
+    animation-delay: -4s;
+}
+
+.register-balance-strip {
+    width: 210px;
+    height: 48px;
+    border: 1px solid var(--color-border-soft);
+    border-radius: 999px;
+    background:
+        repeating-linear-gradient(
+            90deg,
+            color-mix(in srgb, var(--color-expense) 18%, transparent) 0 20px,
+            color-mix(in srgb, var(--color-income) 18%, transparent) 20px 40px,
+            transparent 40px 58px
+        ),
+        var(--color-bg-muted-card);
+    opacity: 0.58;
+    animation: register-strip-slide 16s linear infinite;
+}
+
+.register-balance-strip-a {
+    left: 6%;
+    bottom: 9%;
+    transform: rotate(8deg);
+}
+
+.register-balance-strip-b {
+    top: 9%;
+    right: 6%;
+    transform: rotate(-6deg);
+    animation-direction: reverse;
+    animation-duration: 21s;
+}
+
+@keyframes register-track-glow {
+    0%,
+    100% {
+        opacity: 0.42;
+    }
+
+    50% {
+        opacity: 0.86;
+    }
+}
+
+@keyframes register-card-orbit {
+    0%,
+    100% {
+        translate: 0 0;
+    }
+
+    50% {
+        translate: -16px 18px;
+    }
+}
+
+@keyframes register-step-rise {
+    0%,
+    100% {
+        translate: 0 0;
+    }
+
+    50% {
+        translate: 12px -20px;
+    }
+}
+
+@keyframes register-strip-slide {
+    from {
+        background-position: 0 0, 0 0;
+    }
+
+    to {
+        background-position: 180px 0, 0 0;
+    }
+}
+
+@media (max-width: 640px) {
+    .register-track {
+        opacity: 0.38;
+    }
+
+    .register-ledger-card {
+        width: 128px;
+        height: 84px;
+        opacity: 0.48;
+    }
+
+    .register-step {
+        width: 58px;
+        height: 58px;
+        border-radius: 18px;
+        opacity: 0.5;
+    }
+
+    .register-step::before {
+        inset: 17px 15px;
+        width: 26px;
+        height: 14px;
+    }
+
+    .register-balance-strip {
+        width: 156px;
+        height: 40px;
+        opacity: 0.44;
+    }
+}
+
 .btn-signout {
     color: var(--color-text-muted);
     background-color: transparent;

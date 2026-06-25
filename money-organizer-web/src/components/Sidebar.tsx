@@ -35,7 +35,7 @@ const navItems = [
     { to: '/transfers', icon: Repeat2, Label: 'Transferências' },
     { to: '/reminders', icon: Bell, Label: 'Lembretes' },
     { to: '/statement-imports', icon: FileUp, Label: 'Importar' },
-    { to: '/settings', icon: Settings, Label: 'Configuracoes' },
+    { to: '/settings', icon: Settings, Label: 'Configurações' },
     { to: '/reports', icon: NotebookPen, Label: 'Relatórios' },
 ]
 

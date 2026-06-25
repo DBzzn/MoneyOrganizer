@@ -119,7 +119,7 @@ export const STORED_ICON_GROUPS: StoredIconGroup[] = [
     {
         label: 'Vida pessoal',
         options: [
-            { value: 'lucide:heart-pulse', label: 'Saude', icon: HeartPulse },
+            { value: 'lucide:heart-pulse', label: 'Saúde', icon: HeartPulse },
             { value: 'lucide:hospital', label: 'Hospital', icon: Hospital },
             { value: 'lucide:pill', label: 'Medicacao', icon: Pill },
             { value: 'lucide:syringe', label: 'Vacina', icon: Syringe },

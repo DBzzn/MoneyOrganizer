@@ -7,6 +7,7 @@ import {
   useRef,
   type ChangeEvent,
   type FormEvent,
+  type MouseEvent as ReactMouseEvent,
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
@@ -245,6 +246,11 @@ type MovementStatusMenuPosition = {
   top: number;
   placement: "top" | "bottom";
   maxHeight: number;
+};
+
+type SelectedReviewActionsMenuPosition = {
+  x: number;
+  y: number;
 };
 
 const TRANSFER_REVIEW_TYPE = "TRANSFERENCIA";
@@ -888,12 +894,9 @@ function getBatchMovementCount(batch: StatementImportBatch | null): number {
   );
 }
 
-function getBatchMovementStatusCounts(
-  batch: StatementImportBatch | null,
-): Record<MovementStatusFilter, number> {
-  const movements = batch?.files.flatMap((file) => file.movements) ?? [];
-  const counts: Record<MovementStatusFilter, number> = {
-    ALL: movements.length,
+function createMovementStatusCounts(): Record<MovementStatusFilter, number> {
+  return {
+    ALL: 0,
     NEW: 0,
     DUPLICATE: 0,
     IGNORED: 0,
@@ -901,12 +904,57 @@ function getBatchMovementStatusCounts(
     NEEDS_REVIEW: 0,
     APPLIED: 0,
   };
+}
+
+function getMovementStatusCounts(
+  movements: Array<Pick<ImportedMovement, "status">>,
+): Record<MovementStatusFilter, number> {
+  const counts = createMovementStatusCounts();
+
+  counts.ALL = movements.length;
 
   movements.forEach((movement) => {
     counts[movement.status] += 1;
   });
 
   return counts;
+}
+
+function getBatchMovementStatusCounts(
+  batch: StatementImportBatch | null,
+): Record<MovementStatusFilter, number> {
+  return getMovementStatusCounts(
+    batch?.files.flatMap((file) => file.movements) ?? [],
+  );
+}
+
+function getCompletedMovementCount(
+  counts: Record<MovementStatusFilter, number>,
+): number {
+  return counts.READY + counts.IGNORED + counts.APPLIED + counts.DUPLICATE;
+}
+
+function getPendingReviewCount(
+  counts: Record<MovementStatusFilter, number>,
+): number {
+  return counts.NEW + counts.NEEDS_REVIEW;
+}
+
+function getMovementCompletionPercentage(
+  counts: Record<MovementStatusFilter, number>,
+): number {
+  if (counts.ALL === 0) {
+    return 0;
+  }
+
+  return Math.round((getCompletedMovementCount(counts) / counts.ALL) * 100);
+}
+
+function isInteractiveMovementTarget(target: EventTarget | null): boolean {
+  return (
+    target instanceof HTMLElement &&
+    Boolean(target.closest("button,a,input,select,textarea,[role='button']"))
+  );
 }
 
 function hasAppliedMovements(batch: StatementImportBatch | null): boolean {
@@ -1269,6 +1317,11 @@ export function StatementImports() {
   const [selectedReviewMovementIds, setSelectedReviewMovementIds] = useState<
     string[]
   >([]);
+  const [activeReviewMovementId, setActiveReviewMovementId] = useState<
+    string | null
+  >(null);
+  const [selectedReviewActionsMenuPosition, setSelectedReviewActionsMenuPosition] =
+    useState<SelectedReviewActionsMenuPosition | null>(null);
   const [expandedImportFileIds, setExpandedImportFileIds] = useState<string[]>(
     [],
   );
@@ -1305,6 +1358,10 @@ export function StatementImports() {
   const movementStatusCounts = useMemo(
     () => getBatchMovementStatusCounts(currentBatch),
     [currentBatch],
+  );
+  const movementCompletionPercentage = useMemo(
+    () => getMovementCompletionPercentage(movementStatusCounts),
+    [movementStatusCounts],
   );
   const applyReadySummary = useMemo(
     () => getApplyReadySummary(currentBatch),
@@ -1379,6 +1436,13 @@ export function StatementImports() {
       ),
     [activeCategories, selectedReviewMovementItems],
   );
+  const selectedBulkCategory = useMemo(
+    () =>
+      bulkCategoryOptions.find(
+        (category) => category.id === selectedBulkCategoryId,
+      ) ?? null,
+    [bulkCategoryOptions, selectedBulkCategoryId],
+  );
   const categorySuggestionCandidates = useMemo<CategorySuggestionCandidate[]>(
     () =>
       currentBatch?.files.flatMap((file) =>
@@ -1410,6 +1474,13 @@ export function StatementImports() {
       ) ?? [],
     [activeCategories, currentBatch],
   );
+  const selectedCategorySuggestionCandidates = useMemo(() => {
+    const selectedIds = new Set(selectedReviewMovementIds);
+
+    return categorySuggestionCandidates.filter((candidate) =>
+      selectedIds.has(candidate.movement.id),
+    );
+  }, [categorySuggestionCandidates, selectedReviewMovementIds]);
   const editingSimilarReviewMovementItems = useMemo(() => {
     if (!editingMovement) {
       return [];
@@ -1675,6 +1746,8 @@ export function StatementImports() {
     if (!batchId) {
       setSelectedBatchId("");
       setCurrentBatch(null);
+      setActiveReviewMovementId(null);
+      setSelectedReviewActionsMenuPosition(null);
       return;
     }
 
@@ -1719,6 +1792,8 @@ export function StatementImports() {
 
     setSelectedBatchId("");
     setCurrentBatch(null);
+    setActiveReviewMovementId(null);
+    setSelectedReviewActionsMenuPosition(null);
     const nextParams = new URLSearchParams(searchParams);
     nextParams.delete("batch");
     setSearchParams(nextParams, { replace: true });
@@ -1752,6 +1827,27 @@ export function StatementImports() {
       current.filter((movementId) => availableIds.has(movementId)),
     );
   }, [bulkCategoryMovementItems]);
+
+  useEffect(() => {
+    if (!activeReviewMovementId) {
+      return;
+    }
+
+    const movementStillInBatch =
+      currentBatch?.files.some((file) =>
+        file.movements.some((movement) => movement.id === activeReviewMovementId),
+      ) ?? false;
+
+    if (!movementStillInBatch) {
+      setActiveReviewMovementId(null);
+    }
+  }, [activeReviewMovementId, currentBatch]);
+
+  useEffect(() => {
+    if (selectedReviewMovementIds.length === 0) {
+      setSelectedReviewActionsMenuPosition(null);
+    }
+  }, [selectedReviewMovementIds.length]);
 
   useEffect(() => {
     if (!selectedBulkCategoryId) {
@@ -1827,6 +1923,8 @@ export function StatementImports() {
     if (selectedBatchId === batchId) {
       setSelectedBatchId("");
       setCurrentBatch(null);
+      setActiveReviewMovementId(null);
+      setSelectedReviewActionsMenuPosition(null);
       const nextParams = new URLSearchParams(searchParams);
       nextParams.delete("batch");
       setSearchParams(nextParams, { replace: true });
@@ -2041,6 +2139,40 @@ export function StatementImports() {
     }
   };
 
+  const handleApplySelectedCategorySuggestions = async () => {
+    if (!currentBatch || selectedCategorySuggestionCandidates.length === 0) {
+      toast.error("Nenhuma sugestao segura nos selecionados.");
+      return;
+    }
+
+    try {
+      setIsApplyingCategorySuggestions(true);
+
+      for (const candidate of selectedCategorySuggestionCandidates) {
+        await updateImportedMovement(candidate.movement.id, {
+          reviewTarget: "TRANSACTION",
+          reviewCategoryId: candidate.category.id,
+          reviewTransferAccountId: null,
+        });
+      }
+
+      await preserveScrollPosition(() => loadBatch(currentBatch.id));
+      setSelectedReviewMovementIds([]);
+      setSelectedBulkCategoryId("");
+      setSelectedReviewActionsMenuPosition(null);
+      toast.success(
+        `${selectedCategorySuggestionCandidates.length} sugestao(oes) aplicada(s) aos selecionados.`,
+      );
+    } catch (error) {
+      await preserveScrollPosition(() => loadBatch(currentBatch.id));
+      toast.error(
+        apiErrorMessage(error, "Erro ao aplicar sugestoes nos selecionados."),
+      );
+    } finally {
+      setIsApplyingCategorySuggestions(false);
+    }
+  };
+
   const handleReviewSelectionChange = useCallback((
     movementId: string,
     shouldSelect: boolean,
@@ -2075,6 +2207,48 @@ export function StatementImports() {
     });
   }, []);
 
+  const closeSelectedReviewActionsMenu = useCallback(() => {
+    setSelectedReviewActionsMenuPosition(null);
+  }, []);
+
+  const handleReviewMovementLineClick = useCallback((movementId: string) => {
+    setActiveReviewMovementId(movementId);
+    setSelectedReviewMovementIds([]);
+    setSelectedReviewActionsMenuPosition(null);
+  }, []);
+
+  const openSelectedReviewActionsMenu = useCallback((
+    event: ReactMouseEvent<HTMLElement>,
+    movement: ImportedMovement,
+  ) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setActiveReviewMovementId(movement.id);
+
+    if (!isBulkCategoryMovementEligible(movement)) {
+      setSelectedReviewActionsMenuPosition(null);
+      toast.error(
+        "Somente transacoes editaveis entram nas acoes em massa.",
+      );
+      return;
+    }
+
+    setSelectedReviewMovementIds((current) =>
+      current.includes(movement.id) ? current : [movement.id],
+    );
+
+    const menuWidth = 288;
+    const menuHeight = 388;
+    const margin = 12;
+    const maxX = Math.max(margin, window.innerWidth - menuWidth - margin);
+    const maxY = Math.max(margin, window.innerHeight - menuHeight - margin);
+
+    setSelectedReviewActionsMenuPosition({
+      x: Math.min(Math.max(event.clientX, margin), maxX),
+      y: Math.min(Math.max(event.clientY, margin), maxY),
+    });
+  }, []);
+
   const handleSelectSimilarReviewMovements = () => {
     if (!editingMovement || editingSimilarReviewMovementItems.length === 0) {
       toast.error("Nao ha movimentos semelhantes editaveis para selecionar.");
@@ -2092,10 +2266,27 @@ export function StatementImports() {
   };
 
   const handleSelectedReviewStatusChange = async (
-    status: Extract<ReviewableMovementStatus, "NEW" | "NEEDS_REVIEW" | "IGNORED">,
+    status: ReviewableMovementStatus,
   ) => {
     if (!currentBatch || selectedReviewMovementItems.length === 0) {
       toast.error("Selecione movimentos editaveis para atualizar.");
+      return;
+    }
+
+    const updateItems =
+      status === "READY"
+        ? selectedReviewMovementItems.filter(
+            ({ file, movement }) => !getMovementReadinessIssue(movement, file),
+          )
+        : selectedReviewMovementItems;
+    const blockedCount = selectedReviewMovementItems.length - updateItems.length;
+
+    if (updateItems.length === 0) {
+      toast.error(
+        status === "READY"
+          ? "Nenhum selecionado esta pronto para marcar como pronto."
+          : "Nenhum selecionado pode ser atualizado.",
+      );
       return;
     }
 
@@ -2104,7 +2295,7 @@ export function StatementImports() {
     try {
       setIsUpdatingSelectedReviewStatus(true);
 
-      for (const { movement } of selectedReviewMovementItems) {
+      for (const { movement } of updateItems) {
         await updateImportedMovementStatus(movement.id, status);
         updatedCount += 1;
       }
@@ -2112,8 +2303,11 @@ export function StatementImports() {
       await preserveScrollPosition(() => loadBatch(currentBatch.id));
       setSelectedReviewMovementIds([]);
       setSelectedBulkCategoryId("");
+      setSelectedReviewActionsMenuPosition(null);
       toast.success(
-        `${updatedCount} movimento(s) marcado(s) como ${movementStatusLabel(status).toLowerCase()}.`,
+        blockedCount > 0
+          ? `${updatedCount} movimento(s) marcado(s) como ${movementStatusLabel(status).toLowerCase()}. ${blockedCount} bloqueado(s) por pendencias.`
+          : `${updatedCount} movimento(s) marcado(s) como ${movementStatusLabel(status).toLowerCase()}.`,
       );
     } catch (error) {
       await preserveScrollPosition(() => loadBatch(currentBatch.id));
@@ -2263,6 +2457,12 @@ export function StatementImports() {
 
     setEditingMovement(movement);
     setEditingMovementFile(file);
+    setActiveReviewMovementId(movement.id);
+    if (isBulkCategoryMovementEligible(movement)) {
+      setSelectedReviewMovementIds((current) =>
+        current.includes(movement.id) ? current : [...current, movement.id],
+      );
+    }
     setMovementEditForm({
       date: dateInputValue(movement.date),
       amount: centsToInputValue(movement.amountCents),
@@ -2924,6 +3124,76 @@ export function StatementImports() {
                         Carregando lote...
                       </div>
                     )}
+
+                    {isExpanded && !isLoadingBatch && currentBatch?.id === summary.id && (
+                      <div
+                        className="border-t px-4 py-3"
+                        style={{
+                          borderColor: "var(--color-border)",
+                          backgroundColor: "var(--color-bg-muted-card)",
+                        }}
+                      >
+                        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                          <div className="flex min-w-0 items-start gap-3">
+                            <span
+                              className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border"
+                              style={{
+                                borderColor: "var(--color-border)",
+                                color: "var(--color-brand)",
+                              }}
+                            >
+                              <Landmark size={17} />
+                            </span>
+                            <div className="min-w-0">
+                              <p
+                                className="text-sm font-semibold"
+                                style={{ color: "var(--color-text)" }}
+                              >
+                                Lote aberto: {formatBatchPeriod(currentBatch)}
+                              </p>
+                              <p
+                                className="mt-1 text-xs"
+                                style={{ color: "var(--color-text-muted)" }}
+                              >
+                                Os arquivos e movimentos vinculados a este lote aparecem no painel abaixo.
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex flex-wrap gap-2 text-xs">
+                            <span
+                              className="rounded-full border px-2.5 py-1 font-medium"
+                              style={{
+                                borderColor: "var(--color-border)",
+                                color: "var(--color-text)",
+                                backgroundColor: "var(--color-bg-card)",
+                              }}
+                            >
+                              {movementCompletionPercentage}% concluido
+                            </span>
+                            <span
+                              className="rounded-full border px-2.5 py-1 font-medium"
+                              style={{
+                                borderColor: "var(--color-border)",
+                                color: "var(--color-text)",
+                                backgroundColor: "var(--color-bg-card)",
+                              }}
+                            >
+                              {getPendingReviewCount(movementStatusCounts)} pendente(s)
+                            </span>
+                            <span
+                              className="rounded-full border px-2.5 py-1 font-medium"
+                              style={{
+                                borderColor: "var(--color-border)",
+                                color: "var(--color-text)",
+                                backgroundColor: "var(--color-bg-card)",
+                              }}
+                            >
+                              {movementStatusCounts.IGNORED} ignorado(s)
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -2941,32 +3211,17 @@ export function StatementImports() {
           )}
         </div>
 
-        {isLoadingBatch && selectedBatchId && (
-          <div
-            className="glass flex min-h-[12rem] flex-col items-center justify-center rounded-2xl p-6 text-center"
-            style={{
-              backgroundColor: "var(--color-bg-card)",
-              border: "1px solid var(--color-border)",
-            }}
-          >
-            <Clock3 size={34} style={{ color: "var(--color-text-muted)" }} />
-            <p
-              className="mt-3 text-sm"
-              style={{ color: "var(--color-text-muted)" }}
-            >
-              Carregando lote...
-            </p>
-          </div>
-        )}
-
         {!isLoadingBatch && currentBatch && (
-          <div className="space-y-5">
+          <div
+            className="space-y-5 border-l-2 pl-4"
+            style={{ borderColor: "var(--color-brand)" }}
+          >
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
               {[
                 {
                   label: "Lote",
                   value: `#${currentBatch.id.slice(0, 8)}`,
-                  detail: batchStatusLabel(currentBatch.status),
+                  detail: `${batchStatusLabel(currentBatch.status)} - ${movementCompletionPercentage}% concluido`,
                   icon: Files,
                 },
                 {
@@ -2976,21 +3231,21 @@ export function StatementImports() {
                   icon: FileSearch,
                 },
                 {
-                  label: "Periodo",
-                  value: formatBatchPeriod(currentBatch),
-                  detail: formatDate(currentBatch.createdAt),
-                  icon: Landmark,
+                  label: "Pendentes",
+                  value: String(getPendingReviewCount(movementStatusCounts)),
+                  detail: `${movementStatusCounts.NEW} novo(s) / ${movementStatusCounts.NEEDS_REVIEW} revisar`,
+                  icon: Clock3,
                 },
                 {
-                  label: "Duplicidades",
-                  value: String(totals.duplicateCount),
-                  detail: `${centsToCurrency(totals.inCents)} / ${centsToCurrency(totals.outCents)}`,
-                  icon: AlertTriangle,
+                  label: "Prontos",
+                  value: String(movementStatusCounts.READY),
+                  detail: `${movementStatusCounts.APPLIED} aplicado(s)`,
+                  icon: CheckCircle2,
                 },
                 {
-                  label: "Avisos",
-                  value: String(movementStatusCounts.NEEDS_REVIEW),
-                  detail: "movimentos para revisar depois",
+                  label: "Ignorados",
+                  value: String(movementStatusCounts.IGNORED),
+                  detail: `${totals.duplicateCount} duplicado(s)`,
                   icon: AlertTriangle,
                 },
               ].map((card) => (
@@ -3337,6 +3592,9 @@ export function StatementImports() {
               onCategoryChange={setSelectedBulkCategoryId}
               onApply={() => void handleApplyBulkCategory()}
               onApplySuggestions={() => void handleApplyCategorySuggestions()}
+              onReadySelected={() =>
+                void handleSelectedReviewStatusChange("READY")
+              }
               onIgnoreSelected={() =>
                 void handleSelectedReviewStatusChange("IGNORED")
               }
@@ -3362,6 +3620,53 @@ export function StatementImports() {
               }
               onClear={() => setSelectedReviewMovementIds([])}
             />
+
+            {selectedReviewActionsMenuPosition && (
+              <SelectedReviewActionsMenu
+                position={selectedReviewActionsMenuPosition}
+                selectedCount={selectedReviewMovementItems.length}
+                selectedCategoryLabel={
+                  selectedBulkCategory
+                    ? formatCategoryLabel(selectedBulkCategory)
+                    : null
+                }
+                selectedSuggestionCount={
+                  selectedCategorySuggestionCandidates.length
+                }
+                isApplying={isApplyingBulkCategory}
+                isApplyingSuggestions={isApplyingCategorySuggestions}
+                isUpdatingStatus={isUpdatingSelectedReviewStatus}
+                onClose={closeSelectedReviewActionsMenu}
+                onReadySelected={() => {
+                  closeSelectedReviewActionsMenu();
+                  void handleSelectedReviewStatusChange("READY");
+                }}
+                onIgnoreSelected={() => {
+                  closeSelectedReviewActionsMenu();
+                  void handleSelectedReviewStatusChange("IGNORED");
+                }}
+                onReviewSelected={() => {
+                  closeSelectedReviewActionsMenu();
+                  void handleSelectedReviewStatusChange("NEEDS_REVIEW");
+                }}
+                onResetSelected={() => {
+                  closeSelectedReviewActionsMenu();
+                  void handleSelectedReviewStatusChange("NEW");
+                }}
+                onApplyCategory={() => {
+                  closeSelectedReviewActionsMenu();
+                  void handleApplyBulkCategory();
+                }}
+                onApplySuggestions={() => {
+                  closeSelectedReviewActionsMenu();
+                  void handleApplySelectedCategorySuggestions();
+                }}
+                onClearSelection={() => {
+                  closeSelectedReviewActionsMenu();
+                  setSelectedReviewMovementIds([]);
+                }}
+              />
+            )}
 
             <div className="space-y-3">
               <div
@@ -3418,6 +3723,12 @@ export function StatementImports() {
                   onEditMovement={openMovementEditor}
                   updatingMovementId={updatingMovementId}
                   selectedMovementIds={selectedReviewMovementIds}
+                  activeMovementId={
+                    editingMovement?.id ?? activeReviewMovementId
+                  }
+                  onActivateMovement={setActiveReviewMovementId}
+                  onMovementLineClick={handleReviewMovementLineClick}
+                  onOpenSelectedActionsMenu={openSelectedReviewActionsMenu}
                   onMovementSelectionChange={handleReviewSelectionChange}
                   onSelectManyMovements={handleReviewSelectMany}
                 />
@@ -3521,6 +3832,250 @@ export function StatementImports() {
   );
 }
 
+function SelectedReviewActionsMenu({
+  position,
+  selectedCount,
+  selectedCategoryLabel,
+  selectedSuggestionCount,
+  isApplying,
+  isApplyingSuggestions,
+  isUpdatingStatus,
+  onClose,
+  onReadySelected,
+  onIgnoreSelected,
+  onReviewSelected,
+  onResetSelected,
+  onApplyCategory,
+  onApplySuggestions,
+  onClearSelection,
+}: {
+  position: SelectedReviewActionsMenuPosition;
+  selectedCount: number;
+  selectedCategoryLabel: string | null;
+  selectedSuggestionCount: number;
+  isApplying: boolean;
+  isApplyingSuggestions: boolean;
+  isUpdatingStatus: boolean;
+  onClose: () => void;
+  onReadySelected: () => void;
+  onIgnoreSelected: () => void;
+  onReviewSelected: () => void;
+  onResetSelected: () => void;
+  onApplyCategory: () => void;
+  onApplySuggestions: () => void;
+  onClearSelection: () => void;
+}) {
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const isBusy = isApplying || isApplyingSuggestions || isUpdatingStatus;
+  const hasSelection = selectedCount > 0;
+  const statusDisabledReason = isBusy
+    ? "Aguarde a atualizacao atual terminar."
+    : !hasSelection
+      ? "Selecione movimentos para atualizar status."
+      : null;
+  const categoryDisabledReason = isApplying
+    ? "Aguarde a aplicacao da categoria terminar."
+    : isUpdatingStatus || isApplyingSuggestions
+      ? "Aguarde a atualizacao atual terminar."
+      : !hasSelection
+        ? "Selecione movimentos para aplicar categoria."
+        : !selectedCategoryLabel
+          ? "Escolha uma categoria no painel de selecionados."
+          : null;
+  const suggestionDisabledReason = isApplyingSuggestions
+    ? "Aguarde a aplicacao das sugestoes terminar."
+    : isApplying || isUpdatingStatus
+      ? "Aguarde a atualizacao atual terminar."
+      : selectedSuggestionCount === 0
+        ? "Nenhuma sugestao segura nos selecionados."
+        : null;
+
+  useEffect(() => {
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+
+      if (menuRef.current?.contains(target)) {
+        return;
+      }
+
+      onClose();
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("scroll", onClose, true);
+
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("scroll", onClose, true);
+    };
+  }, [onClose]);
+
+  const renderAction = ({
+    label,
+    detail,
+    icon: Icon,
+    disabledReason,
+    onClick,
+    color = "var(--color-brand)",
+  }: {
+    label: string;
+    detail: string;
+    icon: LucideIcon;
+    disabledReason: string | null;
+    onClick: () => void;
+    color?: string;
+  }) => (
+    <button
+      type="button"
+      title={disabledReason ?? label}
+      disabled={Boolean(disabledReason)}
+      onClick={onClick}
+      className="flex w-full items-start gap-3 rounded-lg border px-3 py-2.5 text-left transition hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50"
+      style={{
+        borderColor: "var(--color-border)",
+        backgroundColor: "var(--color-bg-input)",
+        color: "var(--color-text)",
+      }}
+    >
+      <span
+        className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border"
+        style={{
+          borderColor: "var(--color-border)",
+          color,
+          backgroundColor: "var(--color-bg-muted-card)",
+        }}
+      >
+        <Icon size={16} />
+      </span>
+      <span className="min-w-0">
+        <span className="block text-sm font-semibold">{label}</span>
+        <span
+          className="mt-0.5 block text-xs leading-5"
+          style={{ color: "var(--color-text-muted)" }}
+        >
+          {disabledReason ?? detail}
+        </span>
+      </span>
+    </button>
+  );
+
+  return createPortal(
+    <div
+      ref={menuRef}
+      role="menu"
+      aria-label="Acoes dos movimentos selecionados"
+      onContextMenu={(event) => event.preventDefault()}
+      className="fixed z-[10000] w-72 overflow-hidden rounded-xl border p-2 shadow-2xl"
+      style={{
+        left: position.x,
+        top: position.y,
+        borderColor: "var(--color-border)",
+        backgroundColor: "var(--color-bg-solid)",
+        boxShadow: "0 24px 60px rgba(15, 23, 42, 0.32)",
+      }}
+    >
+      <div className="flex items-start justify-between gap-3 px-2 pb-2 pt-1">
+        <div className="min-w-0">
+          <p
+            className="text-sm font-semibold"
+            style={{ color: "var(--color-text)" }}
+          >
+            Acoes dos selecionados
+          </p>
+          <p
+            className="mt-0.5 text-xs"
+            style={{ color: "var(--color-text-muted)" }}
+          >
+            {selectedCount} movimento(s)
+          </p>
+        </div>
+        <button
+          type="button"
+          aria-label="Fechar menu"
+          title="Fechar"
+          onClick={onClose}
+          className="app-icon-control flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
+        >
+          <X size={15} />
+        </button>
+      </div>
+
+      <div className="space-y-2">
+        {renderAction({
+          label: "Aplicar categoria",
+          detail: selectedCategoryLabel
+            ? selectedCategoryLabel
+            : "Escolha uma categoria no painel.",
+          icon: CheckCircle2,
+          disabledReason: categoryDisabledReason,
+          onClick: onApplyCategory,
+          color: "var(--color-income)",
+        })}
+        {renderAction({
+          label: "Aplicar sugestoes",
+          detail: `${selectedSuggestionCount} sugestao(oes) segura(s)`,
+          icon: ListChecks,
+          disabledReason: suggestionDisabledReason,
+          onClick: onApplySuggestions,
+          color: "var(--color-brand)",
+        })}
+        <div
+          className="border-t"
+          style={{ borderColor: "var(--color-border)" }}
+        />
+        {renderAction({
+          label: "Marcar como pronto",
+          detail: "Liberar selecionados validos para aplicacao.",
+          icon: CheckCircle2,
+          disabledReason: statusDisabledReason,
+          onClick: onReadySelected,
+          color: "var(--color-income)",
+        })}
+        {renderAction({
+          label: "Ignorar selecionados",
+          detail: "Nao importar estes movimentos.",
+          icon: XCircle,
+          disabledReason: statusDisabledReason,
+          onClick: onIgnoreSelected,
+          color: "#dc2626",
+        })}
+        {renderAction({
+          label: "Botar em revisar",
+          detail: "Sinalizar para voltar depois.",
+          icon: AlertTriangle,
+          disabledReason: statusDisabledReason,
+          onClick: onReviewSelected,
+          color: "#d97706",
+        })}
+        {renderAction({
+          label: "Voltar para novo",
+          detail: "Reabrir a revisao destes movimentos.",
+          icon: RefreshCw,
+          disabledReason: statusDisabledReason,
+          onClick: onResetSelected,
+          color: "var(--color-brand)",
+        })}
+        {renderAction({
+          label: "Limpar selecao",
+          detail: "Remover todos do grupo atual.",
+          icon: X,
+          disabledReason: hasSelection ? null : "Nenhum movimento selecionado.",
+          onClick: onClearSelection,
+          color: "var(--color-text-muted)",
+        })}
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
 function BulkReviewCategoryPanel({
   totalEligibleCount,
   selectedCount,
@@ -3534,6 +4089,7 @@ function BulkReviewCategoryPanel({
   onCategoryChange,
   onApply,
   onApplySuggestions,
+  onReadySelected,
   onIgnoreSelected,
   onReviewSelected,
   onResetSelected,
@@ -3553,6 +4109,7 @@ function BulkReviewCategoryPanel({
   onCategoryChange: (categoryId: string) => void;
   onApply: () => void;
   onApplySuggestions: () => void;
+  onReadySelected: () => void;
   onIgnoreSelected: () => void;
   onReviewSelected: () => void;
   onResetSelected: () => void;
@@ -3610,7 +4167,7 @@ function BulkReviewCategoryPanel({
               className="text-sm font-semibold"
               style={{ color: "var(--color-text)" }}
             >
-              Categorizar selecionados
+              So com os selecionados
             </p>
             <span
               className="rounded-full border px-2 py-0.5 text-xs font-medium"
@@ -3619,19 +4176,19 @@ function BulkReviewCategoryPanel({
                 color: "var(--color-text-muted)",
               }}
             >
-              {selectedCount} de {totalEligibleCount} editavel(is)
+              {selectedCount} selecionado(s) de {totalEligibleCount} editavel(is)
             </span>
           </div>
           <p
             className="mt-1 text-xs"
             style={{ color: "var(--color-text-muted)" }}
           >
-            Use as checkboxes dos movimentos para aplicar uma categoria sem sair
-            da revisao.
+            Use as checkboxes dos movimentos para aplicar categoria ou mudar
+            status em massa sem sair da revisao.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-[auto_auto_auto_minmax(14rem,1fr)_auto_auto_auto_auto_auto]">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-[auto_auto_auto_minmax(14rem,1fr)_auto_auto_auto_auto_auto_auto]">
           <button
             type="button"
             onClick={onSelectAll}
@@ -3664,7 +4221,7 @@ function BulkReviewCategoryPanel({
               color: "var(--color-text)",
             }}
           >
-            Limpar
+            Limpar selecao
           </button>
           <DisabledReasonTooltip reason={suggestionsDisabledReason}>
             <button
@@ -3679,7 +4236,7 @@ function BulkReviewCategoryPanel({
               ) : (
                 <ListChecks size={15} />
               )}
-              Sugestoes ({suggestedCategoryCount})
+              Aplicar sugestoes ({suggestedCategoryCount})
             </button>
           </DisabledReasonTooltip>
           <select
@@ -3724,6 +4281,22 @@ function BulkReviewCategoryPanel({
           <DisabledReasonTooltip reason={statusDisabledReason}>
             <button
               type="button"
+              title={statusDisabledReason ?? "Marcar selecionados como pronto"}
+              onClick={onReadySelected}
+              disabled={Boolean(statusDisabledReason)}
+              className="flex h-10 items-center justify-center gap-2 rounded-lg border border-green-200 bg-green-50 px-4 text-sm font-semibold text-green-700 transition hover:bg-green-100 disabled:cursor-not-allowed disabled:border-green-100 disabled:bg-green-50 disabled:text-green-300"
+            >
+              {isUpdatingStatus ? (
+                <RefreshCw size={16} className="animate-spin" />
+              ) : (
+                <CheckCircle2 size={16} />
+              )}
+              Marcar pronto
+            </button>
+          </DisabledReasonTooltip>
+          <DisabledReasonTooltip reason={statusDisabledReason}>
+            <button
+              type="button"
               title={statusDisabledReason ?? "Ignorar selecionados"}
               onClick={onIgnoreSelected}
               disabled={Boolean(statusDisabledReason)}
@@ -3734,7 +4307,7 @@ function BulkReviewCategoryPanel({
               ) : (
                 <XCircle size={16} />
               )}
-              Ignorar
+              Ignorar selecionados
             </button>
           </DisabledReasonTooltip>
           <DisabledReasonTooltip reason={statusDisabledReason}>
@@ -3750,7 +4323,7 @@ function BulkReviewCategoryPanel({
               ) : (
                 <AlertTriangle size={16} />
               )}
-              Aviso
+              Botar em revisar
             </button>
           </DisabledReasonTooltip>
           <DisabledReasonTooltip reason={statusDisabledReason}>
@@ -3770,7 +4343,7 @@ function BulkReviewCategoryPanel({
               ) : (
                 <RefreshCw size={16} />
               )}
-              Novo
+              Voltar para novo
             </button>
           </DisabledReasonTooltip>
           <DisabledReasonTooltip reason={applyDisabledReason}>
@@ -3786,7 +4359,7 @@ function BulkReviewCategoryPanel({
               ) : (
                 <CheckCircle2 size={16} />
               )}
-              {isApplying ? "Aplicando..." : "Aplicar"}
+              {isApplying ? "Aplicando..." : "Aplicar categoria"}
             </button>
           </DisabledReasonTooltip>
         </div>
@@ -4380,6 +4953,10 @@ const StatementImportFilePanel = memo(function StatementImportFilePanel({
   onEditMovement,
   updatingMovementId,
   selectedMovementIds,
+  activeMovementId,
+  onActivateMovement,
+  onMovementLineClick,
+  onOpenSelectedActionsMenu,
   onMovementSelectionChange,
   onSelectManyMovements,
 }: {
@@ -4399,6 +4976,13 @@ const StatementImportFilePanel = memo(function StatementImportFilePanel({
   onEditMovement: (movement: ImportedMovement, file: StatementImportFile) => void;
   updatingMovementId: string | null;
   selectedMovementIds: string[];
+  activeMovementId: string | null;
+  onActivateMovement: (movementId: string) => void;
+  onMovementLineClick: (movementId: string) => void;
+  onOpenSelectedActionsMenu: (
+    event: ReactMouseEvent<HTMLElement>,
+    movement: ImportedMovement,
+  ) => void;
   onMovementSelectionChange: (
     movementId: string,
     shouldSelect: boolean,
@@ -4407,9 +4991,11 @@ const StatementImportFilePanel = memo(function StatementImportFilePanel({
 }) {
   const selectedIds = new Set(selectedMovementIds);
   const warnings = getWarnings(file);
-  const duplicateMovements = file.movements.filter(
-    (movement) => movement.status === "DUPLICATE",
-  ).length;
+  const fileStatusCounts = getMovementStatusCounts(file.movements);
+  const duplicateMovements = fileStatusCounts.DUPLICATE;
+  const filePendingReviewCount = getPendingReviewCount(fileStatusCounts);
+  const fileCompletionPercentage =
+    getMovementCompletionPercentage(fileStatusCounts);
   const visibleMovements =
     movementStatusFilter === "ALL"
       ? file.movements
@@ -4508,7 +5094,7 @@ const StatementImportFilePanel = memo(function StatementImportFilePanel({
         </div>
       </div>
 
-      <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-4">
+      <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-7">
         <InfoPill
           label="Conta"
           value={file.financialAccount?.name ?? "Sem conta"}
@@ -4517,6 +5103,18 @@ const StatementImportFilePanel = memo(function StatementImportFilePanel({
         <InfoPill
           label="No filtro"
           value={`${visibleMovements.length} visivel(is)`}
+        />
+        <InfoPill
+          label="Progresso"
+          value={`${fileCompletionPercentage}% concluido`}
+        />
+        <InfoPill
+          label="Pendentes"
+          value={`${filePendingReviewCount} movimento(s)`}
+        />
+        <InfoPill
+          label="Ignorados"
+          value={`${fileStatusCounts.IGNORED} movimento(s)`}
         />
         <InfoPill
           label="Duplicados"
@@ -4531,7 +5129,7 @@ const StatementImportFilePanel = memo(function StatementImportFilePanel({
           className="mt-4 flex flex-col gap-3 rounded-xl border p-3 sm:flex-row sm:items-center sm:justify-between"
           style={{
             borderColor: "var(--color-border)",
-            backgroundColor: "var(--color-bg)",
+            backgroundColor: "var(--color-bg-muted-card)",
           }}
         >
           <label className="flex min-w-0 items-center gap-3">
@@ -4544,7 +5142,7 @@ const StatementImportFilePanel = memo(function StatementImportFilePanel({
                   event.target.checked,
                 )
               }
-              className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              className="app-checkbox"
             />
             <span className="min-w-0">
               <span
@@ -4617,8 +5215,15 @@ const StatementImportFilePanel = memo(function StatementImportFilePanel({
                   onEditMovement(selectedMovement, file)
                 }
                 isUpdating={updatingMovementId === movement.id}
-                isSelected={selectedIds.has(movement.id)}
+                isChecked={selectedIds.has(movement.id)}
+                isActive={
+                  selectedIds.has(movement.id) ||
+                  activeMovementId === movement.id
+                }
                 canSelect={isBulkCategoryMovementEligible(movement)}
+                onActivateMovement={onActivateMovement}
+                onMovementLineClick={onMovementLineClick}
+                onOpenSelectedActionsMenu={onOpenSelectedActionsMenu}
                 onSelectionChange={onMovementSelectionChange}
               />
             ))}
@@ -4688,29 +5293,56 @@ const StatementImportFilePanel = memo(function StatementImportFilePanel({
                 {paginatedMovements.map((movement) => {
                   const canSelectMovement =
                     isBulkCategoryMovementEligible(movement);
+                  const isMovementChecked = selectedIds.has(movement.id);
+                  const isMovementActive =
+                    isMovementChecked || activeMovementId === movement.id;
 
                   return (
                     <tr
                       key={movement.id}
-                      style={{ borderBottom: "1px solid var(--color-border)" }}
+                      onClick={(event) => {
+                        if (isInteractiveMovementTarget(event.target)) {
+                          return;
+                        }
+
+                        onMovementLineClick(movement.id);
+                      }}
+                      onContextMenu={(event) => {
+                        if (isInteractiveMovementTarget(event.target)) {
+                          return;
+                        }
+
+                        onOpenSelectedActionsMenu(event, movement);
+                      }}
+                      className="cursor-pointer transition"
+                      style={{
+                        borderBottom: "1px solid var(--color-border)",
+                        backgroundColor: isMovementActive
+                          ? "var(--color-bg-muted-card-hover)"
+                          : "transparent",
+                        boxShadow: isMovementActive
+                          ? "inset 4px 0 0 var(--color-brand)"
+                          : undefined,
+                      }}
                     >
                       <td className="px-4 py-3">
                         <input
                           type="checkbox"
-                          checked={selectedIds.has(movement.id)}
-                          onChange={(event) =>
+                          checked={isMovementChecked}
+                          onChange={(event) => {
+                            onActivateMovement(movement.id);
                             onMovementSelectionChange(
                               movement.id,
                               event.target.checked,
-                            )
-                          }
+                            );
+                          }}
                           disabled={!canSelectMovement}
                           title={
                             canSelectMovement
                               ? "Selecionar para categorizar"
                               : "Somente transacoes editaveis podem ser categorizadas em massa"
                           }
-                          className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-40"
+                          className="app-checkbox"
                         />
                       </td>
                       <td
@@ -5042,7 +5674,7 @@ function UndoAppliedConfirmationContent({
                 onChange={(event) =>
                   onSelectMany(allMovementIds, event.target.checked)
                 }
-                className="h-4 w-4 rounded border-gray-300 text-rose-600 focus:ring-rose-500"
+                className="app-checkbox"
               />
               <span className="min-w-0">
                 <span
@@ -5107,7 +5739,7 @@ function UndoAppliedConfirmationContent({
                         onChange={(event) =>
                           onSelectMany(batchMovementIds, event.target.checked)
                         }
-                        className="mt-0.5 h-4 w-4 rounded border-gray-300 text-rose-600 focus:ring-rose-500"
+                        className="app-checkbox mt-0.5"
                       />
                       <span className="min-w-0">
                         <span className="block text-sm font-semibold text-rose-900">
@@ -5170,7 +5802,7 @@ function UndoAppliedConfirmationContent({
                                 event.target.checked,
                               )
                             }
-                            className="mt-0.5 h-4 w-4 rounded border-gray-300 text-rose-600 focus:ring-rose-500"
+                            className="app-checkbox mt-0.5"
                           />
                           <span className="min-w-0">
                             <span
@@ -5209,7 +5841,7 @@ function UndoAppliedConfirmationContent({
                                       event.target.checked,
                                     )
                                   }
-                                  className="mt-1 h-4 w-4 rounded border-gray-300 text-rose-600 focus:ring-rose-500"
+                                  className="app-checkbox mt-1"
                                 />
                                 <span className="min-w-0">
                                   <span className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -5675,7 +6307,7 @@ const MovementStatusActions = memo(function MovementStatusActions({
     }
 
     const rect = button.getBoundingClientRect();
-    const menuWidth = 320;
+    const menuWidth = 288;
     const viewportMargin = 16;
     const preferredLeft = rect.left + rect.width / 2;
     const minLeft = viewportMargin + menuWidth / 2;
@@ -6020,7 +6652,7 @@ const MovementStatusActions = memo(function MovementStatusActions({
           ) : (
             <div
               ref={statusMenuRef}
-              className="fixed z-[9999] w-80 max-w-[calc(100vw-2rem)] overflow-visible rounded-xl border shadow-2xl"
+              className="fixed z-[9999] w-72 max-w-[calc(100vw-2rem)] overflow-visible rounded-xl border shadow-2xl"
               style={{
                 left: statusMenuPosition.left,
                 top: statusMenuPosition.top,
@@ -6053,7 +6685,7 @@ const MovementStatusActions = memo(function MovementStatusActions({
       : null;
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="flex flex-nowrap items-center gap-1.5">
       <DisabledReasonTooltip reason={editDisabledReason}>
         <button
           type="button"
@@ -6061,7 +6693,7 @@ const MovementStatusActions = memo(function MovementStatusActions({
           aria-label="Editar movimento"
           onClick={() => onEditMovement(movement)}
           disabled={isUpdating}
-          className="flex h-9 w-9 items-center justify-center rounded-lg border border-blue-200 bg-blue-50 text-blue-700 transition hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
+          className="app-icon-control flex h-9 w-9 items-center justify-center rounded-lg disabled:cursor-not-allowed disabled:opacity-60"
         >
           <Pencil size={16} />
         </button>
@@ -6084,14 +6716,14 @@ const MovementStatusActions = memo(function MovementStatusActions({
             setIsStatusMenuOpen(true);
           }}
           disabled={isUpdating}
-          className={`inline-flex h-9 min-w-[8.5rem] items-center justify-between gap-2 rounded-lg border px-3 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-60 ${movementStatusButtonClass}`}
+          className={`inline-flex h-9 w-[7.25rem] min-w-0 items-center justify-between gap-1.5 rounded-lg border px-2.5 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-60 ${movementStatusButtonClass}`}
         >
           {isUpdating ? (
             <RefreshCw size={15} className="animate-spin" />
           ) : (
             <StatusIcon status={movement.status} />
           )}
-          <span className="flex-1 text-left">
+          <span className="min-w-0 flex-1 truncate text-left">
             {movementStatusLabel(movement.status)}
           </span>
           <ChevronDown
@@ -6113,8 +6745,12 @@ const MovementCard = memo(function MovementCard({
   onApplyCategorySuggestion,
   onEditMovement,
   isUpdating,
-  isSelected,
+  isChecked,
+  isActive,
   canSelect,
+  onActivateMovement,
+  onMovementLineClick,
+  onOpenSelectedActionsMenu,
   onSelectionChange,
 }: {
   movement: ImportedMovement;
@@ -6130,33 +6766,62 @@ const MovementCard = memo(function MovementCard({
   onApplyCategorySuggestion: (movement: ImportedMovement) => void;
   onEditMovement: (movement: ImportedMovement) => void;
   isUpdating: boolean;
-  isSelected: boolean;
+  isChecked: boolean;
+  isActive: boolean;
   canSelect: boolean;
+  onActivateMovement: (movementId: string) => void;
+  onMovementLineClick: (movementId: string) => void;
+  onOpenSelectedActionsMenu: (
+    event: ReactMouseEvent<HTMLElement>,
+    movement: ImportedMovement,
+  ) => void;
   onSelectionChange: (movementId: string, shouldSelect: boolean) => void;
 }) {
+  const handleCardClick = (event: ReactMouseEvent<HTMLDivElement>) => {
+    if (isInteractiveMovementTarget(event.target)) {
+      return;
+    }
+
+    onMovementLineClick(movement.id);
+  };
+
+  const handleCardContextMenu = (event: ReactMouseEvent<HTMLDivElement>) => {
+    if (isInteractiveMovementTarget(event.target)) {
+      return;
+    }
+
+    onOpenSelectedActionsMenu(event, movement);
+  };
+
   return (
     <div
-      className="rounded-xl border p-4"
+      onClick={handleCardClick}
+      onContextMenu={handleCardContextMenu}
+      className="cursor-pointer rounded-xl border p-4 transition"
       style={{
-        borderColor: "var(--color-border)",
-        backgroundColor: "var(--color-bg)",
+        borderColor: isActive ? "var(--color-brand)" : "var(--color-border)",
+        backgroundColor: isActive
+          ? "var(--color-bg-muted-card-hover)"
+          : "var(--color-bg)",
+        boxShadow: isActive ? "inset 4px 0 0 var(--color-brand)" : undefined,
       }}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-start gap-3">
           <input
             type="checkbox"
-            checked={isSelected}
-            onChange={(event) =>
-              onSelectionChange(movement.id, event.target.checked)
-            }
+            checked={isChecked}
+            onChange={(event) => {
+              onActivateMovement(movement.id);
+              onSelectionChange(movement.id, event.target.checked);
+            }}
             disabled={!canSelect}
             title={
               canSelect
                 ? "Selecionar para categorizar"
                 : "Somente transacoes editaveis podem ser categorizadas em massa"
             }
-            className="mt-1 h-4 w-4 shrink-0 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-40"
+            className="app-checkbox mt-1"
           />
           <div className="min-w-0">
           <p

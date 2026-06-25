@@ -467,9 +467,9 @@ export function Settings() {
         <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
             <p className="text-sm font-medium" style={{ color: 'var(--color-text-muted)' }}>
-              Preferencias
+              Preferências
             </p>
-            <h1 className="mt-1 text-3xl font-bold tracking-normal">Configuracoes</h1>
+            <h1 className="mt-1 text-3xl font-bold tracking-normal">Configurações</h1>
           </div>
           <button
             type="button"
@@ -595,8 +595,8 @@ export function Settings() {
 
           <div className="space-y-5">
             <SettingsCard
-              title="Aparencia"
-              description="Preferencias locais salvas neste navegador."
+              title="Aparência"
+              description="Preferências locais salvas neste navegador."
               icon={isDark ? Moon : Sun}
             >
               <ToggleRow
@@ -607,21 +607,21 @@ export function Settings() {
               />
               <ToggleRow
                 label="Ajuda contextual"
-                description={showContextHelp ? 'Botoes de ajuda ficam disponiveis.' : 'Botoes de ajuda ficam discretos.'}
+                description={showContextHelp ? 'Botões de ajuda ficam disponíveis.' : 'Botões de ajuda ficam discretos.'}
                 checked={showContextHelp}
                 onChange={handleContextHelpChange}
               />
             </SettingsCard>
 
             <SettingsCard
-              title="Modulos"
+              title="Módulos"
               description="Estado funcional dos fluxos principais do produto."
               icon={SlidersHorizontal}
             >
               <StatusRow
                 icon={FileUp}
-                label="Importacao"
-                description="Lotes, revisao, conciliacao, sugestoes e apply de transacoes/transferencias."
+                label="Importação"
+                description="Lotes, revisão, conciliação, sugestões e apply de transações/transferências."
                 badge="Ativo"
                 tone="green"
                 to="/statement-imports"
@@ -629,7 +629,7 @@ export function Settings() {
               <StatusRow
                 icon={Tag}
                 label="Categorias"
-                description="Natureza de categoria validada por entrada, saida ou ambos."
+                description="Natureza de categoria validada por entrada, saída ou ambos."
                 badge="Ativo"
                 tone="green"
                 to="/categories"
@@ -637,7 +637,7 @@ export function Settings() {
               <StatusRow
                 icon={WalletCards}
                 label="Ajuste de saldo"
-                description="Disponivel no ledger; apply por import ainda nao liberado."
+                description="Disponível no ledger; apply por import ainda não liberado."
                 badge="Parcial"
                 tone="yellow"
                 to="/accounts"
@@ -645,7 +645,7 @@ export function Settings() {
               <StatusRow
                 icon={Database}
                 label="XLSX"
-                description="Bloqueado ate existir fixture real e decisao de dependencia."
+                description="Bloqueado até existir fixture real e decisão de dependência."
                 badge="Aguardando"
                 tone="gray"
               />

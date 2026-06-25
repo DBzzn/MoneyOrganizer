@@ -36,10 +36,20 @@ export function Register() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4"
-      style={{ backgroundColor: 'var(--color-bg)' }}>
-        
-      <div className="rounded-2xl shadow-sm w-full max-w-md p-8"
+    <div className="register-scene relative flex min-h-screen items-center justify-center overflow-hidden p-4">
+      <div className="register-motion-bg" aria-hidden="true">
+        <span className="register-track register-track-a" />
+        <span className="register-track register-track-b" />
+        <span className="register-ledger-card register-ledger-card-a" />
+        <span className="register-ledger-card register-ledger-card-b" />
+        <span className="register-step register-step-a" />
+        <span className="register-step register-step-b" />
+        <span className="register-step register-step-c" />
+        <span className="register-balance-strip register-balance-strip-a" />
+        <span className="register-balance-strip register-balance-strip-b" />
+      </div>
+
+      <div className="glass-heavy relative z-10 w-full max-w-md rounded-2xl p-8 shadow-sm"
         style={{ backgroundColor: 'var(--color-bg-card)', border: '1px solid var(--color-border)' }}>
 
         <div className="mb-8 flex items-start justify-between">

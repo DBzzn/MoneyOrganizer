@@ -45,7 +45,7 @@ const EXPENSE_TYPES: TransactionType[] = ['CREDIT_CASH', 'CREDIT_INSTALLMENT', '
 type ReportDepth = 'basic' | 'intermediate' | 'complete'
 type ExportFormat = 'html' | 'pdf' | 'csv' | 'xlsx'
 type InsightTone = 'green' | 'blue' | 'yellow' | 'red'
-type ActionPriority = 'Alta' | 'Media' | 'Baixa'
+type ActionPriority = 'Alta' | 'Média' | 'Baixa'
 
 type ReportActionItem = {
     title: string
@@ -60,18 +60,18 @@ const reportDepthOptions: Array<{
 }> = [
     {
         value: 'basic',
-        label: 'Basico',
-        description: 'Resumo para decisao rapida',
+        label: 'Básico',
+        description: 'Resumo para decisão rápida',
     },
     {
         value: 'intermediate',
-        label: 'Intermediario',
-        description: 'Tendencias e projecoes',
+        label: 'Intermediário',
+        description: 'Tendências e projeções',
     },
     {
         value: 'complete',
         label: 'Completo',
-        description: 'Todos os detalhes e export',
+        description: 'Todos os detalhes e exportação',
     },
 ]
 
@@ -84,25 +84,25 @@ const exportFormatOptions: Array<{
     {
         value: 'html',
         label: 'HTML',
-        description: 'Arquivo visual, tematizado e compartilhavel',
+        description: 'Arquivo visual, tematizado e compartilhável',
         available: true,
     },
     {
         value: 'pdf',
         label: 'PDF',
-        description: 'Arquivo pronto no tema, com graficos e fundo',
+        description: 'Arquivo pronto no tema, com gráficos e fundo',
         available: true,
     },
     {
         value: 'csv',
         label: 'CSV',
-        description: 'Dados tabulares estruturados em uma proxima etapa',
+        description: 'Dados tabulares estruturados em uma próxima etapa',
         available: false,
     },
     {
         value: 'xlsx',
         label: 'XLSX',
-        description: 'Planilha futura, depois da decisao de dependencia',
+        description: 'Planilha futura, depois da decisão de dependência',
         available: false,
     },
 ]
@@ -136,7 +136,7 @@ const actionPriorityStyle: Record<ActionPriority, { borderColor: string; backgro
         backgroundColor: 'var(--color-expense-bg)',
         color: 'var(--color-expense)',
     },
-    Media: {
+    Média: {
         borderColor: 'rgba(217, 119, 6, 0.32)',
         backgroundColor: 'rgba(217, 119, 6, 0.12)',
         color: '#d97706',
@@ -235,9 +235,9 @@ function getSavingsRateLabel(savingsRate: number): string {
 }
 
 function getCashCoverageLabel(months: number | null): string {
-    if (months === null) return 'Sem despesa media'
+    if (months === null) return 'Sem despesa média'
     if (months >= 6) return 'Confortavel'
-    if (months >= 3) return 'Atencao moderada'
+    if (months >= 3) return 'Atenção moderada'
     if (months >= 1) return 'Reserva curta'
     return 'Muito curto'
 }
@@ -254,7 +254,7 @@ function getFinancialHealth(score: number): {
     if (score >= 80) {
         return {
             label: 'Excelente',
-            description: 'Boa combinacao entre sobra, caixa e previsibilidade.',
+            description: 'Boa combinação entre sobra, caixa e previsibilidade.',
             tone: 'green',
         }
     }
@@ -262,7 +262,7 @@ function getFinancialHealth(score: number): {
     if (score >= 65) {
         return {
             label: 'Saudavel',
-            description: 'Base positiva, mas ainda vale monitorar concentracao e projecao.',
+            description: 'Base positiva, mas ainda vale monitorar concentração e projeção.',
             tone: 'blue',
         }
     }
@@ -270,14 +270,14 @@ function getFinancialHealth(score: number): {
     if (score >= 45) {
         return {
             label: 'Atenção',
-            description: 'Existem sinais de aperto ou dependencia de poucos pontos do orçamento.',
+            description: 'Existem sinais de aperto ou dependência de poucos pontos do orçamento.',
             tone: 'yellow',
         }
     }
 
     return {
         label: 'Crítico',
-        description: 'Priorize caixa, cortes recorrentes e revisão de pendencias.',
+        description: 'Priorize caixa, cortes recorrentes e revisão de pendências.',
         tone: 'red',
     }
 }
@@ -513,7 +513,7 @@ function buildEvolutionChartSvg(data: EvolutionChartPoint[], theme: ReportTheme)
     }).join('')
 
     return `
-        <svg class="report-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Grafico de evolucao por periodo">
+        <svg class="report-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Gráfico de evolução por período">
             ${gridLines}
             <line x1="${padding.left}" y1="${zeroY}" x2="${width - padding.right}" y2="${zeroY}" stroke="${theme.border}" />
             ${paths}
@@ -527,7 +527,7 @@ function buildEvolutionChartSvg(data: EvolutionChartPoint[], theme: ReportTheme)
 
 function buildProjectionChartSvg(data: ProjectionChartPoint[], theme: ReportTheme): string {
     if (data.length === 0) {
-        return '<div class="empty-state">Sem dados suficientes para o grafico de projecao.</div>'
+        return '<div class="empty-state">Sem dados suficientes para o gráfico de projeção.</div>'
     }
 
     const width = 920
@@ -567,7 +567,7 @@ function buildProjectionChartSvg(data: ProjectionChartPoint[], theme: ReportThem
     }).join('')
 
     return `
-        <svg class="report-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Grafico de projecao futura">
+        <svg class="report-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Gráfico de projeção futura">
             ${gridLines}
             <line x1="${padding.left}" y1="${zeroY}" x2="${width - padding.right}" y2="${zeroY}" stroke="${theme.border}" />
             ${bars}
@@ -749,7 +749,7 @@ export function Reports() {
     const nextProjection = projection[0]
     const showIntermediateSections = reportDepth !== 'basic'
     const showCompleteSections = reportDepth === 'complete'
-    const reportPeriodLabel = `${formatMonth(evolutionStart)} ate ${formatMonth(evolutionEnd)}`
+    const reportPeriodLabel = `${formatMonth(evolutionStart)} até ${formatMonth(evolutionEnd)}`
     const financialHealthScore = clampScore(
         50 +
         (periodBalance >= 0 ? 10 : -12) +
@@ -771,13 +771,13 @@ export function Reports() {
             : {
                 title: 'Dar destino para a sobra',
                 body: `A sobra foi de ${formatCurrency(periodBalance)}. Reserve uma parte antes que ela vire gasto solto no mês seguinte.`,
-                priority: savingsRate >= 20 ? 'Baixa' : 'Media',
+                priority: savingsRate >= 20 ? 'Baixa' : 'Média',
             },
         topCategory && topCategoryShare > 35
             ? {
                 title: `Revisar ${topCategory.categoryName}`,
                 body: `Essa categoria concentra ${topCategoryShare.toFixed(1)}% dos gastos listados. Vale separar o que é recorrente do que foi pontual.`,
-                priority: topCategoryShare > 50 ? 'Alta' : 'Media',
+                priority: topCategoryShare > 50 ? 'Alta' : 'Média',
             }
             : {
                 title: 'Manter categorias bem distribuídas',
@@ -790,12 +790,12 @@ export function Reports() {
                 body: cashCoverageMonths === null
                     ? 'Ainda falta despesa média para medir cobertura. Após alguns meses classificados, esse indicador fica mais útil.'
                     : `A cobertura estimada é de ${cashCoverageMonths.toFixed(1)} meses. Mirar primeiro em 3 meses reduz bastante o susto financeiro.`,
-                priority: cashCoverageMonths !== null && cashCoverageMonths < 1 ? 'Alta' : 'Media',
+                priority: cashCoverageMonths !== null && cashCoverageMonths < 1 ? 'Alta' : 'Média',
             }
             : {
                 title: 'Preservar a reserva',
                 body: `A cobertura estimada é de ${cashCoverageMonths.toFixed(1)} meses. Evite misturar esse fôlego com gasto cotidiano.`,
-                priority: cashCoverageMonths >= 6 ? 'Baixa' : 'Media',
+                priority: cashCoverageMonths >= 6 ? 'Baixa' : 'Média',
             },
         projectedNegativeMonths.length > 0
             ? {
@@ -823,7 +823,7 @@ export function Reports() {
             ? {
                 title: 'Investigar alta de gastos',
                 body: `Os gastos subiram ${formatPercentage(expenseTrend)} entre o primeiro e o último mês do período. Veja se foi evento pontual ou nova rotina.`,
-                priority: 'Media',
+                priority: 'Média',
             }
             : {
                 title: 'Manter rotina de revisão',
@@ -843,17 +843,17 @@ export function Reports() {
             bg: financialHealthStyle.backgroundColor,
         },
         {
-            label: 'Resultado do periodo',
+            label: 'Resultado do período',
             value: formatCurrency(periodBalance),
             detail: periodBalance >= 0
-                ? 'Entrou mais dinheiro do que saiu no periodo.'
-                : 'Saiu mais dinheiro do que entrou no periodo.',
+                ? 'Entrou mais dinheiro do que saiu no período.'
+                : 'Saiu mais dinheiro do que entrou no período.',
             icon: Wallet,
             color: periodBalance >= 0 ? 'var(--color-balance)' : 'var(--color-expense)',
             bg: periodBalance >= 0 ? 'var(--color-balance-bg)' : 'var(--color-expense-bg)',
         },
         {
-            label: 'Taxa de poupanca',
+            label: 'Taxa de poupança',
             value: `${savingsRate.toFixed(1)}%`,
             detail: getSavingsRateLabel(savingsRate),
             icon: PiggyBank,
@@ -871,7 +871,7 @@ export function Reports() {
         {
             label: 'Maior vazamento',
             value: topCategory?.categoryName ?? 'Sem dados',
-            detail: topCategory ? `${topCategoryShare.toFixed(1)}% dos gastos listados` : 'Sem gastos no periodo',
+            detail: topCategory ? `${topCategoryShare.toFixed(1)}% dos gastos listados` : 'Sem gastos no período',
             icon: Landmark,
             color: topCategoryShare > 35 ? 'var(--color-expense)' : 'var(--color-count)',
             bg: topCategoryShare > 35 ? 'var(--color-expense-bg)' : 'var(--color-count-bg)',
@@ -880,33 +880,33 @@ export function Reports() {
 
     const insightCards: Array<{ title: string; body: string; tone: InsightTone }> = [
         {
-            title: periodBalance >= 0 ? 'Sobrou dinheiro no periodo' : 'Periodo fechou negativo',
+            title: periodBalance >= 0 ? 'Sobrou dinheiro no período' : 'Período fechou negativo',
             body: periodBalance >= 0
                 ? `A sobra foi de ${formatCurrency(periodBalance)}. Vale separar uma parte antes que ela vire gasto solto.`
-                : `O buraco foi de ${formatCurrency(Math.abs(periodBalance))}. O primeiro corte deve olhar categorias recorrentes, nao so compras isoladas.`,
+                : `O buraco foi de ${formatCurrency(Math.abs(periodBalance))}. O primeiro corte deve olhar categorias recorrentes, não só compras isoladas.`,
             tone: periodBalance >= 0 ? 'green' : 'red',
         },
         {
             title: expenseTrend !== null && expenseTrend > 0 ? 'Gastos em alta' : 'Gastos controlados',
             body: expenseTrend === null
-                ? 'Ainda falta uma base comparavel entre o primeiro e o ultimo mes do periodo.'
-                : `Do primeiro ao ultimo mes, os gastos variaram ${formatPercentage(expenseTrend)}.`,
+                ? 'Ainda falta uma base comparável entre o primeiro e o último mês do período.'
+                : `Do primeiro ao último mês, os gastos variaram ${formatPercentage(expenseTrend)}.`,
             tone: expenseTrend !== null && expenseTrend > 0 ? 'yellow' : 'blue',
         },
         {
-            title: projectedNegativeMonths.length > 0 ? 'Projecao pede atencao' : 'Projecao sem saldo negativo',
+            title: projectedNegativeMonths.length > 0 ? 'Projeção pede atenção' : 'Projeção sem saldo negativo',
             body: projectedNegativeMonths.length > 0
-                ? `${projectedNegativeMonths.length} mes(es) da projecao aparecem abaixo de zero.`
+                ? `${projectedNegativeMonths.length} mês(es) da projeção aparecem abaixo de zero.`
                 : nextProjection
-                    ? `Proximo saldo projetado: ${formatCurrency(nextProjection.projectedBalance)}.`
+                    ? `Próximo saldo projetado: ${formatCurrency(nextProjection.projectedBalance)}.`
                     : 'Sem meses projetados para avaliar.',
             tone: projectedNegativeMonths.length > 0 ? 'red' : 'green',
         },
         {
-            title: incomeTrend !== null && incomeTrend < 0 ? 'Receita em queda' : 'Receita estavel ou em alta',
+            title: incomeTrend !== null && incomeTrend < 0 ? 'Receita em queda' : 'Receita estável ou em alta',
             body: incomeTrend === null
-                ? 'Ainda falta uma base comparavel para medir variacao de receita.'
-                : `Do primeiro ao ultimo mes, as receitas variaram ${formatPercentage(incomeTrend)}.`,
+                ? 'Ainda falta uma base comparável para medir variação de receita.'
+                : `Do primeiro ao último mês, as receitas variaram ${formatPercentage(incomeTrend)}.`,
             tone: incomeTrend !== null && incomeTrend < 0 ? 'yellow' : 'blue',
         },
     ]
@@ -1127,23 +1127,23 @@ export function Reports() {
         `
         const monthlySummaryCards = [
             {
-                label: 'Receitas no mes',
+                label: 'Receitas no mês',
                 value: formatCurrency(balance?.income ?? 0),
-                detail: `Mes base: ${formatMonth(balanceMonth)}`,
+                detail: `Mês base: ${formatMonth(balanceMonth)}`,
                 color: 'var(--color-income)',
                 bg: 'var(--color-income-bg)',
             },
             {
-                label: 'Despesas no mes',
+                label: 'Despesas no mês',
                 value: formatCurrency(balance?.expenses ?? 0),
-                detail: `${balance?.transactionCount?.total ?? 0} transacoes no total`,
+                detail: `${balance?.transactionCount?.total ?? 0} transações no total`,
                 color: 'var(--color-expense)',
                 bg: 'var(--color-expense-bg)',
             },
             {
-                label: 'Saldo do mes',
+                label: 'Saldo do mês',
                 value: formatCurrency(balance?.balance ?? 0),
-                detail: Number(balance?.balance ?? 0) >= 0 ? 'Mes acima de zero' : 'Mes abaixo de zero',
+                detail: Number(balance?.balance ?? 0) >= 0 ? 'Mês acima de zero' : 'Mês abaixo de zero',
                 color: Number(balance?.balance ?? 0) >= 0 ? 'var(--color-balance)' : 'var(--color-expense)',
                 bg: Number(balance?.balance ?? 0) >= 0 ? 'var(--color-balance-bg)' : 'var(--color-expense-bg)',
             },
@@ -1167,8 +1167,8 @@ export function Reports() {
             account.name,
             account.institutionName || 'Sem instituicao',
             formatCurrency(account.currentBalance),
-            account.includeInDashboard ? 'Sim' : 'Nao',
-            account.isArchived ? 'Sim' : 'Nao',
+            account.includeInDashboard ? 'Sim' : 'Não',
+            account.isArchived ? 'Sim' : 'Não',
         ])
 
         return `<!DOCTYPE html>
@@ -1176,16 +1176,16 @@ export function Reports() {
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Money Organizer - Relatorio ${escapeHtml(depthLabel)}</title>
+<title>Money Organizer - Relatório ${escapeHtml(depthLabel)}</title>
 <style>${styles}</style>
 </head>
 <body>
 <main class="report-shell">
     <header class="hero">
         <h1>Money Organizer</h1>
-        <p class="subtitle">Relatorio financeiro ${escapeHtml(depthLabel.toLowerCase())}: ${escapeHtml(depthDescription)}.</p>
+        <p class="subtitle">Relatório financeiro ${escapeHtml(depthLabel.toLowerCase())}: ${escapeHtml(depthDescription)}.</p>
         <div class="meta-row">
-            <span class="badge">Periodo: ${escapeHtml(reportPeriodLabel)}</span>
+            <span class="badge">Período: ${escapeHtml(reportPeriodLabel)}</span>
             <span class="badge">Nivel: ${escapeHtml(depthLabel)}</span>
             <span class="badge">Contas: ${escapeHtml(`${selectedAccounts.length} de ${financialAccounts.length}`)}</span>
             <span class="badge">Gerado em: ${escapeHtml(generatedAt)}</span>
@@ -1195,7 +1195,7 @@ export function Reports() {
     <section class="section">
         <div class="section-header">
             <h2>Resumo financeiro</h2>
-            <p>Indicadores principais para entender sobra, pressao de gastos e folego de caixa.</p>
+            <p>Indicadores principais para entender sobra, pressão de gastos e fôlego de caixa.</p>
         </div>
         <div class="grid grid-4">
             ${financialSignals.map((signal) => cardHtml(signal.label, signal.value, signal.detail, signal.color, signal.bg)).join('')}
@@ -1204,8 +1204,8 @@ export function Reports() {
 
     <section class="section">
         <div class="section-header">
-            <h2>Leitura pratica</h2>
-            <p>Interpretacao em linguagem direta para orientar a proxima decisao.</p>
+            <h2>Leitura prática</h2>
+            <p>Interpretação em linguagem direta para orientar a próxima decisão.</p>
         </div>
         <div class="grid grid-2">
             ${insightCards.map((insight) => {
@@ -1223,14 +1223,14 @@ export function Reports() {
 
     <section class="section">
         <div class="section-header">
-            <h2>Plano de acao</h2>
-            <p>Score financeiro e passos praticos para a proxima revisao.</p>
+            <h2>Plano de ação</h2>
+            <p>Score financeiro e passos práticos para a próxima revisão.</p>
         </div>
         <div class="grid grid-2">
             <article class="card score-card" style="border-color:${financialHealthStyle.borderColor}; background:${financialHealthStyle.backgroundColor};">
                 <div class="score-top">
                     <div>
-                        <p class="card-label">Saude financeira</p>
+                        <p class="card-label">Saúde financeira</p>
                         <h3 style="color:${financialHealthStyle.color};">${escapeHtml(financialHealth.label)}</h3>
                     </div>
                     <strong class="score-value">${escapeHtml(`${financialHealthScore}/100`)}</strong>
@@ -1240,7 +1240,7 @@ export function Reports() {
             </article>
             <article class="card action-list-card">
                 <div class="section-header">
-                    <h2>Proximas acoes</h2>
+                    <h2>Próximas ações</h2>
                     <p>${escapeHtml(exportHasComplete ? 'Lista completa de prioridades sugeridas.' : 'Prioridades resumidas para agir sem travar.')}</p>
                 </div>
                 <div class="action-list">
@@ -1264,8 +1264,8 @@ export function Reports() {
 
     <section class="section">
         <div class="section-header">
-            <h2>Evolucao por periodo</h2>
-            <p>Receitas, despesas, saldo e acumulado dentro do periodo selecionado.</p>
+            <h2>Evolução por período</h2>
+            <p>Receitas, despesas, saldo e acumulado dentro do período selecionado.</p>
         </div>
         <div class="card chart-card">
             ${buildEvolutionChartSvg(evolutionChartData, theme)}
@@ -1275,17 +1275,17 @@ export function Reports() {
     <section class="section">
         <div class="section-header">
             <h2>Maiores gastos por categoria</h2>
-            <p>${escapeHtml(exportHasComplete ? 'Lista completa das categorias do periodo.' : `Top ${categoryLimit} categorias do periodo.`)}</p>
+            <p>${escapeHtml(exportHasComplete ? 'Lista completa das categorias do período.' : `Top ${categoryLimit} categorias do período.`)}</p>
         </div>
         <div class="card chart-card">
-            ${categoryRows.length === 0 ? '<div class="empty-state">Nenhum gasto encontrado no periodo.</div>' : `
+            ${categoryRows.length === 0 ? '<div class="empty-state">Nenhum gasto encontrado no período.</div>' : `
                 <div class="category-list">
                     ${categoryRows.map(({ amount, category, percentage }) => `
                         <div class="category-row">
                             <div class="category-line">
                                 <div>
                                     <div class="category-name">${escapeHtml(`${formatStoredIconPrefix(category.categoryIcon)}${category.categoryName}`)}</div>
-                                    <p class="category-meta">${escapeHtml(`${category.transactionCount} transacoes - ${percentage.toFixed(1)}% dos gastos listados`)}</p>
+                                    <p class="category-meta">${escapeHtml(`${category.transactionCount} transações - ${percentage.toFixed(1)}% dos gastos listados`)}</p>
                                 </div>
                                 <div class="category-value">${escapeHtml(formatCurrency(amount))}</div>
                             </div>
@@ -1299,8 +1299,8 @@ export function Reports() {
 
     <section class="section">
         <div class="section-header">
-            <h2>Balanco mensal</h2>
-            <p>Recorte rapido do mes selecionado na pagina.</p>
+            <h2>Balanço mensal</h2>
+            <p>Recorte rápido do mês selecionado na página.</p>
         </div>
         <div class="grid grid-3">
             ${monthlySummaryCards.map((card) => cardHtml(card.label, card.value, card.detail, card.color, card.bg)).join('')}
@@ -1310,8 +1310,8 @@ export function Reports() {
     ${exportHasIntermediate ? `
         <section class="section">
             <div class="section-header">
-                <h2>Projecao futura</h2>
-                <p>Visao de saldo projetado, confirmados e pendencias no intervalo selecionado.</p>
+                <h2>Projeção futura</h2>
+                <p>Visão de saldo projetado, confirmados e pendências no intervalo selecionado.</p>
             </div>
             <div class="card chart-card">
                 ${buildProjectionChartSvg(projectionChartData, theme)}
@@ -1323,23 +1323,23 @@ export function Reports() {
                 <h2>Tabela de evolucao</h2>
                 <p>Base numerica do grafico de evolucao.</p>
             </div>
-            ${tableHtml(['Mes', 'Receitas', 'Despesas', 'Saldo', 'Receitas vs inicio', 'Despesas vs inicio'], evolutionRows)}
+            ${tableHtml(['Mês', 'Receitas', 'Despesas', 'Saldo', 'Receitas vs início', 'Despesas vs início'], evolutionRows)}
         </section>
 
         <section class="section">
             <div class="section-header">
-                <h2>Tabela de projecao</h2>
-                <p>Valores previstos e pendencias por mes.</p>
+                <h2>Tabela de projeção</h2>
+                <p>Valores previstos e pendências por mês.</p>
             </div>
-            ${tableHtml(['Mes', 'Receita projetada', 'Despesa projetada', 'Saldo projetado', 'Pendentes'], projectionRows)}
+            ${tableHtml(['Mês', 'Receita projetada', 'Despesa projetada', 'Saldo projetado', 'Pendentes'], projectionRows)}
         </section>
     ` : ''}
 
     ${exportHasComplete ? `
         <section class="section">
             <div class="section-header">
-                <h2>Posicao por conta</h2>
-                <p>Saldos atuais e propriedades das contas selecionadas no relatorio.</p>
+                <h2>Posição por conta</h2>
+                <p>Saldos atuais e propriedades das contas selecionadas no relatório.</p>
             </div>
             <div class="grid grid-4">
                 ${accountPositionCards.map((card) => cardHtml(card.label, card.value, card.detail, card.color, card.bg)).join('')}
@@ -1349,7 +1349,7 @@ export function Reports() {
         </section>
     ` : ''}
 
-    <p class="footer">Relatorio gerado localmente pelo Money Organizer. Use como apoio para revisao financeira, nao como recomendacao de investimento.</p>
+    <p class="footer">Relatório gerado localmente pelo Money Organizer. Use como apoio para revisão financeira, não como recomendação de investimento.</p>
 </main>
 </body>
 </html>`
@@ -1391,7 +1391,7 @@ export function Reports() {
         const scoreColor = parseCssColor(themeColor(financialHealthStyle.color, theme.text), text)
         const priorityPdfColor = (priority: ActionPriority): RGB => {
             if (priority === 'Alta') return expense
-            if (priority === 'Media') return parseCssColor('#d97706', [217, 119, 6])
+            if (priority === 'Média') return parseCssColor('#d97706', [217, 119, 6])
             return brand
         }
         const pdfHasIntermediate = depth !== 'basic'
@@ -1541,7 +1541,7 @@ export function Reports() {
 
             ensureSpace(scoreCardHeight + 8)
             drawCard(margin, y, contentWidth, scoreCardHeight)
-            writeText('Saude financeira', margin + 14, y + 13, contentWidth - 28, { color: textMuted, fontSize: 8, lineHeight: 11 })
+            writeText('Saúde financeira', margin + 14, y + 13, contentWidth - 28, { color: textMuted, fontSize: 8, lineHeight: 11 })
             writeText(`${financialHealthScore}/100`, margin + 14, y + 31, 100, { bold: true, color: scoreColor, fontSize: 22, lineHeight: 26 })
             writeText(financialHealth.label, margin + 120, y + 36, contentWidth - 134, { bold: true, color: scoreColor, fontSize: 11, lineHeight: 14 })
             setFill(inputBg)
@@ -1597,7 +1597,7 @@ export function Reports() {
 
             ensureSpace(height)
             drawCard(margin, y, contentWidth, height)
-            writeText('Evolucao por periodo', margin + 14, y + 13, contentWidth - 28, { bold: true, fontSize: 11 })
+            writeText('Evolução por período', margin + 14, y + 13, contentWidth - 28, { bold: true, fontSize: 11 })
             setDraw(border)
 
             for (let index = 0; index < 5; index += 1) {
@@ -1643,7 +1643,7 @@ export function Reports() {
 
             ensureSpace(height)
             drawCard(margin, y, contentWidth, height)
-            writeText('Projecao futura', margin + 14, y + 13, contentWidth - 28, { bold: true, fontSize: 11 })
+            writeText('Projeção futura', margin + 14, y + 13, contentWidth - 28, { bold: true, fontSize: 11 })
             setDraw(border)
 
             for (let index = 0; index < 5; index += 1) {
@@ -1679,7 +1679,7 @@ export function Reports() {
             if (categoryRows.length === 0) {
                 ensureSpace(54)
                 drawCard(margin, y, contentWidth, 54)
-                writeText('Nenhum gasto encontrado no periodo.', margin + 14, y + 18, contentWidth - 28, { color: textMuted })
+                writeText('Nenhum gasto encontrado no período.', margin + 14, y + 18, contentWidth - 28, { color: textMuted })
                 y += 68
                 return
             }
@@ -1688,7 +1688,7 @@ export function Reports() {
                 ensureSpace(rowHeight + 8)
                 drawCard(margin, y, contentWidth, rowHeight)
                 writeText(`${formatStoredIconPrefix(category.categoryIcon)}${category.categoryName}`, margin + 12, y + 7, contentWidth * 0.45, { bold: true, fontSize: 9 })
-                writeText(`${category.transactionCount} transacoes - ${percentage.toFixed(1)}%`, margin + 12, y + 22, contentWidth * 0.45, { color: textMuted, fontSize: 7 })
+                writeText(`${category.transactionCount} transações - ${percentage.toFixed(1)}%`, margin + 12, y + 22, contentWidth * 0.45, { color: textMuted, fontSize: 7 })
                 writeText(formatCurrency(amount), margin + contentWidth - 120, y + 12, 108, { bold: true, color: expense, fontSize: 9 })
                 setFill(isDarkTheme ? [65, 62, 92] : [226, 232, 240])
                 pdf.roundedRect(margin + contentWidth * 0.52, y + 24, contentWidth * 0.32, 5, 2.5, 2.5, 'F')
@@ -1732,7 +1732,7 @@ export function Reports() {
         writeText('Money Organizer', margin, y, contentWidth, { bold: true, fontSize: 24, lineHeight: 28 })
         y += 31
         y += writeText(
-            `Relatorio financeiro ${getReportDepthLabel(depth).toLowerCase()} - ${getReportDepthDescription(depth)}.`,
+            `Relatório financeiro ${getReportDepthLabel(depth).toLowerCase()} - ${getReportDepthDescription(depth)}.`,
             margin,
             y,
             contentWidth,
@@ -1740,7 +1740,7 @@ export function Reports() {
         )
         y += 9
         ;[
-            `Periodo: ${reportPeriodLabel}`,
+            `Período: ${reportPeriodLabel}`,
             `Nivel: ${getReportDepthLabel(depth)}`,
             `Contas: ${selectedAccounts.length} de ${financialAccounts.length}`,
             `Gerado em: ${new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date())}`,
@@ -1756,38 +1756,38 @@ export function Reports() {
         })
         y += 62
 
-        drawSectionTitle('Resumo financeiro', 'Indicadores principais para entender sobra, pressao de gastos e folego de caixa.')
+        drawSectionTitle('Resumo financeiro', 'Indicadores principais para entender sobra, pressão de gastos e fôlego de caixa.')
         drawMetricGrid(financialSignals)
 
-        drawSectionTitle('Leitura pratica', 'Interpretacao em linguagem direta para orientar a proxima decisao.')
+        drawSectionTitle('Leitura prática', 'Interpretação em linguagem direta para orientar a próxima decisão.')
         drawInsightCards()
 
-        drawSectionTitle('Plano de acao', 'Score financeiro e passos praticos para a proxima revisao.')
+        drawSectionTitle('Plano de ação', 'Score financeiro e passos práticos para a próxima revisão.')
         drawActionPlan()
 
         drawEvolutionPdfChart()
 
-        drawSectionTitle('Maiores gastos por categoria', pdfHasComplete ? 'Lista completa das categorias do periodo.' : `Top ${categoryLimit} categorias do periodo.`)
+        drawSectionTitle('Maiores gastos por categoria', pdfHasComplete ? 'Lista completa das categorias do período.' : `Top ${categoryLimit} categorias do período.`)
         drawCategoryList()
 
-        drawSectionTitle('Balanco mensal', 'Recorte rapido do mes selecionado na pagina.')
+        drawSectionTitle('Balanço mensal', 'Recorte rápido do mês selecionado na página.')
         drawMetricGrid([
             {
-                label: 'Receitas no mes',
+                label: 'Receitas no mês',
                 value: formatCurrency(balance?.income ?? 0),
-                detail: `Mes base: ${formatMonth(balanceMonth)}`,
+                detail: `Mês base: ${formatMonth(balanceMonth)}`,
                 color: theme.income,
             },
             {
-                label: 'Despesas no mes',
+                label: 'Despesas no mês',
                 value: formatCurrency(balance?.expenses ?? 0),
-                detail: `${balance?.transactionCount?.total ?? 0} transacoes no total`,
+                detail: `${balance?.transactionCount?.total ?? 0} transações no total`,
                 color: theme.expense,
             },
             {
-                label: 'Saldo do mes',
+                label: 'Saldo do mês',
                 value: formatCurrency(balance?.balance ?? 0),
-                detail: Number(balance?.balance ?? 0) >= 0 ? 'Mes acima de zero' : 'Mes abaixo de zero',
+                detail: Number(balance?.balance ?? 0) >= 0 ? 'Mês acima de zero' : 'Mês abaixo de zero',
                 color: Number(balance?.balance ?? 0) >= 0 ? theme.balance : theme.expense,
             },
         ])
@@ -1797,7 +1797,7 @@ export function Reports() {
 
             drawSectionTitle('Tabela de evolucao', 'Base numerica do grafico de evolucao.')
             drawTable(
-                ['Mes', 'Receitas', 'Despesas', 'Saldo', 'Rec. vs inicio', 'Desp. vs inicio'],
+                ['Mês', 'Receitas', 'Despesas', 'Saldo', 'Rec. vs início', 'Desp. vs início'],
                 evolution.map((item) => [
                     formatMonth(item.month),
                     formatCurrency(item.income),
@@ -1808,9 +1808,9 @@ export function Reports() {
                 ]),
             )
 
-            drawSectionTitle('Tabela de projecao', 'Valores previstos e pendencias por mes.')
+            drawSectionTitle('Tabela de projeção', 'Valores previstos e pendências por mês.')
             drawTable(
-                ['Mes', 'Receita proj.', 'Despesa proj.', 'Saldo proj.', 'Pendentes'],
+                ['Mês', 'Receita proj.', 'Despesa proj.', 'Saldo proj.', 'Pendentes'],
                 projection.map((item) => [
                     formatMonth(item.month),
                     formatCurrency(item.projectedIncome),
@@ -1822,7 +1822,7 @@ export function Reports() {
         }
 
         if (pdfHasComplete) {
-            drawSectionTitle('Posicao por conta', 'Saldos atuais e propriedades das contas selecionadas no relatorio.')
+            drawSectionTitle('Posição por conta', 'Saldos atuais e propriedades das contas selecionadas no relatório.')
             drawMetricGrid(accountPositionCards)
             drawTable(
                 ['Conta', 'Instituicao', 'Saldo atual', 'Dashboard', 'Arquivada'],
@@ -1830,15 +1830,15 @@ export function Reports() {
                     account.name,
                     account.institutionName || 'Sem instituicao',
                     formatCurrency(account.currentBalance),
-                    account.includeInDashboard ? 'Sim' : 'Nao',
-                    account.isArchived ? 'Sim' : 'Nao',
+                    account.includeInDashboard ? 'Sim' : 'Não',
+                    account.isArchived ? 'Sim' : 'Não',
                 ]),
             )
         }
 
         ensureSpace(40)
         writeText(
-            'Relatorio gerado localmente pelo Money Organizer. Use como apoio para revisao financeira, nao como recomendacao de investimento.',
+            'Relatório gerado localmente pelo Money Organizer. Use como apoio para revisão financeira, não como recomendação de investimento.',
             margin,
             y,
             contentWidth,
@@ -1907,7 +1907,7 @@ export function Reports() {
                             className="app-icon-control inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl px-4 text-sm font-medium xl:w-auto"
                         >
                             <Download size={17} />
-                            Exportar relatorio
+                            Exportar relatório
                         </button>
                     </div>
                 </section>
@@ -1923,7 +1923,7 @@ export function Reports() {
                     <div>
                         <h2 className="text-lg font-semibold" style={{ color: 'var(--color-text)' }}>Leitura financeira</h2>
                         <p className="mt-1 text-sm" style={{ color: 'var(--color-text-muted)' }}>
-                            Sobra, aperto, concentracao de gasto e folego de caixa para decisao pratica.
+                            Sobra, aperto, concentração de gasto e fôlego de caixa para decisão prática.
                         </p>
                     </div>
 
@@ -2017,7 +2017,7 @@ export function Reports() {
                         >
                             <div className="mb-4 flex items-center gap-2" style={{ color: 'var(--color-brand)' }}>
                                 <Lightbulb size={18} />
-                                <h3 className="text-sm font-semibold">Proximas acoes</h3>
+                                <h3 className="text-sm font-semibold">Próximas ações</h3>
                             </div>
                             <div className="divide-y" style={{ borderColor: 'var(--color-border-soft)' }}>
                                 {visibleActionItems.map((item) => {
@@ -2191,7 +2191,7 @@ export function Reports() {
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                     <div className="glass rounded-2xl p-5"
                         style={{ backgroundColor: 'var(--color-bg-card)', border: '1px solid var(--color-border)' }}>
-                        <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>Melhor mes do periodo</p>
+                        <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>Melhor mês do período</p>
                         <p className="text-xl font-bold mt-1" style={{ color: 'var(--color-income)' }}>
                             {bestMonth ? `${formatMonth(bestMonth.month)} - ${formatCurrency(Number(bestMonth.balance))}` : 'Sem dados'}
                         </p>
@@ -2210,13 +2210,13 @@ export function Reports() {
                     <div>
                         <h2 className="text-lg font-semibold" style={{ color: 'var(--color-text)' }}>Maiores gastos por categoria</h2>
                         <p className="text-sm mt-1" style={{ color: 'var(--color-text-muted)' }}>
-                            Ranking baseado no periodo de evolucao selecionado.
+                            Ranking baseado no período de evolução selecionado.
                         </p>
                     </div>
 
                     {categoryTotals.length === 0 ? (
                         <div className="flex items-center justify-center h-32">
-                            <p style={{ color: 'var(--color-text-muted)' }}>Nenhum gasto encontrado no periodo</p>
+                            <p style={{ color: 'var(--color-text-muted)' }}>Nenhum gasto encontrado no período</p>
                         </div>
                     ) : (
                         <div className="space-y-3">
@@ -2452,7 +2452,7 @@ export function Reports() {
                         <div className="mb-5 flex items-start justify-between gap-4">
                             <div>
                                 <h2 id="reports-export-title" className="text-lg font-semibold" style={{ color: 'var(--color-text)' }}>
-                                    Exportar relatorio
+                                    Exportar relatório
                                 </h2>
                                 <p className="mt-1 text-sm" style={{ color: 'var(--color-text-muted)' }}>
                                     Escolha o nivel e o formato do arquivo.
@@ -2460,7 +2460,7 @@ export function Reports() {
                             </div>
                             <button
                                 type="button"
-                                aria-label="Fechar exportacao"
+                                aria-label="Fechar exportação"
                                 title="Fechar"
                                 onClick={() => setIsExportModalOpen(false)}
                                 className="app-icon-control flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
@@ -2472,7 +2472,7 @@ export function Reports() {
                         <div className="space-y-6">
                             <section className="space-y-3">
                                 <div>
-                                    <h3 className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>Nivel do relatorio</h3>
+                                    <h3 className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>Nível do relatório</h3>
                                     <p className="mt-1 text-xs" style={{ color: 'var(--color-text-muted)' }}>
                                         O arquivo sera montado com o nivel escolhido aqui.
                                     </p>
