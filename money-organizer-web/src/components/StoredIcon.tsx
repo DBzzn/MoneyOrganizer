@@ -62,8 +62,8 @@ export function StoredIconPicker({
 
                 <button
                     type="button"
-                    aria-label="Limpar icone"
-                    title="Limpar icone"
+                    aria-label="Limpar ícone"
+                    title="Limpar ícone"
                     onClick={() => onChange('')}
                     className="app-icon-control flex h-11 w-11 items-center justify-center rounded-lg"
                 >

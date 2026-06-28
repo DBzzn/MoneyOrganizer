@@ -28,7 +28,7 @@ export class CreateBalanceAdjustmentDto {
 
   @ApiProperty({
     description: 'Required reason for the balance adjustment',
-    example: 'Conciliacao com saldo real do banco',
+    example: 'Conciliação com saldo real do banco',
   })
   @IsString()
   @IsNotEmpty()

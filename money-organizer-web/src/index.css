@@ -96,6 +96,22 @@ html,
     -webkit-backdrop-filter: blur(20px);
 }
 
+/* ─── TOAST OVERLAY ─── */
+.app-toast-viewport {
+    position: fixed !important;
+    inset: max(1rem, env(safe-area-inset-top)) 0 auto 0 !important;
+    width: 100% !important;
+    height: 0 !important;
+    overflow: visible !important;
+    pointer-events: none !important;
+    z-index: 9999 !important;
+    contain: layout paint;
+}
+
+.app-toast-viewport > * {
+    pointer-events: auto;
+}
+
 /* ─── NAV ─── */
 .nav-item {
     color: var(--color-text-muted);
@@ -330,7 +346,10 @@ html,
 .register-track,
 .register-ledger-card,
 .register-step,
-.register-balance-strip {
+.register-balance-strip,
+.register-growth-line,
+.register-check-node,
+.register-goal-card {
     position: absolute;
     display: block;
 }
@@ -480,6 +499,151 @@ html,
     animation-duration: 21s;
 }
 
+.register-growth-line {
+    width: 280px;
+    height: 128px;
+    border-radius: 20px;
+    border: 1px solid var(--color-border-soft);
+    background:
+        linear-gradient(
+            135deg,
+            transparent 0 43%,
+            color-mix(in srgb, var(--color-income) 58%, transparent) 44% 46%,
+            transparent 47%
+        ),
+        linear-gradient(
+            0deg,
+            color-mix(in srgb, var(--color-brand) 14%, transparent),
+            transparent
+        );
+    opacity: 0.46;
+    animation: register-growth-sweep 13s ease-in-out infinite;
+}
+
+.register-growth-line::before,
+.register-growth-line::after {
+    content: "";
+    position: absolute;
+    width: 38px;
+    height: 10px;
+    border-radius: 999px;
+    background: var(--color-income-bg);
+}
+
+.register-growth-line::before {
+    left: 42px;
+    bottom: 30px;
+}
+
+.register-growth-line::after {
+    right: 44px;
+    top: 30px;
+    background: var(--color-balance-bg);
+}
+
+.register-growth-line-a {
+    left: 10%;
+    top: 43%;
+    transform: rotate(-10deg);
+}
+
+.register-growth-line-b {
+    right: 12%;
+    bottom: 36%;
+    transform: rotate(12deg);
+    animation-delay: -6s;
+}
+
+.register-check-node {
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+    border: 1px solid var(--color-border);
+    background: var(--color-bg-input);
+    box-shadow: 0 14px 34px rgba(15, 23, 42, 0.12);
+    opacity: 0.78;
+    animation: register-node-pop 6.5s ease-in-out infinite;
+}
+
+.register-check-node::before {
+    content: "";
+    position: absolute;
+    left: 10px;
+    top: 9px;
+    width: 13px;
+    height: 8px;
+    border-left: 3px solid var(--color-income);
+    border-bottom: 3px solid var(--color-income);
+    transform: rotate(-45deg);
+}
+
+.register-check-node-a {
+    left: 29%;
+    top: 24%;
+}
+
+.register-check-node-b {
+    right: 31%;
+    bottom: 24%;
+    animation-delay: -2s;
+}
+
+.register-check-node-c {
+    left: 31%;
+    bottom: 12%;
+    animation-delay: -4s;
+}
+
+.register-goal-card {
+    width: 148px;
+    height: 94px;
+    border-radius: 18px;
+    border: 1px solid var(--color-border-soft);
+    background:
+        linear-gradient(135deg, var(--color-bg-card), var(--color-bg-input)),
+        var(--color-bg-card);
+    box-shadow: 0 22px 54px rgba(15, 23, 42, 0.14);
+    opacity: 0.62;
+    animation: register-goal-scan 9s ease-in-out infinite;
+}
+
+.register-goal-card::before,
+.register-goal-card::after {
+    content: "";
+    position: absolute;
+    left: 18px;
+    right: 18px;
+    border-radius: 999px;
+}
+
+.register-goal-card::before {
+    top: 20px;
+    height: 9px;
+    background: var(--color-brand);
+    opacity: 0.64;
+}
+
+.register-goal-card::after {
+    top: 46px;
+    right: 52px;
+    height: 9px;
+    background: var(--color-income);
+    opacity: 0.68;
+}
+
+.register-goal-card-a {
+    left: 6%;
+    top: 34%;
+    transform: rotate(8deg);
+}
+
+.register-goal-card-b {
+    right: 8%;
+    top: 22%;
+    transform: rotate(-8deg);
+    animation-delay: -4.5s;
+}
+
 @keyframes register-track-glow {
     0%,
     100% {
@@ -523,6 +687,43 @@ html,
     }
 }
 
+@keyframes register-growth-sweep {
+    0%,
+    100% {
+        opacity: 0.34;
+        background-position: -80px 0, 0 0;
+    }
+
+    50% {
+        opacity: 0.68;
+        background-position: 80px 0, 0 0;
+    }
+}
+
+@keyframes register-node-pop {
+    0%,
+    100% {
+        scale: 1;
+        translate: 0 0;
+    }
+
+    50% {
+        scale: 1.08;
+        translate: 0 -10px;
+    }
+}
+
+@keyframes register-goal-scan {
+    0%,
+    100% {
+        translate: 0 0;
+    }
+
+    50% {
+        translate: 14px -12px;
+    }
+}
+
 @media (max-width: 640px) {
     .register-track {
         opacity: 0.38;
@@ -551,6 +752,32 @@ html,
         width: 156px;
         height: 40px;
         opacity: 0.44;
+    }
+
+    .register-growth-line {
+        width: 188px;
+        height: 88px;
+        opacity: 0.34;
+    }
+
+    .register-check-node {
+        width: 28px;
+        height: 28px;
+        border-radius: 9px;
+        opacity: 0.48;
+    }
+
+    .register-check-node::before {
+        left: 8px;
+        top: 8px;
+        width: 11px;
+        height: 7px;
+    }
+
+    .register-goal-card {
+        width: 116px;
+        height: 76px;
+        opacity: 0.42;
     }
 }
 
@@ -721,6 +948,125 @@ html,
     border: 1px solid var(--color-border);
     color: var(--color-text);
     box-shadow: 0 20px 45px rgba(15, 23, 42, 0.22);
+}
+
+.app-chip {
+    display: inline-flex;
+    align-items: center;
+    width: fit-content;
+    border-radius: 999px;
+    border: 1px solid var(--color-border-soft);
+    background-color: var(--color-bg-muted-card);
+    color: var(--color-text);
+}
+
+.app-chip-success {
+    border-color: color-mix(in srgb, var(--color-income) 45%, transparent);
+    background-color: color-mix(in srgb, var(--color-income) 16%, var(--color-bg-solid));
+    color: var(--color-income);
+}
+
+.app-chip-danger {
+    border-color: color-mix(in srgb, var(--color-expense) 45%, transparent);
+    background-color: color-mix(in srgb, var(--color-expense) 16%, var(--color-bg-solid));
+    color: var(--color-expense);
+}
+
+.app-chip-warning {
+    border-color: color-mix(in srgb, #d97706 48%, transparent);
+    background-color: color-mix(in srgb, #d97706 18%, var(--color-bg-solid));
+    color: #b45309;
+}
+
+.app-chip-info {
+    border-color: color-mix(in srgb, var(--color-brand) 42%, transparent);
+    background-color: color-mix(in srgb, var(--color-brand) 16%, var(--color-bg-solid));
+    color: var(--color-brand);
+}
+
+.app-chip-muted {
+    border-color: var(--color-border-soft);
+    background-color: var(--color-bg-muted-card);
+    color: var(--color-text-muted);
+}
+
+.app-inline-alert {
+    border: 1px solid var(--color-border-soft);
+    border-radius: 0.75rem;
+    background-color: var(--color-bg-muted-card);
+    color: var(--color-text);
+}
+
+.app-inline-alert-warning {
+    border-color: color-mix(in srgb, #d97706 45%, transparent);
+    background-color: color-mix(in srgb, #d97706 14%, var(--color-bg-solid));
+    color: var(--color-text);
+}
+
+.app-inline-alert-danger {
+    border-color: color-mix(in srgb, var(--color-expense) 45%, transparent);
+    background-color: color-mix(in srgb, var(--color-expense) 14%, var(--color-bg-solid));
+    color: var(--color-text);
+}
+
+.app-soft-button-info,
+.app-soft-button-success,
+.app-soft-button-warning,
+.app-soft-button-danger,
+.app-soft-button-muted {
+    border: 1px solid var(--color-border-soft);
+    color: var(--color-text);
+    background-color: var(--color-bg-input);
+}
+
+.app-soft-button-info {
+    border-color: color-mix(in srgb, var(--color-brand) 42%, transparent);
+    background-color: color-mix(in srgb, var(--color-brand) 13%, var(--color-bg-solid));
+    color: var(--color-brand);
+}
+
+.app-soft-button-success {
+    border-color: color-mix(in srgb, var(--color-income) 45%, transparent);
+    background-color: color-mix(in srgb, var(--color-income) 14%, var(--color-bg-solid));
+    color: var(--color-income);
+}
+
+.app-soft-button-warning {
+    border-color: color-mix(in srgb, #d97706 48%, transparent);
+    background-color: color-mix(in srgb, #d97706 15%, var(--color-bg-solid));
+    color: #b45309;
+}
+
+.app-soft-button-danger {
+    border-color: color-mix(in srgb, var(--color-expense) 45%, transparent);
+    background-color: color-mix(in srgb, var(--color-expense) 14%, var(--color-bg-solid));
+    color: var(--color-expense);
+}
+
+.app-soft-button-muted {
+    border-color: var(--color-border-soft);
+    background-color: var(--color-bg-muted-card);
+    color: var(--color-text-muted);
+}
+
+.app-soft-button-info:hover,
+.app-soft-button-success:hover,
+.app-soft-button-warning:hover,
+.app-soft-button-danger:hover,
+.app-soft-button-muted:hover {
+    opacity: 0.86;
+}
+
+:root.dark .app-chip-warning {
+    color: #fbbf24;
+}
+
+:root.dark .app-inline-alert-warning {
+    color: var(--color-text);
+}
+
+:root.dark .app-soft-button-warning {
+    color: #fbbf24;
 }
 
 :root.dark .app-control,

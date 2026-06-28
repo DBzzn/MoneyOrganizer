@@ -325,7 +325,7 @@ export function Sidebar({ isOpen, isMobile, onNavigate, onToggle }: SidebarProps
                     <div
                         ref={mobileNavRef}
                         role="navigation"
-                        aria-label="Navegacao principal"
+                        aria-label="Navegação principal"
                         onPointerDown={handleMobileNavPointerDown}
                         onPointerMove={handleMobileNavPointerMove}
                         onPointerUp={stopMobileNavDrag}

@@ -71,6 +71,7 @@ function createPrismaMock() {
     id: 'user-1',
     name: 'New Name',
     email: 'new@example.com',
+    reserveTargetMonths: 6,
     createdAt: new Date('2026-06-23T00:00:00.000Z'),
   });
 
@@ -126,6 +127,7 @@ describe('UsersService', () => {
         id: true,
         name: true,
         email: true,
+        reserveTargetMonths: true,
         createdAt: true,
       },
     });
@@ -153,6 +155,25 @@ describe('UsersService', () => {
       where: { id: 'user-1' },
       data: { password: 'new-hashed-password' },
       select: { id: true },
+    });
+  });
+
+  it('updates financial preferences without requiring the current password', async () => {
+    await service.updatePreferences('user-1', {
+      reserveTargetMonths: 9,
+    });
+
+    expect(bcrypt.compare).not.toHaveBeenCalled();
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: 'user-1' },
+      data: { reserveTargetMonths: 9 },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        reserveTargetMonths: true,
+        createdAt: true,
+      },
     });
   });
 

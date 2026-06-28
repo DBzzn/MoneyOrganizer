@@ -123,7 +123,7 @@ function ImportSourceBadge({ source }: { source: AppliedImportSource | null }) {
         <Link
             to={`/statement-imports?batch=${encodeURIComponent(source.file.batchId)}`}
             title={`Abrir lote de origem: ${source.file.originalName}`}
-            className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700 transition hover:bg-blue-100"
+            className="app-chip app-chip-info inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium transition hover:opacity-85"
         >
             <FileSearch size={12} />
             Importado
@@ -244,7 +244,7 @@ export function Transfers() {
             })
             .catch(() => {
                 if (isActive) {
-                    toast.error('Erro ao abrir a transferencia pelo extrato.')
+                    toast.error('Erro ao abrir a transferência pelo extrato.')
                 }
             })
 
@@ -303,7 +303,7 @@ export function Transfers() {
             setTransfers((prev) => prev.filter((transfer) => transfer.id !== confirmModal.transferId))
             toast.success('Transferência removida com sucesso!')
         } catch (error) {
-            toast.error(apiErrorMessage(error, 'Erro ao remover a transferencia.'))
+            toast.error(apiErrorMessage(error, 'Erro ao remover a transferência.'))
         } finally {
             setConfirmModal({ isOpen: false, transferId: null })
         }
@@ -573,9 +573,9 @@ export function Transfers() {
 
                                     <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
                                         {transfer.isPending ? (
-                                            <span className="rounded-full bg-yellow-100 px-2.5 py-1 text-xs font-medium text-yellow-700">Pendente</span>
+                                            <span className="app-chip app-chip-warning px-2.5 py-1 text-xs font-medium">Pendente</span>
                                         ) : (
-                                            <span className="rounded-full bg-green-100 px-2.5 py-1 text-xs font-medium text-green-700">Confirmada</span>
+                                            <span className="app-chip app-chip-success px-2.5 py-1 text-xs font-medium">Confirmada</span>
                                         )}
                                         <ImportSourceBadge source={getImportSource(transfer)} />
 
@@ -638,9 +638,9 @@ export function Transfers() {
                                             </td>
                                             <td className="px-6 py-4">
                                                 {transfer.isPending ? (
-                                                    <span className="rounded-full bg-yellow-100 px-2.5 py-1 text-xs font-medium text-yellow-700">Pendente</span>
+                                                    <span className="app-chip app-chip-warning px-2.5 py-1 text-xs font-medium">Pendente</span>
                                                 ) : (
-                                                    <span className="rounded-full bg-green-100 px-2.5 py-1 text-xs font-medium text-green-700">Confirmada</span>
+                                                    <span className="app-chip app-chip-success px-2.5 py-1 text-xs font-medium">Confirmada</span>
                                                 )}
                                             </td>
                                             <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-semibold text-blue-600">

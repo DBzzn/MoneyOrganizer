@@ -66,6 +66,10 @@ describe('FinancialAccountsService', () => {
     service = module.get<FinancialAccountsService>(FinancialAccountsService);
   });
 
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
   it('should be defined', () => {
     expect(service).toBeDefined();
   });
@@ -229,6 +233,8 @@ describe('FinancialAccountsService', () => {
   });
 
   it('returns a unified account ledger with signed movements', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-06-10T12:00:00.000Z'));
+
     const account = {
       id: 'account-1',
       name: 'Nubank',

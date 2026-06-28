@@ -1,0 +1,3 @@
+ALTER TABLE "User" ADD COLUMN "reserveTargetMonths" INTEGER NOT NULL DEFAULT 6;
+
+ALTER TABLE "StatementImportBatch" ADD COLUMN "name" VARCHAR(120);

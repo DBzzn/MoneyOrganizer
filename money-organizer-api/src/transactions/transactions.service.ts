@@ -610,7 +610,7 @@ export class TransactionsService {
 
             if (importedMovementCount > 0) {
                 throw new BadRequestException(
-                    'Transacao criada por importacao nao pode ser excluida diretamente. Mantenha a rastreabilidade ate existir um fluxo de desfazer para importacoes.',
+                    'Transação criada por importação não pode ser excluída diretamente. Mantenha a rastreabilidade até existir um fluxo de desfazer para importações.',
                 );
             }
 

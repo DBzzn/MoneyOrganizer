@@ -56,8 +56,8 @@ export class FinancialAccountsController {
 
   @ApiOperation({ summary: 'Listar extrato unificado de uma conta financeira' })
   @ApiResponse({ status: 200, description: 'Extrato da conta retornado com sucesso' })
-  @ApiResponse({ status: 401, description: 'Nao autenticado' })
-  @ApiResponse({ status: 404, description: 'Conta financeira nao encontrada ou nao pertence ao usuario' })
+  @ApiResponse({ status: 401, description: 'Não autenticado' })
+  @ApiResponse({ status: 404, description: 'Conta financeira não encontrada ou não pertence ao usuário' })
   @Get(':id/ledger')
   getLedger(
     @Request() req: AuthenticatedRequest,

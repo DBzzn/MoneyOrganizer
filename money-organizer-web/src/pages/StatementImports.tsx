@@ -53,6 +53,7 @@ import {
   undoAppliedImportedMovements,
   updateImportedMovement,
   updateImportedMovementStatus,
+  updateStatementImportBatch,
 } from "../api/statementImports";
 import { formatStoredIconPrefix } from "../components/storedIconRegistry";
 import { StoredIconPicker } from "../components/StoredIcon";
@@ -175,7 +176,7 @@ const INVOICE_PAYMENT_FLAG = "INVOICE_PAYMENT_REQUIRES_DUPLICATE_REVIEW";
 const APPLY_CONFIRMATION_COLUMNS = [
   { key: "date", label: "Data", minWidth: 96, defaultWidth: 112 },
   { key: "target", label: "Alvo", minWidth: 112, defaultWidth: 128 },
-  { key: "description", label: "Descricao", minWidth: 180, defaultWidth: 280 },
+  { key: "description", label: "Descrição", minWidth: 180, defaultWidth: 280 },
   { key: "type", label: "Tipo", minWidth: 120, defaultWidth: 144 },
   { key: "destination", label: "Destino", minWidth: 150, defaultWidth: 176 },
   { key: "account", label: "Conta", minWidth: 150, defaultWidth: 176 },
@@ -268,12 +269,12 @@ const TRANSACTION_REVIEW_TYPE_OPTIONS: Record<
   ],
   OUT: [
     { value: "PIX", label: "Pix" },
-    { value: "DEBITO", label: "Debito" },
-    { value: "CREDITO", label: "Credito" },
+    { value: "DEBITO", label: "Débito" },
+    { value: "CREDITO", label: "Crédito" },
     { value: "BOLETO", label: "Boleto" },
     { value: "DINHEIRO", label: "Dinheiro" },
     { value: "COMPRA", label: "Compra" },
-    { value: "OUTRA_SAIDA", label: "Outra saida" },
+    { value: "OUTRA_SAIDA", label: "Outra saída" },
   ],
 };
 
@@ -380,7 +381,7 @@ function dateInputValue(date: string): string {
 }
 
 function directionLabel(direction: StatementMovementDirection): string {
-  return direction === "IN" ? "Entrada" : "Saida";
+  return direction === "IN" ? "Entrada" : "Saída";
 }
 
 function normalizeReviewTypeValue(value: string): string {
@@ -403,7 +404,7 @@ function getReviewTypeOptions(
   reviewTarget: ImportedMovementReviewTarget,
 ): ReviewTypeOption[] {
   if (reviewTarget === "TRANSFER") {
-    return [{ value: TRANSFER_REVIEW_TYPE, label: "Transferencia" }];
+    return [{ value: TRANSFER_REVIEW_TYPE, label: "Transferência" }];
   }
 
   return TRANSACTION_REVIEW_TYPE_OPTIONS[direction];
@@ -567,15 +568,15 @@ function getSafePrepareBlockReason(
   file: StatementImportFile,
 ): string | null {
   if (movement.status !== "NEW" && movement.status !== "NEEDS_REVIEW") {
-    return "Movimento ja saiu da revisao rapida";
+    return "Movimento já saiu da revisão rápida";
   }
 
   if (movement.amountCents <= 0) {
-    return "Valor invalido";
+    return "Valor inválido";
   }
 
   if (!movement.rawDescription.trim()) {
-    return "Descricao pendente";
+    return "Descrição pendente";
   }
 
   if (!file.financialAccountId) {
@@ -590,15 +591,15 @@ function getSafePrepareBlockReason(
   if (
     movement.reviewHints?.flags.includes("PIX_REQUIRES_MANUAL_TRANSFER_REVIEW")
   ) {
-    return "Pix exige revisao manual de transferencia";
+    return "Pix exige revisão manual de transferência";
   }
 
   if (hasInvoicePaymentWarning(movement)) {
-    return "Pagamento de fatura exige revisao manual";
+    return "Pagamento de fatura exige revisão manual";
   }
 
   if (movement.reviewTarget === "TRANSFER") {
-    return "Transferencia exige revisao manual";
+    return "Transferência exige revisão manual";
   }
 
   const rawType = normalizeReviewTypeValue(movement.rawType);
@@ -627,7 +628,7 @@ function getMovementReadinessIssue(
   }
 
   if (!movement.rawDescription.trim()) {
-    return "Informe uma descricao revisada";
+    return "Informe uma descrição revisada";
   }
 
   if (!file.financialAccountId) {
@@ -641,11 +642,11 @@ function getMovementReadinessIssue(
 
   if (movement.reviewTarget === "TRANSFER") {
     if (!movement.reviewTransferAccountId) {
-      return "Informe a outra conta da transferencia";
+      return "Informe a outra conta da transferência";
     }
 
     if (movement.reviewTransferAccountId === file.financialAccountId) {
-      return "Use contas diferentes na transferencia";
+      return "Use contas diferentes na transferência";
     }
 
     return null;
@@ -658,7 +659,7 @@ function getMovementReadinessIssue(
   ).some((option) => option.value === rawType);
 
   if (!validType) {
-    return "Revise o tipo da transacao";
+    return "Revise o tipo da transação";
   }
 
   if (!movement.reviewCategoryId) {
@@ -683,7 +684,7 @@ function getMovementReconciliationIssue(
     hasLedgerReconciliationMatch(movement) &&
     movement.reconciliationStatus !== "CONFIRMED_UNIQUE"
   ) {
-    return "Confirme a conciliacao do match antes de marcar como pronto";
+    return "Confirme a conciliação do match antes de marcar como pronto";
   }
 
   return null;
@@ -695,8 +696,8 @@ function hasInvoicePaymentWarning(movement: ImportedMovement): boolean {
 
 function directionClass(direction: StatementMovementDirection): string {
   return direction === "IN"
-    ? "bg-green-100 text-green-700"
-    : "bg-red-100 text-red-700";
+    ? "app-chip app-chip-success"
+    : "app-chip app-chip-danger";
 }
 
 function DirectionIcon({
@@ -714,7 +715,7 @@ function DirectionIcon({
 function batchStatusLabel(status: StatementImportBatchStatus): string {
   const labels: Record<StatementImportBatchStatus, string> = {
     DRAFT: "Rascunho",
-    REVIEWING: "Em revisao",
+    REVIEWING: "Em revisão",
     READY: "Pronto",
     APPLIED: "Aplicado",
     PARTIALLY_APPLIED: "Parcial",
@@ -749,8 +750,8 @@ function movementStatusLabel(status: ImportedMovementStatus): string {
 
 function reviewSourceLabel(sourceType: string): string {
   const labels: Record<string, string> = {
-    TRANSACTION: "Transacao",
-    TRANSFER: "Transferencia",
+    TRANSACTION: "Transação",
+    TRANSFER: "Transferência",
     BALANCE_ADJUSTMENT: "Ajuste",
   };
 
@@ -759,9 +760,9 @@ function reviewSourceLabel(sourceType: string): string {
 
 function reviewFlagLabel(flag: string): string {
   const labels: Record<string, string> = {
-    POSSIBLE_LEDGER_MATCH: "Possivel match",
-    RECONCILIATION_REQUIRED: "Conciliacao pendente",
-    PIX_REQUIRES_MANUAL_TRANSFER_REVIEW: "Pix: revisar transferencia",
+    POSSIBLE_LEDGER_MATCH: "Possível match",
+    RECONCILIATION_REQUIRED: "Conciliação pendente",
+    PIX_REQUIRES_MANUAL_TRANSFER_REVIEW: "Pix: revisar transferência",
     INVOICE_PAYMENT_REQUIRES_DUPLICATE_REVIEW:
       "Pagamento de fatura: risco de duplicidade",
   };
@@ -771,24 +772,24 @@ function reviewFlagLabel(flag: string): string {
 
 function reviewFlagClass(flag: string): string {
   if (flag === INVOICE_PAYMENT_FLAG) {
-    return "border-red-200 bg-red-50 text-red-700";
+    return "app-chip app-chip-danger";
   }
 
   if (
     flag === "POSSIBLE_LEDGER_MATCH" ||
     flag === "RECONCILIATION_REQUIRED"
   ) {
-    return "border-amber-200 bg-amber-50 text-amber-800";
+    return "app-chip app-chip-warning";
   }
 
-  return "border-blue-200 bg-blue-50 text-blue-700";
+  return "app-chip app-chip-info";
 }
 
 function reconciliationStatusLabel(
   status: ImportedMovementReconciliationStatus,
 ): string {
   const labels: Record<ImportedMovementReconciliationStatus, string> = {
-    PENDING: "Conciliacao pendente",
+    PENDING: "Conciliação pendente",
     CONFIRMED_UNIQUE: "Novo confirmado",
     CONFIRMED_DUPLICATE: "Duplicidade confirmada",
   };
@@ -800,14 +801,14 @@ function reconciliationStatusClass(
   status: ImportedMovementReconciliationStatus,
 ): string {
   if (status === "CONFIRMED_UNIQUE") {
-    return "border-green-200 bg-green-50 text-green-700";
+    return "app-chip app-chip-success";
   }
 
   if (status === "CONFIRMED_DUPLICATE") {
-    return "border-red-200 bg-red-50 text-red-700";
+    return "app-chip app-chip-danger";
   }
 
-  return "border-amber-200 bg-amber-50 text-amber-800";
+  return "app-chip app-chip-warning";
 }
 
 function statusClass(
@@ -817,18 +818,18 @@ function statusClass(
     | ImportedMovementStatus,
 ): string {
   if (status === "DUPLICATE") {
-    return "bg-yellow-100 text-yellow-700";
+    return "app-chip app-chip-warning";
   }
 
   if (status === "FAILED" || status === "CANCELED") {
-    return "bg-red-100 text-red-700";
+    return "app-chip app-chip-danger";
   }
 
   if (status === "APPLIED" || status === "READY" || status === "PARSED") {
-    return "bg-green-100 text-green-700";
+    return "app-chip app-chip-success";
   }
 
-  return "bg-blue-100 text-blue-700";
+  return "app-chip app-chip-info";
 }
 
 function StatusIcon({
@@ -892,6 +893,16 @@ function getBatchMovementCount(batch: StatementImportBatch | null): number {
   return (
     batch?.files.reduce((total, file) => total + file.movements.length, 0) ?? 0
   );
+}
+
+function getBatchDisplayName(
+  batch: Pick<StatementImportBatch | StatementImportBatchSummary, "id" | "name">,
+): string {
+  return batch.name?.trim() || `Lote #${batch.id.slice(0, 8)}`;
+}
+
+function getBatchShortCode(batchId: string): string {
+  return `#${batchId.slice(0, 8)}`;
 }
 
 function createMovementStatusCounts(): Record<MovementStatusFilter, number> {
@@ -1084,8 +1095,8 @@ function getReadyMovementPreview(
           description: movement.rawDescription || "-",
           label:
             movement.reviewTarget === "TRANSFER"
-              ? `Transferencia - ${file.financialAccount?.name ?? "Conta do extrato"}`
-              : (movement.reviewCategory?.name ?? "Transacao"),
+              ? `Transferência - ${file.financialAccount?.name ?? "Conta do extrato"}`
+              : (movement.reviewCategory?.name ?? "Transação"),
           direction: movement.direction,
           amountCents: movement.amountCents,
         })),
@@ -1141,7 +1152,7 @@ function getUndoAppliedMovementDetails(
         .map((movement) => ({
           id: movement.id,
           batchId: batch.id,
-          batchLabel: `Lote #${batch.id.slice(0, 8)}`,
+          batchLabel: getBatchDisplayName(batch),
           fileId: file.id,
           fileName: file.originalName,
           sourceAccountName: file.financialAccount?.name ?? "Conta do extrato",
@@ -1149,8 +1160,8 @@ function getUndoAppliedMovementDetails(
           description: movement.rawDescription || "-",
           reviewTarget: movement.reviewTarget,
           entityLabel: movement.appliedTransferId
-            ? "Transferencia"
-            : "Transacao",
+            ? "Transferência"
+            : "Transação",
           destinationLabel:
             movement.reviewTarget === "TRANSFER"
               ? (movement.reviewTransferAccount?.name ?? "Outra conta")
@@ -1170,7 +1181,7 @@ function getUndoAppliedSummary(
 ): ApplyReadySummary {
   const summary = movements.reduce(
     (totals, movement) => {
-      if (movement.entityLabel === "Transferencia") {
+      if (movement.entityLabel === "Transferência") {
         totals.transferCount += 1;
       } else {
         totals.transactionCount += 1;
@@ -1216,7 +1227,7 @@ function formatBatchSummaryPeriod(summary: StatementImportBatchSummary): string 
     .sort();
 
   if (starts.length === 0 || ends.length === 0) {
-    return "Periodo nao identificado";
+    return "Período não identificado";
   }
 
   return `${formatDate(starts[0])} a ${formatDate(ends[ends.length - 1])}`;
@@ -1226,7 +1237,7 @@ function formatFilePeriod(
   file: Pick<StatementImportFile, "periodStart" | "periodEnd">,
 ): string {
   if (!file.periodStart || !file.periodEnd) {
-    return "Periodo nao identificado";
+    return "Período não identificado";
   }
 
   return `${formatDate(file.periodStart)} a ${formatDate(file.periodEnd)}`;
@@ -1234,7 +1245,7 @@ function formatFilePeriod(
 
 function formatBatchPeriod(batch: StatementImportBatch | null): string {
   if (!batch) {
-    return "Periodo nao identificado";
+    return "Período não identificado";
   }
 
   const starts = batch.files
@@ -1247,7 +1258,7 @@ function formatBatchPeriod(batch: StatementImportBatch | null): string {
     .sort();
 
   if (starts.length === 0 || ends.length === 0) {
-    return "Periodo nao identificado";
+    return "Período não identificado";
   }
 
   return `${formatDate(starts[0])} a ${formatDate(ends[ends.length - 1])}`;
@@ -1263,14 +1274,14 @@ function getAppliedMovementLink(movement: ImportedMovement) {
   if (movement.appliedTransactionId) {
     return {
       href: `/transactions?edit=${encodeURIComponent(movement.appliedTransactionId)}`,
-      label: "Transacao",
+      label: "Transação",
     };
   }
 
   if (movement.appliedTransferId) {
     return {
       href: `/transfers?edit=${encodeURIComponent(movement.appliedTransferId)}`,
-      label: "Transferencia",
+      label: "Transferência",
     };
   }
 
@@ -1305,8 +1316,11 @@ export function StatementImports() {
   const [isApplyConfirmOpen, setIsApplyConfirmOpen] = useState(false);
   const [isUndoConfirmOpen, setIsUndoConfirmOpen] = useState(false);
   const [batchToDeleteId, setBatchToDeleteId] = useState<string | null>(null);
+  const [batchRenameId, setBatchRenameId] = useState<string | null>(null);
+  const [batchRenameDraft, setBatchRenameDraft] = useState("");
   const [isSavingMovement, setIsSavingMovement] = useState(false);
   const [isDeletingBatch, setIsDeletingBatch] = useState(false);
+  const [isRenamingBatch, setIsRenamingBatch] = useState(false);
   const [isPreparingSafe, setIsPreparingSafe] = useState(false);
   const [isIgnoringDuplicates, setIsIgnoringDuplicates] = useState(false);
   const [isApplyingReady, setIsApplyingReady] = useState(false);
@@ -1646,14 +1660,14 @@ export function StatementImports() {
     ? "Aguarde o lote atual terminar de salvar."
     : null;
   const refreshDisabledReason = isLoadingBatches
-    ? "Aguarde a atualizacao dos lotes terminar."
+    ? "Aguarde a atualização dos lotes terminar."
     : null;
   const ignoreDuplicatesDisabledReason = isIgnoringDuplicates
     ? "Ignorando duplicados deste lote."
     : isPreparingSafe
       ? "Aguarde o preparo dos movimentos seguros terminar."
       : isApplyingReady
-        ? "Aguarde a aplicacao dos movimentos prontos terminar."
+        ? "Aguarde a aplicação dos movimentos prontos terminar."
         : isUndoingApplied
           ? "Aguarde o desfazer dos movimentos aplicados terminar."
           : duplicateMovementCandidates.length === 0
@@ -1662,11 +1676,11 @@ export function StatementImports() {
   const prepareSafeDisabledReason = isPreparingSafe
     ? "Preparando movimentos seguros deste lote."
     : isApplyingReady
-      ? "Aguarde a aplicacao dos movimentos prontos terminar."
+      ? "Aguarde a aplicação dos movimentos prontos terminar."
       : isUndoingApplied
         ? "Aguarde o desfazer dos movimentos aplicados terminar."
         : safeReadyCandidates.length === 0
-          ? "Nenhum movimento seguro disponivel para preparo automatico."
+          ? "Nenhum movimento seguro disponível para preparo automático."
           : null;
   const applyReadyDisabledReason = isApplyingReady
     ? "Aplicando movimentos prontos deste lote."
@@ -1677,12 +1691,12 @@ export function StatementImports() {
         : movementStatusCounts.READY === 0
           ? "Nenhum movimento pronto para aplicar."
           : readyReconciliationBlockCount > 0
-            ? "Resolva a conciliacao dos movimentos prontos antes de aplicar."
+            ? "Resolva a conciliação dos movimentos prontos antes de aplicar."
             : null;
   const undoAppliedDisabledReason = isUndoingApplied
     ? "Desfazendo movimentos aplicados deste lote."
     : isApplyingReady
-      ? "Aguarde a aplicacao dos movimentos prontos terminar."
+      ? "Aguarde a aplicação dos movimentos prontos terminar."
       : isPreparingSafe
         ? "Aguarde o preparo dos movimentos seguros terminar."
         : undoAppliedSummary.totalCount === 0
@@ -1890,6 +1904,50 @@ export function StatementImports() {
     }
   };
 
+  const openBatchRename = (
+    batch: Pick<StatementImportBatch | StatementImportBatchSummary, "id" | "name">,
+  ) => {
+    setBatchRenameId(batch.id);
+    setBatchRenameDraft(batch.name?.trim() ?? "");
+  };
+
+  const closeBatchRename = () => {
+    if (isRenamingBatch) {
+      return;
+    }
+
+    setBatchRenameId(null);
+    setBatchRenameDraft("");
+  };
+
+  const handleRenameBatch = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    if (!batchRenameId) {
+      return;
+    }
+
+    const nextName = batchRenameDraft.trim();
+
+    try {
+      setIsRenamingBatch(true);
+      const response = await updateStatementImportBatch(batchRenameId, {
+        name: nextName || null,
+      });
+      setCurrentBatch((batch) =>
+        batch?.id === response.data.id ? response.data : batch,
+      );
+      setBatchRenameId(null);
+      setBatchRenameDraft("");
+      await refreshBatches(response.data.id);
+      toast.success(nextName ? "Lote renomeado." : "Nome do lote removido.");
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "Erro ao renomear lote."));
+    } finally {
+      setIsRenamingBatch(false);
+    }
+  };
+
   const handleDeleteBatch = async () => {
     if (!batchToDeleteId) {
       return;
@@ -1903,7 +1961,7 @@ export function StatementImports() {
       setIsDeletingBatch(true);
       await deleteStatementImportBatch(deletedBatchId);
       setBatchToDeleteId(null);
-      toast.success("Lote excluido com sucesso.");
+      toast.success("Lote excluído com sucesso.");
       if (shouldClearExpandedBatch) {
         setSelectedBatchId("");
         setCurrentBatch(null);
@@ -1962,9 +2020,9 @@ export function StatementImports() {
       setSelectedFiles([]);
       form.reset();
       await refreshBatches(response.data.id);
-      toast.success("Lote salvo para revisao!");
+      toast.success("Lote salvo para revisão!");
     } catch {
-      toast.error("Erro ao criar lote de importacao.");
+      toast.error("Erro ao criar lote de importação.");
     } finally {
       setIsUploading(false);
     }
@@ -2053,7 +2111,7 @@ export function StatementImports() {
     }
 
     if (!isBulkCategoryMovementEligible(movement)) {
-      toast.error("Somente transacoes editaveis aceitam sugestao de categoria.");
+      toast.error("Somente transações editáveis aceitam sugestão de categoria.");
       return;
     }
 
@@ -2062,12 +2120,12 @@ export function StatementImports() {
     );
 
     if (!category || !categoryMatchesMovementDirection(category, movement.direction)) {
-      toast.error("Sugestao indisponivel ou incompativel com o movimento.");
+      toast.error("Sugestão indisponível ou incompatível com o movimento.");
       return;
     }
 
     if (movement.reviewCategoryId === suggestion.categoryId) {
-      toast.success("Essa sugestao ja esta aplicada.");
+      toast.success("Essa sugestão já está aplicada.");
       return;
     }
 
@@ -2099,7 +2157,7 @@ export function StatementImports() {
 
       toast.success(`Categoria sugerida aplicada: ${category.name}.`);
     } catch (error) {
-      toast.error(apiErrorMessage(error, "Erro ao aplicar sugestao."));
+      toast.error(apiErrorMessage(error, "Erro ao aplicar sugestão."));
     } finally {
       setUpdatingMovementId(null);
     }
@@ -2107,7 +2165,7 @@ export function StatementImports() {
 
   const handleApplyCategorySuggestions = async () => {
     if (!currentBatch || categorySuggestionCandidates.length === 0) {
-      toast.error("Nenhuma sugestao segura para aplicar.");
+      toast.error("Nenhuma sugestão segura para aplicar.");
       return;
     }
 
@@ -2130,10 +2188,10 @@ export function StatementImports() {
 
       await preserveScrollPosition(() => loadBatch(currentBatch.id));
       toast.success(
-        `${categorySuggestionCandidates.length} sugestao(oes) aplicada(s).`,
+        `${categorySuggestionCandidates.length} sugestão(ões) aplicada(s).`,
       );
     } catch (error) {
-      toast.error(apiErrorMessage(error, "Erro ao aplicar sugestoes."));
+      toast.error(apiErrorMessage(error, "Erro ao aplicar sugestões."));
     } finally {
       setIsApplyingCategorySuggestions(false);
     }
@@ -2141,7 +2199,7 @@ export function StatementImports() {
 
   const handleApplySelectedCategorySuggestions = async () => {
     if (!currentBatch || selectedCategorySuggestionCandidates.length === 0) {
-      toast.error("Nenhuma sugestao segura nos selecionados.");
+      toast.error("Nenhuma sugestão segura nos selecionados.");
       return;
     }
 
@@ -2161,12 +2219,12 @@ export function StatementImports() {
       setSelectedBulkCategoryId("");
       setSelectedReviewActionsMenuPosition(null);
       toast.success(
-        `${selectedCategorySuggestionCandidates.length} sugestao(oes) aplicada(s) aos selecionados.`,
+        `${selectedCategorySuggestionCandidates.length} sugestão(ões) aplicada(s) aos selecionados.`,
       );
     } catch (error) {
       await preserveScrollPosition(() => loadBatch(currentBatch.id));
       toast.error(
-        apiErrorMessage(error, "Erro ao aplicar sugestoes nos selecionados."),
+        apiErrorMessage(error, "Erro ao aplicar sugestões nos selecionados."),
       );
     } finally {
       setIsApplyingCategorySuggestions(false);
@@ -2228,7 +2286,7 @@ export function StatementImports() {
     if (!isBulkCategoryMovementEligible(movement)) {
       setSelectedReviewActionsMenuPosition(null);
       toast.error(
-        "Somente transacoes editaveis entram nas acoes em massa.",
+        "Somente transações editáveis entram nas ações em massa.",
       );
       return;
     }
@@ -2251,7 +2309,7 @@ export function StatementImports() {
 
   const handleSelectSimilarReviewMovements = () => {
     if (!editingMovement || editingSimilarReviewMovementItems.length === 0) {
-      toast.error("Nao ha movimentos semelhantes editaveis para selecionar.");
+      toast.error("Não há movimentos semelhantes editáveis para selecionar.");
       return;
     }
 
@@ -2261,7 +2319,7 @@ export function StatementImports() {
 
     handleReviewSelectMany(movementIds, true);
     toast.success(
-      `${movementIds.length} movimento(s) com a mesma descricao selecionado(s).`,
+      `${movementIds.length} movimento(s) com a mesma descrição selecionado(s).`,
     );
   };
 
@@ -2269,7 +2327,7 @@ export function StatementImports() {
     status: ReviewableMovementStatus,
   ) => {
     if (!currentBatch || selectedReviewMovementItems.length === 0) {
-      toast.error("Selecione movimentos editaveis para atualizar.");
+      toast.error("Selecione movimentos editáveis para atualizar.");
       return;
     }
 
@@ -2284,7 +2342,7 @@ export function StatementImports() {
     if (updateItems.length === 0) {
       toast.error(
         status === "READY"
-          ? "Nenhum selecionado esta pronto para marcar como pronto."
+          ? "Nenhum selecionado está pronto para marcar como pronto."
           : "Nenhum selecionado pode ser atualizado.",
       );
       return;
@@ -2306,7 +2364,7 @@ export function StatementImports() {
       setSelectedReviewActionsMenuPosition(null);
       toast.success(
         blockedCount > 0
-          ? `${updatedCount} movimento(s) marcado(s) como ${movementStatusLabel(status).toLowerCase()}. ${blockedCount} bloqueado(s) por pendencias.`
+          ? `${updatedCount} movimento(s) marcado(s) como ${movementStatusLabel(status).toLowerCase()}. ${blockedCount} bloqueado(s) por pendências.`
           : `${updatedCount} movimento(s) marcado(s) como ${movementStatusLabel(status).toLowerCase()}.`,
       );
     } catch (error) {
@@ -2342,7 +2400,7 @@ export function StatementImports() {
 
   const applyCategoryToSelectedReviewMovements = async (category: Category) => {
     if (!currentBatch || selectedReviewMovementItems.length === 0) {
-      toast.error("Selecione movimentos de transacao para aplicar categoria.");
+      toast.error("Selecione movimentos de transação para aplicar categoria.");
       return;
     }
 
@@ -2573,18 +2631,18 @@ export function StatementImports() {
     const rawDescription = movementEditForm.rawDescription.trim();
 
     if (!rawType || !rawDescription) {
-      toast.error("Tipo e descricao sao obrigatorios.");
+      toast.error("Tipo e descrição são obrigatórios.");
       return;
     }
 
     if (movementEditForm.reviewTarget === "TRANSFER") {
       if (!editingMovementFile.financialAccountId) {
-        toast.error("Selecione a conta do extrato antes de revisar transferencia.");
+        toast.error("Selecione a conta do extrato antes de revisar transferência.");
         return;
       }
 
       if (!movementEditForm.reviewTransferAccountId) {
-        toast.error("Informe a outra conta da transferencia.");
+        toast.error("Informe a outra conta da transferência.");
         return;
       }
 
@@ -2648,7 +2706,7 @@ export function StatementImports() {
       if (currentBatch) {
         await preserveScrollPosition(() => loadBatch(currentBatch.id));
       }
-      toast.success("Movimento atualizado para revisao.");
+      toast.success("Movimento atualizado para revisão.");
     } catch (error) {
       toast.error(apiErrorMessage(error, "Erro ao editar movimento."));
     } finally {
@@ -2662,7 +2720,7 @@ export function StatementImports() {
     }
 
     if (readyReconciliationBlockCount > 0) {
-      toast.error("Resolva a conciliacao dos movimentos prontos antes de aplicar.");
+      toast.error("Resolva a conciliação dos movimentos prontos antes de aplicar.");
       return;
     }
 
@@ -2673,7 +2731,7 @@ export function StatementImports() {
       setCurrentBatch(response.data.batch);
       await preserveScrollPosition(() => refreshBatches(response.data.batch.id));
       toast.success(
-        `${response.data.appliedCount} movimento(s) aplicado(s): ${response.data.transactionCount} transacao(oes), ${response.data.transferCount} transferencia(s).`,
+        `${response.data.appliedCount} movimento(s) aplicado(s): ${response.data.transactionCount} transação(ões), ${response.data.transferCount} transferência(s).`,
       );
     } catch (error) {
       toast.error(apiErrorMessage(error, "Erro ao aplicar movimentos prontos."));
@@ -2737,7 +2795,7 @@ export function StatementImports() {
       setSelectedUndoMovementIds([]);
       await preserveScrollPosition(() => refreshBatches(response.data.batch.id));
       toast.success(
-        `${response.data.undoneCount} movimento(s) desfeito(s): ${response.data.transactionCount} transacao(oes), ${response.data.transferCount} transferencia(s).`,
+        `${response.data.undoneCount} movimento(s) desfeito(s): ${response.data.transactionCount} transação(ões), ${response.data.transferCount} transferência(s).`,
       );
     } catch (error) {
       toast.error(
@@ -2831,7 +2889,7 @@ export function StatementImports() {
             className="text-2xl font-bold"
             style={{ color: "var(--color-text)" }}
           >
-            Importacao de extratos
+            Importação de extratos
           </h1>
           <p className="mt-1" style={{ color: "var(--color-text-muted)" }}>
             Lotes persistidos para revisar movimentos antes de qualquer impacto
@@ -2856,8 +2914,8 @@ export function StatementImports() {
               className="text-sm leading-6"
               style={{ color: "var(--color-text-muted)" }}
             >
-              Criar e revisar lotes nao altera saldo. A aplicacao financeira
-              acontece apenas ao usar "Aplicar prontos", depois da revisao.
+              Criar e revisar lotes não altera saldo. A aplicação financeira
+              acontece apenas ao usar "Aplicar prontos", depois da revisão.
             </p>
           </div>
         </div>
@@ -2959,7 +3017,7 @@ export function StatementImports() {
                 style={{ color: "var(--color-text-muted)" }}
               >
                 {batchSummaries.length} lote(s) salvo(s), {batchRangeStart}-
-                {batchRangeEnd} visivel(is)
+                {batchRangeEnd} visível(is)
               </p>
             </div>
             <DisabledReasonTooltip
@@ -3009,11 +3067,11 @@ export function StatementImports() {
                 const deleteDisabledReason = deleteBlockedByAppliedMovements
                   ? "Desfaca os movimentos aplicados antes de excluir o lote."
                   : isDeletingBatch
-                    ? "Aguarde a exclusao do lote terminar."
+                    ? "Aguarde a exclusão do lote terminar."
                     : isUploading
                       ? "Aguarde o envio do lote terminar."
                       : isApplyingReady
-                        ? "Aguarde a aplicacao dos movimentos prontos terminar."
+                        ? "Aguarde a aplicação dos movimentos prontos terminar."
                         : isUndoingApplied
                           ? "Aguarde o desfazer dos movimentos aplicados terminar."
                           : null;
@@ -3051,14 +3109,21 @@ export function StatementImports() {
                               className="font-semibold"
                               style={{ color: "var(--color-text)" }}
                             >
-                              #{summary.id.slice(0, 8)}
+                              {getBatchDisplayName(summary)}
                             </span>
+                            {summary.name?.trim() && (
+                              <span
+                                className="rounded-full border px-2 py-0.5 text-xs font-medium"
+                                style={{
+                                  borderColor: "var(--color-border)",
+                                  color: "var(--color-text-muted)",
+                                }}
+                              >
+                                {getBatchShortCode(summary.id)}
+                              </span>
+                            )}
                             <span
-                              className="rounded-full border px-2 py-0.5 text-xs font-medium"
-                              style={{
-                                borderColor: "var(--color-border)",
-                                color: "var(--color-text-muted)",
-                              }}
+                              className="app-chip app-chip-info"
                             >
                               {batchStatusLabel(summary.status)}
                             </span>
@@ -3080,36 +3145,52 @@ export function StatementImports() {
                         </span>
                       </button>
 
-                      <DisabledReasonTooltip
-                        reason={deleteDisabledReason}
-                        className="inline-flex w-full sm:w-auto"
-                      >
-                        <button
-                          type="button"
-                          title={deleteDisabledReason ?? "Excluir lote"}
-                          onClick={() => setBatchToDeleteId(summary.id)}
-                          disabled={
-                            deleteBlockedByAppliedMovements ||
-                            isDeletingBatch ||
-                            isUploading ||
-                            isApplyingReady ||
-                            isUndoingApplied
-                          }
-                          className="flex h-10 w-full items-center justify-center rounded-lg border px-3 transition disabled:cursor-not-allowed disabled:opacity-60 sm:w-10"
-                          style={{
-                            borderColor: "var(--color-border)",
-                            color: deleteBlockedByAppliedMovements
-                              ? "var(--color-text-muted)"
-                              : "#dc2626",
-                          }}
+                      <div className="flex w-full gap-2 sm:w-auto">
+                        <DisabledReasonTooltip
+                          reason={isRenamingBatch ? "Aguarde o renomeio terminar." : null}
+                          className="inline-flex flex-1 sm:flex-none"
                         >
-                          {isDeletingThisBatch ? (
-                            <RefreshCw size={16} className="animate-spin" />
-                          ) : (
-                            <Trash2 size={16} />
-                          )}
-                        </button>
-                      </DisabledReasonTooltip>
+                          <button
+                            type="button"
+                            title="Renomear lote"
+                            onClick={() => openBatchRename(summary)}
+                            disabled={isRenamingBatch}
+                            className="app-icon-control flex h-10 w-full items-center justify-center rounded-lg px-3 disabled:cursor-not-allowed disabled:opacity-60 sm:w-10"
+                          >
+                            <Pencil size={16} />
+                          </button>
+                        </DisabledReasonTooltip>
+                        <DisabledReasonTooltip
+                          reason={deleteDisabledReason}
+                          className="inline-flex flex-1 sm:flex-none"
+                        >
+                          <button
+                            type="button"
+                            title={deleteDisabledReason ?? "Excluir lote"}
+                            onClick={() => setBatchToDeleteId(summary.id)}
+                            disabled={
+                              deleteBlockedByAppliedMovements ||
+                              isDeletingBatch ||
+                              isUploading ||
+                              isApplyingReady ||
+                              isUndoingApplied
+                            }
+                            className="flex h-10 w-full items-center justify-center rounded-lg border px-3 transition disabled:cursor-not-allowed disabled:opacity-60 sm:w-10"
+                            style={{
+                              borderColor: "var(--color-border)",
+                              color: deleteBlockedByAppliedMovements
+                                ? "var(--color-text-muted)"
+                                : "#dc2626",
+                            }}
+                          >
+                            {isDeletingThisBatch ? (
+                              <RefreshCw size={16} className="animate-spin" />
+                            ) : (
+                              <Trash2 size={16} />
+                            )}
+                          </button>
+                        </DisabledReasonTooltip>
+                      </div>
                     </div>
 
                     {isExpanded && isLoadingBatch && (
@@ -3149,13 +3230,13 @@ export function StatementImports() {
                                 className="text-sm font-semibold"
                                 style={{ color: "var(--color-text)" }}
                               >
-                                Lote aberto: {formatBatchPeriod(currentBatch)}
+                                {getBatchDisplayName(currentBatch)}
                               </p>
                               <p
                                 className="mt-1 text-xs"
                                 style={{ color: "var(--color-text-muted)" }}
                               >
-                                Os arquivos e movimentos vinculados a este lote aparecem no painel abaixo.
+                                {getBatchShortCode(currentBatch.id)} - {formatBatchPeriod(currentBatch)}. Arquivos e movimentos vinculados aparecem no painel abaixo.
                               </p>
                             </div>
                           </div>
@@ -3168,7 +3249,7 @@ export function StatementImports() {
                                 backgroundColor: "var(--color-bg-card)",
                               }}
                             >
-                              {movementCompletionPercentage}% concluido
+                              {movementCompletionPercentage}% concluído
                             </span>
                             <span
                               className="rounded-full border px-2.5 py-1 font-medium"
@@ -3220,8 +3301,8 @@ export function StatementImports() {
               {[
                 {
                   label: "Lote",
-                  value: `#${currentBatch.id.slice(0, 8)}`,
-                  detail: `${batchStatusLabel(currentBatch.status)} - ${movementCompletionPercentage}% concluido`,
+                  value: getBatchDisplayName(currentBatch),
+                  detail: `${batchStatusLabel(currentBatch.status)} - ${movementCompletionPercentage}% concluído`,
                   icon: Files,
                 },
                 {
@@ -3302,19 +3383,19 @@ export function StatementImports() {
                   className="text-sm font-semibold"
                   style={{ color: "var(--color-text)" }}
                 >
-                  Aplicacao financeira
+                  Aplicação financeira
                 </p>
                 <p
                   className="mt-1 text-xs"
                   style={{ color: "var(--color-text-muted)" }}
                 >
                   {applyReadySummary.totalCount} movimento(s) pronto(s) para
-                  criar transacoes ou transferencias revisadas.
+                  criar transações ou transferências revisadas.
                   {pendingReconciliationCount > 0
-                    ? ` ${pendingReconciliationCount} movimento(s) ainda pedem conciliacao.`
+                    ? ` ${pendingReconciliationCount} movimento(s) ainda pedem conciliação.`
                     : ""}
                   {readyReconciliationBlockCount > 0
-                    ? " Ha prontos bloqueados por conciliacao pendente."
+                    ? " Há prontos bloqueados por conciliação pendente."
                     : ""}
                   {safeReadyCandidates.length > 0
                     ? ` ${safeReadyCandidates.length} movimento(s) seguro(s) podem ser preparados automaticamente.`
@@ -3329,11 +3410,11 @@ export function StatementImports() {
                 {applyReadySummary.totalCount > 0 && (
                   <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3 xl:grid-cols-5">
                     <ApplySummaryMetric
-                      label="Transacoes"
+                      label="Transações"
                       value={String(applyReadySummary.transactionCount)}
                     />
                     <ApplySummaryMetric
-                      label="Transferencias"
+                      label="Transferências"
                       value={String(applyReadySummary.transferCount)}
                     />
                     <ApplySummaryMetric
@@ -3351,32 +3432,32 @@ export function StatementImports() {
                   </div>
                 )}
                 {readyInvoicePaymentWarningCount > 0 && (
-                  <div className="mt-4 overflow-hidden rounded-xl border border-red-200 bg-red-50 shadow-sm">
+                  <div className="app-inline-alert app-inline-alert-danger mt-4 overflow-hidden shadow-sm">
                     <div className="grid grid-cols-[4px_1fr]">
                       <div className="bg-red-500" aria-hidden="true" />
                       <div className="p-3">
                         <div className="flex items-start gap-3">
-                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-red-100 text-red-700">
+                          <div className="app-soft-button-danger flex h-9 w-9 shrink-0 items-center justify-center rounded-lg">
                             <AlertTriangle size={18} />
                           </div>
                           <div className="min-w-0">
                             <div className="flex flex-wrap items-center gap-2">
-                              <p className="text-sm font-semibold text-red-900">
+                              <p className="text-sm font-semibold" style={{ color: "var(--color-text)" }}>
                                 Risco de duplicidade: pagamento de fatura
                               </p>
-                              <span className="rounded-full bg-red-600 px-2 py-0.5 text-[11px] font-semibold text-white">
+                              <span className="app-chip app-chip-danger px-2 py-0.5 text-[11px] font-semibold">
                                 {readyInvoicePaymentWarningCount} pronta(s)
                               </span>
                             </div>
-                            <p className="mt-1 text-xs leading-5 text-red-800">
+                            <p className="mt-1 text-xs leading-5" style={{ color: "var(--color-text-muted)" }}>
                               Ha movimento(s) de pagamento de fatura marcados
-                              como prontos. Se as compras ja foram importadas
-                              como transacoes individuais, aplicar tambem o
+                              como prontos. Se as compras já foram importadas
+                              como transações individuais, aplicar também o
                               total da fatura pode duplicar a despesa.
                             </p>
-                            <p className="mt-2 text-xs font-medium text-red-900">
+                            <p className="mt-2 text-xs font-medium" style={{ color: "var(--color-text)" }}>
                               Revise manualmente e ignore quando for apenas a
-                              quitacao de uma fatura ja detalhada.
+                              quitação de uma fatura já detalhada.
                             </p>
                           </div>
                         </div>
@@ -3432,13 +3513,13 @@ export function StatementImports() {
                           className="text-xs font-semibold"
                           style={{ color: "var(--color-text)" }}
                         >
-                          Pendencias de revisao
+                          Pendências de revisão
                         </p>
                         <div className="mt-2 grid grid-cols-1 gap-1.5 min-[920px]:grid-cols-2 min-[1440px]:grid-cols-3">
                           {reviewBlockSummary.map((item) => (
                             <span
                               key={item.reason}
-                              className="min-w-0 rounded-lg bg-yellow-100 px-2.5 py-1.5 text-xs font-medium text-yellow-800"
+                              className="app-inline-alert app-inline-alert-warning min-w-0 px-2.5 py-1.5 text-xs font-medium"
                               title={item.reason}
                             >
                               <span className="font-semibold">
@@ -3463,7 +3544,7 @@ export function StatementImports() {
                     title={ignoreDuplicatesDisabledReason ?? "Ignorar duplicados"}
                     onClick={() => void handleIgnoreDuplicateMovements()}
                     disabled={Boolean(ignoreDuplicatesDisabledReason)}
-                    className="flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-4 text-sm font-semibold text-amber-900 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:border-amber-100 disabled:bg-amber-50 disabled:text-amber-400 sm:w-auto"
+                    className="app-soft-button-warning flex h-10 w-full items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
                   >
                     {isIgnoringDuplicates ? (
                       <RefreshCw size={16} className="animate-spin" />
@@ -3771,9 +3852,88 @@ export function StatementImports() {
             onSubmit={handleQuickCategorySubmit}
           />
         )}
+        {batchRenameId &&
+          createPortal(
+            <div
+              className="fixed inset-0 z-[9999] flex items-end bg-black/45 p-3 backdrop-blur-sm sm:items-center sm:justify-center"
+              onMouseDown={closeBatchRename}
+            >
+              <form
+                onSubmit={handleRenameBatch}
+                onMouseDown={(event) => event.stopPropagation()}
+                className="glass-heavy w-full rounded-2xl p-5 shadow-2xl sm:max-w-md"
+                style={{
+                  backgroundColor: "var(--color-bg-modal)",
+                  border: "1px solid var(--color-border)",
+                }}
+              >
+                <div className="mb-4 flex items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <h2
+                      className="text-lg font-semibold"
+                      style={{ color: "var(--color-text)" }}
+                    >
+                      Renomear lote
+                    </h2>
+                    <p
+                      className="mt-1 text-sm"
+                      style={{ color: "var(--color-text-muted)" }}
+                    >
+                      {getBatchShortCode(batchRenameId)} continua disponível como referência.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    aria-label="Fechar"
+                    title="Fechar"
+                    onClick={closeBatchRename}
+                    disabled={isRenamingBatch}
+                    className="app-icon-control flex h-9 w-9 shrink-0 items-center justify-center rounded-lg"
+                  >
+                    <X size={17} />
+                  </button>
+                </div>
+
+                <label className="mb-1 block text-sm font-medium">
+                  Nome do lote
+                </label>
+                <input
+                  value={batchRenameDraft}
+                  onChange={(event) => setBatchRenameDraft(event.target.value)}
+                  className="app-control w-full"
+                  maxLength={120}
+                  placeholder="Ex.: Nubank maio 2026"
+                  autoFocus
+                />
+                <p className="mt-2 text-xs leading-5" style={{ color: "var(--color-text-muted)" }}>
+                  Deixe em branco para voltar ao rótulo automático pelo ID curto.
+                </p>
+
+                <div className="mt-5 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                  <button
+                    type="button"
+                    onClick={closeBatchRename}
+                    disabled={isRenamingBatch}
+                    className="app-icon-control inline-flex h-10 items-center justify-center rounded-lg px-4 text-sm font-medium"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isRenamingBatch}
+                    className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-400"
+                  >
+                    {isRenamingBatch && <RefreshCw size={16} className="animate-spin" />}
+                    Salvar nome
+                  </button>
+                </div>
+              </form>
+            </div>,
+            document.body,
+          )}
         <ConfirmModal
           isOpen={Boolean(batchToDeleteId)}
-          message="Excluir este lote de importacao? Arquivos e movimentos importados deste lote serao removidos. Lotes com movimentos aplicados ficam bloqueados para preservar a rastreabilidade financeira."
+          message="Excluir este lote de importação? Arquivos e movimentos importados deste lote serão removidos. Lotes com movimentos aplicados ficam bloqueados para preservar a rastreabilidade financeira."
           confirmLabel="Excluir lote"
           onConfirm={() => void handleDeleteBatch()}
           onCancel={() => {
@@ -3869,25 +4029,25 @@ function SelectedReviewActionsMenu({
   const isBusy = isApplying || isApplyingSuggestions || isUpdatingStatus;
   const hasSelection = selectedCount > 0;
   const statusDisabledReason = isBusy
-    ? "Aguarde a atualizacao atual terminar."
+    ? "Aguarde a atualização atual terminar."
     : !hasSelection
       ? "Selecione movimentos para atualizar status."
       : null;
   const categoryDisabledReason = isApplying
-    ? "Aguarde a aplicacao da categoria terminar."
+    ? "Aguarde a aplicação da categoria terminar."
     : isUpdatingStatus || isApplyingSuggestions
-      ? "Aguarde a atualizacao atual terminar."
+      ? "Aguarde a atualização atual terminar."
       : !hasSelection
         ? "Selecione movimentos para aplicar categoria."
         : !selectedCategoryLabel
           ? "Escolha uma categoria no painel de selecionados."
           : null;
   const suggestionDisabledReason = isApplyingSuggestions
-    ? "Aguarde a aplicacao das sugestoes terminar."
+    ? "Aguarde a aplicação das sugestões terminar."
     : isApplying || isUpdatingStatus
-      ? "Aguarde a atualizacao atual terminar."
+      ? "Aguarde a atualização atual terminar."
       : selectedSuggestionCount === 0
-        ? "Nenhuma sugestao segura nos selecionados."
+        ? "Nenhuma sugestão segura nos selecionados."
         : null;
 
   useEffect(() => {
@@ -4019,8 +4179,8 @@ function SelectedReviewActionsMenu({
           color: "var(--color-income)",
         })}
         {renderAction({
-          label: "Aplicar sugestoes",
-          detail: `${selectedSuggestionCount} sugestao(oes) segura(s)`,
+          label: "Aplicar sugestões",
+          detail: `${selectedSuggestionCount} sugestão(ões) segura(s)`,
           icon: ListChecks,
           disabledReason: suggestionDisabledReason,
           onClick: onApplySuggestions,
@@ -4032,7 +4192,7 @@ function SelectedReviewActionsMenu({
         />
         {renderAction({
           label: "Marcar como pronto",
-          detail: "Liberar selecionados validos para aplicacao.",
+          detail: "Liberar selecionados válidos para aplicação.",
           icon: CheckCircle2,
           disabledReason: statusDisabledReason,
           onClick: onReadySelected,
@@ -4040,14 +4200,14 @@ function SelectedReviewActionsMenu({
         })}
         {renderAction({
           label: "Ignorar selecionados",
-          detail: "Nao importar estes movimentos.",
+          detail: "Não importar estes movimentos.",
           icon: XCircle,
           disabledReason: statusDisabledReason,
           onClick: onIgnoreSelected,
           color: "#dc2626",
         })}
         {renderAction({
-          label: "Botar em revisar",
+          label: "Marcar revisão",
           detail: "Sinalizar para voltar depois.",
           icon: AlertTriangle,
           disabledReason: statusDisabledReason,
@@ -4056,14 +4216,14 @@ function SelectedReviewActionsMenu({
         })}
         {renderAction({
           label: "Voltar para novo",
-          detail: "Reabrir a revisao destes movimentos.",
+          detail: "Reabrir a revisão destes movimentos.",
           icon: RefreshCw,
           disabledReason: statusDisabledReason,
           onClick: onResetSelected,
           color: "var(--color-brand)",
         })}
         {renderAction({
-          label: "Limpar selecao",
+          label: "Limpar seleção",
           detail: "Remover todos do grupo atual.",
           icon: X,
           disabledReason: hasSelection ? null : "Nenhum movimento selecionado.",
@@ -4122,34 +4282,34 @@ function BulkReviewCategoryPanel({
   const createDisabledReason = !hasSelection
     ? "Selecione movimentos para criar uma categoria contextual."
     : hasMixedDirections
-      ? "Para criar categoria rapida, selecione apenas entradas ou apenas saidas."
+      ? "Para criar categoria rápida, selecione apenas entradas ou apenas saídas."
       : null;
   const applyDisabledReason = isApplying
-    ? "Aguarde a aplicacao da categoria terminar."
+    ? "Aguarde a aplicação da categoria terminar."
     : isUpdatingStatus
-      ? "Aguarde a atualizacao dos selecionados terminar."
+      ? "Aguarde a atualização dos selecionados terminar."
       : isApplyingSuggestions
-        ? "Aguarde a aplicacao das sugestoes terminar."
+        ? "Aguarde a aplicação das sugestões terminar."
     : !hasSelection
       ? "Selecione movimentos para aplicar categoria."
       : !selectedCategoryId
-        ? "Selecione uma categoria compativel."
+        ? "Selecione uma categoria compatível."
         : null;
   const statusDisabledReason = isUpdatingStatus
-    ? "Aguarde a atualizacao dos selecionados terminar."
+    ? "Aguarde a atualização dos selecionados terminar."
     : isApplying
-      ? "Aguarde a aplicacao da categoria terminar."
+      ? "Aguarde a aplicação da categoria terminar."
       : isApplyingSuggestions
-        ? "Aguarde a aplicacao das sugestoes terminar."
+        ? "Aguarde a aplicação das sugestões terminar."
       : !hasSelection
         ? "Selecione movimentos para atualizar status."
         : null;
   const suggestionsDisabledReason = isApplyingSuggestions
-    ? "Aguarde a aplicacao das sugestoes terminar."
+    ? "Aguarde a aplicação das sugestões terminar."
     : isApplying || isUpdatingStatus
-      ? "Aguarde a atualizacao atual terminar."
+      ? "Aguarde a atualização atual terminar."
       : suggestedCategoryCount === 0
-        ? "Nenhuma sugestao segura pendente neste lote."
+        ? "Nenhuma sugestão segura pendente neste lote."
         : null;
 
   return (
@@ -4167,7 +4327,7 @@ function BulkReviewCategoryPanel({
               className="text-sm font-semibold"
               style={{ color: "var(--color-text)" }}
             >
-              So com os selecionados
+              Só com selecionados
             </p>
             <span
               className="rounded-full border px-2 py-0.5 text-xs font-medium"
@@ -4176,7 +4336,7 @@ function BulkReviewCategoryPanel({
                 color: "var(--color-text-muted)",
               }}
             >
-              {selectedCount} selecionado(s) de {totalEligibleCount} editavel(is)
+              {selectedCount} selecionado(s) de {totalEligibleCount} editáveis
             </span>
           </div>
           <p
@@ -4184,7 +4344,7 @@ function BulkReviewCategoryPanel({
             style={{ color: "var(--color-text-muted)" }}
           >
             Use as checkboxes dos movimentos para aplicar categoria ou mudar
-            status em massa sem sair da revisao.
+            status em massa sem sair da revisão.
           </p>
         </div>
 
@@ -4204,7 +4364,7 @@ function BulkReviewCategoryPanel({
               color: "var(--color-text)",
             }}
           >
-            Selecionar editaveis
+            Selecionar editáveis
           </button>
           <button
             type="button"
@@ -4221,22 +4381,22 @@ function BulkReviewCategoryPanel({
               color: "var(--color-text)",
             }}
           >
-            Limpar selecao
+            Limpar seleção
           </button>
           <DisabledReasonTooltip reason={suggestionsDisabledReason}>
             <button
               type="button"
-              title={suggestionsDisabledReason ?? "Aplicar sugestoes de categoria"}
+              title={suggestionsDisabledReason ?? "Aplicar sugestões de categoria"}
               onClick={onApplySuggestions}
               disabled={Boolean(suggestionsDisabledReason)}
-              className="flex h-10 items-center justify-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 text-xs font-semibold text-blue-700 transition hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
+              className="app-soft-button-info flex h-10 items-center justify-center gap-2 rounded-lg px-3 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-60"
             >
               {isApplyingSuggestions ? (
                 <RefreshCw size={15} className="animate-spin" />
               ) : (
                 <ListChecks size={15} />
               )}
-              Aplicar sugestoes ({suggestedCategoryCount})
+              Aplicar sugestões ({suggestedCategoryCount})
             </button>
           </DisabledReasonTooltip>
           <select
@@ -4252,7 +4412,7 @@ function BulkReviewCategoryPanel({
           >
             <option value="">
               {hasMixedDirections
-                ? "Categorias mistas compativeis"
+                ? "Categorias mistas compatíveis"
                 : "Categoria para selecionados"}
             </option>
             {categoryOptions.map((category) => (
@@ -4273,7 +4433,7 @@ function BulkReviewCategoryPanel({
                 isApplyingSuggestions ||
                 isUpdatingStatus
               }
-              className="flex h-10 w-full items-center justify-center rounded-lg border border-blue-200 bg-blue-50 text-blue-700 transition hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60 sm:w-10"
+              className="app-soft-button-info flex h-10 w-full items-center justify-center rounded-lg transition disabled:cursor-not-allowed disabled:opacity-60 sm:w-10"
             >
               <Plus size={17} />
             </button>
@@ -4284,7 +4444,7 @@ function BulkReviewCategoryPanel({
               title={statusDisabledReason ?? "Marcar selecionados como pronto"}
               onClick={onReadySelected}
               disabled={Boolean(statusDisabledReason)}
-              className="flex h-10 items-center justify-center gap-2 rounded-lg border border-green-200 bg-green-50 px-4 text-sm font-semibold text-green-700 transition hover:bg-green-100 disabled:cursor-not-allowed disabled:border-green-100 disabled:bg-green-50 disabled:text-green-300"
+              className="app-soft-button-success flex h-10 items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60"
             >
               {isUpdatingStatus ? (
                 <RefreshCw size={16} className="animate-spin" />
@@ -4300,7 +4460,7 @@ function BulkReviewCategoryPanel({
               title={statusDisabledReason ?? "Ignorar selecionados"}
               onClick={onIgnoreSelected}
               disabled={Boolean(statusDisabledReason)}
-              className="flex h-10 items-center justify-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-4 text-sm font-semibold text-amber-900 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:border-amber-100 disabled:bg-amber-50 disabled:text-amber-400"
+              className="app-soft-button-warning flex h-10 items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60"
             >
               {isUpdatingStatus ? (
                 <RefreshCw size={16} className="animate-spin" />
@@ -4316,14 +4476,14 @@ function BulkReviewCategoryPanel({
               title={statusDisabledReason ?? "Marcar selecionados com aviso"}
               onClick={onReviewSelected}
               disabled={Boolean(statusDisabledReason)}
-              className="flex h-10 items-center justify-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-4 text-sm font-semibold text-amber-900 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:border-amber-100 disabled:bg-amber-50 disabled:text-amber-400"
+              className="app-soft-button-warning flex h-10 items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60"
             >
               {isUpdatingStatus ? (
                 <RefreshCw size={16} className="animate-spin" />
               ) : (
                 <AlertTriangle size={16} />
               )}
-              Botar em revisar
+              Marcar revisão
             </button>
           </DisabledReasonTooltip>
           <DisabledReasonTooltip reason={statusDisabledReason}>
@@ -4454,7 +4614,7 @@ function QuickCategoryDialog({
               className="mb-1 block text-sm font-medium"
               style={{ color: "var(--color-text)" }}
             >
-              Icone
+              Ícone
             </label>
             <StoredIconPicker value={icon} onChange={onIconChange} />
           </div>
@@ -4559,7 +4719,7 @@ function MovementEditDialog({
               className="mt-1 text-sm"
               style={{ color: "var(--color-text-muted)" }}
             >
-              Ao salvar, o movimento volta para revisao antes de ser aprovado.
+              Ao salvar, o movimento volta para revisão antes de ser aprovado.
             </p>
           </div>
           <button
@@ -4654,8 +4814,8 @@ function MovementEditDialog({
               }
               className="app-control"
             >
-              <option value="TRANSACTION">Transacao</option>
-              <option value="TRANSFER">Transferencia</option>
+              <option value="TRANSACTION">Transação</option>
+              <option value="TRANSFER">Transferência</option>
             </select>
           </div>
 
@@ -4711,7 +4871,7 @@ function MovementEditDialog({
                 aria-label="Criar categoria"
                 onClick={() => onCreateCategory(form.direction)}
                 disabled={isSaving}
-                className="flex h-11 w-11 items-center justify-center rounded-lg border border-blue-200 bg-blue-50 text-blue-700 transition hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
+                className="app-soft-button-info flex h-11 w-11 items-center justify-center rounded-lg transition disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <Plus size={17} />
               </button>
@@ -4728,21 +4888,21 @@ function MovementEditDialog({
                   className="text-xs font-semibold"
                   style={{ color: "var(--color-text)" }}
                 >
-                  Mesma descricao
+                  Mesma descrição
                 </p>
                 <p
                   className="mt-0.5 text-xs"
                   style={{ color: "var(--color-text-muted)" }}
                 >
-                  {similarMovementCount} movimento(s) editavel(is) com a mesma
-                  descricao e direcao.
+                  {similarMovementCount} movimento(s) editáveis com a mesma
+                  descrição e direção.
                 </p>
               </div>
               <button
                 type="button"
                 onClick={onSelectSimilarMovements}
                 disabled={isSaving || similarMovementCount === 0}
-                className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 text-xs font-semibold text-blue-700 transition hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
+                className="app-soft-button-info inline-flex h-9 items-center justify-center gap-2 rounded-lg px-3 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <ListChecks size={15} />
                 Selecionar similares
@@ -4795,7 +4955,7 @@ function MovementEditDialog({
             className="mb-1 block text-sm font-medium"
             style={{ color: "var(--color-text)" }}
           >
-            Descricao revisada
+            Descrição revisada
           </label>
           <textarea
             value={form.rawDescription}
@@ -4837,7 +4997,7 @@ function MovementEditDialog({
             className="flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-400"
           >
             {isSaving ? <RefreshCw size={16} className="animate-spin" /> : null}
-            Salvar revisao
+            Salvar revisão
           </button>
         </div>
       </form>
@@ -4881,7 +5041,7 @@ function MovementReviewHints({
       {hints.reconciliationMatches.slice(0, 1).map((match) => (
         <span
           key={`${match.sourceType}-${match.sourceId}`}
-          className="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800"
+          className="app-chip app-chip-warning px-2 py-1 text-xs font-medium"
           title={`${reviewSourceLabel(match.sourceType)}: ${match.label}`}
         >
           {reviewSourceLabel(match.sourceType)}
@@ -4903,8 +5063,8 @@ function MovementReviewHints({
             type="button"
             onClick={() => onApplyCategorySuggestion?.(movement)}
             disabled={isApplyingCategorySuggestion}
-            className="rounded-full border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 transition hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
-            title={`${categorySuggestion.basedOnCount} ocorrencia(s) por descricao. Aplicar categoria sugerida.`}
+            className="app-chip app-chip-info px-2 py-1 text-xs font-medium transition hover:opacity-85 disabled:cursor-not-allowed disabled:opacity-60"
+            title={`${categorySuggestion.basedOnCount} ocorrência(s) por descrição. Aplicar categoria sugerida.`}
           >
             {isApplyingCategorySuggestion ? (
               <RefreshCw size={12} className="mr-1 inline animate-spin" />
@@ -4914,8 +5074,8 @@ function MovementReviewHints({
           </button>
         ) : (
           <span
-            className="rounded-full border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700"
-            title={`${categorySuggestion.basedOnCount} ocorrencia(s) por descricao`}
+            className="app-chip app-chip-info px-2 py-1 text-xs font-medium"
+            title={`${categorySuggestion.basedOnCount} ocorrência(s) por descrição`}
           >
             {formatStoredIconPrefix(categorySuggestion.categoryIcon)}
             {categorySuggestion.categoryName}
@@ -5102,11 +5262,11 @@ const StatementImportFilePanel = memo(function StatementImportFilePanel({
         <InfoPill label="Movimentos" value={`${file.movements.length} total`} />
         <InfoPill
           label="No filtro"
-          value={`${visibleMovements.length} visivel(is)`}
+          value={`${visibleMovements.length} visível(is)`}
         />
         <InfoPill
           label="Progresso"
-          value={`${fileCompletionPercentage}% concluido`}
+          value={`${fileCompletionPercentage}% concluído`}
         />
         <InfoPill
           label="Pendentes"
@@ -5149,7 +5309,7 @@ const StatementImportFilePanel = memo(function StatementImportFilePanel({
                 className="block text-sm font-semibold"
                 style={{ color: "var(--color-text)" }}
               >
-                Selecionar transacoes editaveis deste filtro
+                Selecionar transações editáveis deste filtro
               </span>
               <span
                 className="block text-xs"
@@ -5168,7 +5328,7 @@ const StatementImportFilePanel = memo(function StatementImportFilePanel({
           {warnings.map((warning) => (
             <p
               key={warning}
-              className="rounded-lg bg-yellow-50 px-3 py-2 text-sm text-yellow-700"
+              className="app-inline-alert app-inline-alert-warning px-3 py-2 text-sm"
             >
               {warning}
             </p>
@@ -5255,7 +5415,7 @@ const StatementImportFilePanel = memo(function StatementImportFilePanel({
                     className="px-4 py-3 text-left text-sm font-semibold"
                     style={{ color: "var(--color-text-muted)" }}
                   >
-                    Revisao
+                    Revisão
                   </th>
                   <th
                     className="px-4 py-3 text-left text-sm font-semibold"
@@ -5267,7 +5427,7 @@ const StatementImportFilePanel = memo(function StatementImportFilePanel({
                     className="px-4 py-3 text-left text-sm font-semibold"
                     style={{ color: "var(--color-text-muted)" }}
                   >
-                    Descricao
+                    Descrição
                   </th>
                   <th
                     className="px-4 py-3 text-left text-sm font-semibold"
@@ -5340,7 +5500,7 @@ const StatementImportFilePanel = memo(function StatementImportFilePanel({
                           title={
                             canSelectMovement
                               ? "Selecionar para categorizar"
-                              : "Somente transacoes editaveis podem ser categorizadas em massa"
+                              : "Somente transações editáveis podem ser categorizadas em massa"
                           }
                           className="app-checkbox"
                         />
@@ -5559,7 +5719,7 @@ function PaginationControls({
         </span>
         <button
           type="button"
-          title="Proxima pagina"
+          title="Próxima página"
           onClick={() => onPageChange(Math.min(totalPages, page + 1))}
           disabled={page >= totalPages}
           className="flex h-9 w-9 items-center justify-center rounded-lg border transition disabled:cursor-not-allowed disabled:opacity-50"
@@ -5631,15 +5791,15 @@ function UndoAppliedConfirmationContent({
           value={`${selectedSummary.totalCount} de ${allSummary.totalCount}`}
         />
         <ApplySummaryMetric
-          label="Transacoes"
+          label="Transações"
           value={`${selectedSummary.transactionCount}`}
         />
         <ApplySummaryMetric
-          label="Transferencias"
+          label="Transferências"
           value={`${selectedSummary.transferCount}`}
         />
         <ApplySummaryMetric
-          label="Entradas / saidas"
+          label="Entradas / saídas"
           value={`${centsToCurrency(selectedSummary.inCents)} / ${centsToCurrency(selectedSummary.outCents)}`}
         />
         <div className="min-w-0">
@@ -5647,7 +5807,7 @@ function UndoAppliedConfirmationContent({
             className="text-[11px]"
             style={{ color: "var(--color-text-muted)" }}
           >
-            Saldo liquido
+            Saldo líquido
           </p>
           <p className="truncate text-sm font-semibold text-rose-700">
             {centsToCurrency(selectedSummary.netCents)}
@@ -5712,7 +5872,7 @@ function UndoAppliedConfirmationContent({
                   color: "var(--color-text)",
                 }}
               >
-                Limpar selecao
+                Limpar seleção
               </button>
             </div>
           </div>
@@ -5919,8 +6079,8 @@ function UndoAppliedConfirmationContent({
           </div>
 
           {selectedSummary.totalCount === 0 && (
-            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800">
-              Selecione alguma coisa para liberar o botao de desfazer.
+            <div className="app-inline-alert app-inline-alert-warning px-4 py-3 text-sm font-medium">
+              Selecione alguma coisa para liberar o botão de desfazer.
             </div>
           )}
         </div>
@@ -5960,15 +6120,15 @@ function ApplyReadyConfirmationContent({
           value={`${summary.totalCount}`}
         />
         <ApplySummaryMetric
-          label="Transacoes"
+          label="Transações"
           value={`${summary.transactionCount}`}
         />
         <ApplySummaryMetric
-          label="Transferencias"
+          label="Transferências"
           value={`${summary.transferCount}`}
         />
         <ApplySummaryMetric
-          label="Entradas / saidas"
+          label="Entradas / saídas"
           value={`${centsToCurrency(summary.inCents)} / ${centsToCurrency(summary.outCents)}`}
         />
         <div className="min-w-0">
@@ -5976,7 +6136,7 @@ function ApplyReadyConfirmationContent({
             className="text-[11px]"
             style={{ color: "var(--color-text-muted)" }}
           >
-            Saldo liquido
+            Saldo líquido
           </p>
           <p className={`truncate text-sm font-semibold ${netTone}`}>
             {centsToCurrency(summary.netCents)}
@@ -5984,43 +6144,43 @@ function ApplyReadyConfirmationContent({
         </div>
       </div>
 
-      <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+      <div className="app-inline-alert app-inline-alert-warning px-4 py-3">
         <div className="flex gap-3">
-          <AlertTriangle className="mt-0.5 shrink-0 text-amber-600" size={18} />
+          <AlertTriangle className="mt-0.5 shrink-0" size={18} />
           <div className="min-w-0">
-            <p className="text-sm font-semibold text-amber-800">
-              Esta acao cria registros financeiros reais.
+            <p className="text-sm font-semibold" style={{ color: "var(--color-text)" }}>
+              Esta ação cria registros financeiros reais.
             </p>
-            <p className="mt-1 text-sm leading-5 text-amber-700">
-              O lote permanece como origem auditavel. A exclusao direta de
-              entidades criadas por importacao fica bloqueada; use Desfazer
-              aplicados no proprio lote quando precisar reverter.
+            <p className="mt-1 text-sm leading-5" style={{ color: "var(--color-text-muted)" }}>
+              O lote permanece como origem auditável. A exclusão direta de
+              entidades criadas por importação fica bloqueada; use Desfazer
+              aplicados no próprio lote quando precisar reverter.
             </p>
           </div>
         </div>
       </div>
 
       {invoiceWarningCount > 0 && (
-        <div className="overflow-hidden rounded-xl border border-red-200 bg-red-50 shadow-sm">
+        <div className="app-inline-alert app-inline-alert-danger overflow-hidden shadow-sm">
           <div className="grid grid-cols-[4px_1fr]">
             <div className="bg-red-500" aria-hidden="true" />
             <div className="p-4">
               <div className="flex gap-3">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-red-100 text-red-700">
+                <div className="app-soft-button-danger flex h-9 w-9 shrink-0 items-center justify-center rounded-lg">
                   <AlertTriangle size={18} />
                 </div>
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <p className="text-sm font-semibold text-red-900">
+                    <p className="text-sm font-semibold" style={{ color: "var(--color-text)" }}>
                       Confirme pagamentos de fatura antes de aplicar
                     </p>
-                    <span className="rounded-full bg-red-600 px-2 py-0.5 text-[11px] font-semibold text-white">
+                    <span className="app-chip app-chip-danger px-2 py-0.5 text-[11px] font-semibold">
                       {invoiceWarningCount} no lote
                     </span>
                   </div>
-                  <p className="mt-1 text-sm leading-5 text-red-800">
+                  <p className="mt-1 text-sm leading-5" style={{ color: "var(--color-text-muted)" }}>
                     Esses itens podem duplicar despesas se as compras da fatura
-                    ja estiverem registradas individualmente.
+                    já estiverem registradas individualmente.
                   </p>
                 </div>
               </div>
@@ -6100,7 +6260,7 @@ function ApplyReadyConfirmationGrid({
             Confira conta, destino, arquivo de origem e valor.
           </p>
         </div>
-        <span className="inline-flex w-fit items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
+        <span className="app-chip app-chip-success inline-flex w-fit items-center gap-1 px-2.5 py-1 text-xs font-medium">
           <CheckCircle2 size={13} />
           {movements.length} pronto(s)
         </span>
@@ -6131,11 +6291,11 @@ function ApplyReadyConfirmationGrid({
                   >
                     {formatDate(movement.date)} -{" "}
                     {movement.reviewTarget === "TRANSFER"
-                      ? "Transferencia"
-                      : "Transacao"}
+                      ? "Transferência"
+                      : "Transação"}
                   </p>
                   {movement.hasInvoicePaymentWarning && (
-                    <span className="mt-2 inline-flex rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-red-700">
+                    <span className="app-chip app-chip-danger mt-2 inline-flex px-2 py-0.5 text-[11px] font-semibold">
                       Risco de duplicidade
                     </span>
                   )}
@@ -6214,13 +6374,13 @@ function ApplyReadyConfirmationGrid({
               </span>
               <span className="px-4 py-3">
                 {movement.reviewTarget === "TRANSFER"
-                  ? "Transferencia"
-                  : "Transacao"}
+                  ? "Transferência"
+                  : "Transação"}
               </span>
               <span className="truncate px-4 py-3" title={movement.description}>
                 {movement.description}
                 {movement.hasInvoicePaymentWarning && (
-                  <span className="ml-2 rounded-full border border-red-200 bg-red-50 px-1.5 py-0.5 text-[10px] font-semibold text-red-700">
+                  <span className="app-chip app-chip-danger ml-2 px-1.5 py-0.5 text-[10px] font-semibold">
                     Duplicidade
                   </span>
                 )}
@@ -6390,7 +6550,7 @@ const MovementStatusActions = memo(function MovementStatusActions({
         <Link
           to={appliedLink.href}
           title={appliedTitle}
-          className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-green-200 bg-green-50 px-3 text-xs font-medium text-green-700 transition hover:bg-green-100"
+          className="app-soft-button-success inline-flex h-9 items-center gap-1.5 rounded-lg px-3 text-xs font-medium transition"
         >
           <FileSearch size={15} />
           {appliedLink.label}
@@ -6406,19 +6566,19 @@ const MovementStatusActions = memo(function MovementStatusActions({
   }
 
   const editDisabledReason = isUpdating
-    ? "Aguarde a atualizacao do movimento terminar."
+    ? "Aguarde a atualização do movimento terminar."
     : null;
 
   const movementStatusButtonClass =
     movement.status === "READY"
-      ? "border-green-200 bg-green-50 text-green-700 hover:bg-green-100"
+      ? "app-soft-button-success"
       : movement.status === "IGNORED"
-        ? "border-red-200 bg-red-50 text-red-700 hover:bg-red-100"
+        ? "app-soft-button-danger"
         : movement.status === "NEEDS_REVIEW"
-          ? "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
+          ? "app-soft-button-warning"
           : movement.status === "DUPLICATE"
-            ? "border-yellow-200 bg-yellow-50 text-yellow-700 hover:bg-yellow-100"
-            : "border-gray-200 bg-gray-50 text-gray-700 hover:bg-gray-100";
+            ? "app-soft-button-warning"
+            : "app-soft-button-muted";
 
   const statusItems: MovementMenuItem[] = MOVEMENT_REVIEW_ACTIONS.map(
     (action) => {
@@ -6426,9 +6586,9 @@ const MovementStatusActions = memo(function MovementStatusActions({
       const isReadyBlocked =
         action.status === "READY" && Boolean(readinessIssue);
       const disabledReason = isUpdating
-        ? "Aguarde a atualizacao do movimento terminar."
+        ? "Aguarde a atualização do movimento terminar."
         : isActive
-          ? `Movimento ja esta como ${movementStatusLabel(action.status).toLowerCase()}.`
+          ? `Movimento já está como ${movementStatusLabel(action.status).toLowerCase()}.`
           : isReadyBlocked
             ? readinessIssue
             : null;
@@ -6438,9 +6598,9 @@ const MovementStatusActions = memo(function MovementStatusActions({
         label: action.label,
         description:
           action.status === "READY"
-            ? "Liberar para aplicacao"
+            ? "Liberar para aplicação"
             : action.status === "IGNORED"
-              ? "Nao importar este movimento"
+              ? "Não importar este movimento"
               : action.status === "NEEDS_REVIEW"
                 ? "Sinalizar para voltar depois"
                 : "Reabrir como movimento novo",
@@ -6468,13 +6628,13 @@ const MovementStatusActions = memo(function MovementStatusActions({
         {
           key: "reconciliation-unique",
           label: "Confirmar novo",
-          description: "Nao duplicar com o ledger",
-          title: "Confirmar que nao duplica o ledger",
+          description: "Não duplicar com o ledger",
+          title: "Confirmar que não duplica o ledger",
           icon: CheckCircle2,
           disabledReason: isUpdating
-            ? "Aguarde a atualizacao do movimento terminar."
+            ? "Aguarde a atualização do movimento terminar."
             : movement.reconciliationStatus === "CONFIRMED_UNIQUE"
-              ? "Movimento ja foi confirmado como novo."
+              ? "Movimento já foi confirmado como novo."
               : null,
           isCurrent: movement.reconciliationStatus === "CONFIRMED_UNIQUE",
           onSelect: () =>
@@ -6488,9 +6648,9 @@ const MovementStatusActions = memo(function MovementStatusActions({
           title: "Confirmar duplicidade e ignorar",
           icon: XCircle,
           disabledReason: isUpdating
-            ? "Aguarde a atualizacao do movimento terminar."
+            ? "Aguarde a atualização do movimento terminar."
             : movement.reconciliationStatus === "CONFIRMED_DUPLICATE"
-              ? "Movimento ja foi confirmado como duplicidade."
+              ? "Movimento já foi confirmado como duplicidade."
               : null,
           isCurrent: movement.reconciliationStatus === "CONFIRMED_DUPLICATE",
           onSelect: () =>
@@ -6504,20 +6664,20 @@ const MovementStatusActions = memo(function MovementStatusActions({
     const Icon = item.icon;
     const toneClass =
       item.tone === "success"
-        ? "text-green-800 hover:bg-green-50"
+        ? "text-[var(--color-income)] hover:opacity-85"
         : item.tone === "danger"
-          ? "text-red-800 hover:bg-red-50"
+          ? "text-[var(--color-expense)] hover:opacity-85"
           : item.tone === "warning"
-            ? "text-amber-800 hover:bg-amber-50"
-            : "text-gray-700 hover:bg-gray-50";
+            ? "text-amber-600 hover:opacity-85"
+            : "hover:opacity-85";
     const iconClass =
       item.tone === "success"
-        ? "bg-green-100 text-green-700"
+        ? "app-soft-button-success"
         : item.tone === "danger"
-          ? "bg-red-100 text-red-700"
+          ? "app-soft-button-danger"
           : item.tone === "warning"
-            ? "bg-amber-100 text-amber-700"
-            : "bg-gray-100 text-gray-700";
+            ? "app-soft-button-warning"
+            : "app-soft-button-muted";
     const disabledClass = item.disabledReason
       ? "opacity-60"
       : "hover:shadow-sm";
@@ -6547,7 +6707,7 @@ const MovementStatusActions = memo(function MovementStatusActions({
           <span className="flex items-center gap-2">
             <span className="text-sm font-semibold">{item.label}</span>
             {item.isCurrent && (
-              <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-blue-700">
+              <span className="app-chip app-chip-info px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
                 Atual
               </span>
             )}
@@ -6619,7 +6779,7 @@ const MovementStatusActions = memo(function MovementStatusActions({
             className="px-2 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide"
             style={{ color: "var(--color-text-muted)" }}
           >
-            Conciliacao
+            Conciliação
           </p>
           {reconciliationItems.map(renderMenuItem)}
         </div>
@@ -6819,7 +6979,7 @@ const MovementCard = memo(function MovementCard({
             title={
               canSelect
                 ? "Selecionar para categorizar"
-                : "Somente transacoes editaveis podem ser categorizadas em massa"
+                : "Somente transações editáveis podem ser categorizadas em massa"
             }
             className="app-checkbox mt-1"
           />
@@ -6864,7 +7024,7 @@ const MovementCard = memo(function MovementCard({
         className="mt-3 break-words text-xs leading-5"
         style={{ color: "var(--color-text-muted)" }}
       >
-        {movement.rawDescription || "Sem descricao"}
+        {movement.rawDescription || "Sem descrição"}
       </p>
       <div className="mt-3">
         <MovementReviewHints
@@ -6874,7 +7034,7 @@ const MovementCard = memo(function MovementCard({
         />
       </div>
       {readinessIssue && (
-        <p className="mt-3 rounded-lg bg-yellow-50 px-3 py-2 text-xs font-medium text-yellow-700">
+        <p className="app-inline-alert app-inline-alert-warning mt-3 px-3 py-2 text-xs font-medium">
           {readinessIssue}
         </p>
       )}

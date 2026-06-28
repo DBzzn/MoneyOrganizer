@@ -95,7 +95,7 @@ export const STORED_ICON_GROUPS: StoredIconGroup[] = [
     {
         label: 'Dia a dia',
         options: [
-            { value: 'lucide:utensils', label: 'Alimentacao', icon: Utensils },
+            { value: 'lucide:utensils', label: 'Alimentação', icon: Utensils },
             { value: 'lucide:shopping-cart', label: 'Mercado', icon: ShoppingCart },
             { value: 'lucide:shopping-bag', label: 'Compras', icon: ShoppingBag },
             { value: 'lucide:car', label: 'Carro', icon: Car },
@@ -121,7 +121,7 @@ export const STORED_ICON_GROUPS: StoredIconGroup[] = [
         options: [
             { value: 'lucide:heart-pulse', label: 'Saúde', icon: HeartPulse },
             { value: 'lucide:hospital', label: 'Hospital', icon: Hospital },
-            { value: 'lucide:pill', label: 'Medicacao', icon: Pill },
+            { value: 'lucide:pill', label: 'Medicação', icon: Pill },
             { value: 'lucide:syringe', label: 'Vacina', icon: Syringe },
             { value: 'lucide:stethoscope', label: 'Consulta', icon: Stethoscope },
             { value: 'lucide:dumbbell', label: 'Exercicio', icon: Dumbbell },
@@ -139,7 +139,7 @@ export const STORED_ICON_GROUPS: StoredIconGroup[] = [
             { value: 'lucide:briefcase-business', label: 'Trabalho', icon: BriefcaseBusiness },
             { value: 'lucide:laptop', label: 'Tecnologia', icon: Laptop },
             { value: 'lucide:smartphone', label: 'Celular', icon: Smartphone },
-            { value: 'lucide:graduation-cap', label: 'Educacao', icon: GraduationCap },
+            { value: 'lucide:graduation-cap', label: 'Educação', icon: GraduationCap },
             { value: 'lucide:shirt', label: 'Roupas', icon: Shirt },
             { value: 'lucide:scissors', label: 'Servicos', icon: Scissors },
             { value: 'lucide:receipt', label: 'Recibo', icon: Receipt },
@@ -173,7 +173,7 @@ export function getStoredIconLabel(value?: string | null): string {
     const option = getStoredIconOption(value)
 
     if (option) return option.label
-    if (value) return 'Icone indisponivel'
+    if (value) return 'Ícone indisponível'
 
-    return 'Sem icone'
+    return 'Sem ícone'
 }

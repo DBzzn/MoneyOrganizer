@@ -14,11 +14,14 @@ createRoot(document.getElementById('root')!).render(
         <Toaster
           position='top-center'
           gutter={10}
+          containerClassName='app-toast-viewport'
           containerStyle={{
             position: 'fixed',
             top: 'max(1rem, env(safe-area-inset-top))',
             left: 0,
             right: 0,
+            height: 0,
+            overflow: 'visible',
             zIndex: 9999,
             pointerEvents: 'none',
           }}

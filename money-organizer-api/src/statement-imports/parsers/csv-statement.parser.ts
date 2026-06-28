@@ -208,7 +208,7 @@ export class CsvStatementParser implements StatementParser {
         sourceType: 'CSV',
         movements: [],
         warnings: [
-          'O CSV enviado nao possui linhas suficientes para importacao.',
+          'O CSV enviado não possui linhas suficientes para importação.',
         ],
       };
     }

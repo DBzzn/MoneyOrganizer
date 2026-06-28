@@ -43,7 +43,7 @@ export class UpdateFinancialAccountDto {
   institutionName?: string;
 
   @ApiProperty({
-    description: 'Icone visual da conta em uma chave lucide:* selecionada no app',
+    description: 'Ícone visual da conta em uma chave lucide:* selecionada no app',
     example: 'lucide:landmark',
     required: false,
   })

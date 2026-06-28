@@ -451,7 +451,7 @@ export class FinancialAccountsService {
     });
 
     if (!account) {
-      throw new NotFoundException('Conta financeira nÃ£o encontrada!');
+      throw new NotFoundException('Conta financeira não encontrada!');
     }
 
     await this.confirmOverduePendingMovements(userId);

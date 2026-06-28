@@ -9,6 +9,7 @@ import { ChartTooltip } from '../components/ChartTooltip'
 import { AccountFilter } from '../components/AccountFilter'
 import { formatStoredIconPrefix } from '../components/storedIconRegistry'
 import { StoredIcon } from '../components/StoredIcon'
+import { useAuth } from '../contexts/useAuth'
 import type { FinancialAccount, MonthlyBalance, EvolutionEntry, ProjectionEntry, CategoryTotal, TransactionType } from '../types'
 import {
     ResponsiveContainer,
@@ -34,6 +35,7 @@ import {
     PiggyBank,
     Scale,
     Table,
+    Target,
     TrendingDown,
     TrendingUp,
     Wallet,
@@ -229,17 +231,25 @@ function formatPercentage(value: number | null): string {
 
 function getSavingsRateLabel(savingsRate: number): string {
     if (savingsRate >= 20) return 'Boa folga'
-    if (savingsRate >= 10) return 'Saudavel'
+    if (savingsRate >= 10) return 'Saudável'
     if (savingsRate >= 0) return 'Apertado'
     return 'Negativo'
 }
 
-function getCashCoverageLabel(months: number | null): string {
+function getCashCoverageLabel(months: number | null, targetMonths: number): string {
     if (months === null) return 'Sem despesa média'
-    if (months >= 6) return 'Confortavel'
-    if (months >= 3) return 'Atenção moderada'
+    if (months >= targetMonths) return 'Meta atingida'
+    if (months >= targetMonths / 2) return 'Atenção moderada'
     if (months >= 1) return 'Reserva curta'
     return 'Muito curto'
+}
+
+function formatMonthsToTarget(months: number | null): string {
+    if (months === null) return 'Sem sobra média'
+    if (months === 0) return 'Meta atingida'
+    if (months < 1) return 'Menos de 1 mês'
+
+    return `${months.toFixed(1)} meses`
 }
 
 function clampScore(score: number): number {
@@ -261,7 +271,7 @@ function getFinancialHealth(score: number): {
 
     if (score >= 65) {
         return {
-            label: 'Saudavel',
+            label: 'Saudável',
             description: 'Base positiva, mas ainda vale monitorar concentração e projeção.',
             tone: 'blue',
         }
@@ -580,6 +590,7 @@ function buildProjectionChartSvg(data: ProjectionChartPoint[], theme: ReportThem
 }
 
 export function Reports() {
+    const { user } = useAuth()
 
     const currentMonth = new Date().toISOString().slice(0, 7)
     const sixMonthsAgo = (() => {
@@ -613,6 +624,7 @@ export function Reports() {
     const [projectionStartDraft, setProjectionStartDraft] = useState(currentMonth)
     const [projectionEndDraft, setProjectionEndDraft] = useState(threeMonthsAhead)
     const accountIdsParam = buildAccountIdsParam(selectedAccountIds, financialAccounts.length)
+    const reserveTargetMonths = user?.reserveTargetMonths ?? 6
 
     useEffect(() => {
         getFinancialAccounts()
@@ -744,7 +756,20 @@ export function Reports() {
     const topCategory = categoryTotals[0]
     const topCategoryAmount = Number(topCategory?.totalAmount ?? 0)
     const topCategoryShare = categoryTotalAmount > 0 ? (topCategoryAmount / categoryTotalAmount) * 100 : 0
-    const cashCoverageMonths = averageExpenses > 0 ? currentCashBalance / averageExpenses : null
+    const cashCoverageMonths = averageExpenses > 0 ? Math.max(0, currentCashBalance / averageExpenses) : null
+    const reserveTargetAmount = averageExpenses > 0 ? averageExpenses * reserveTargetMonths : null
+    const reserveGap = reserveTargetAmount === null ? null : Math.max(0, reserveTargetAmount - currentCashBalance)
+    const averageMonthlySurplus = evolution.length > 0 ? periodBalance / evolution.length : 0
+    const monthsToReserveTarget = reserveGap === null
+        ? null
+        : reserveGap === 0
+            ? 0
+            : averageMonthlySurplus > 0
+                ? reserveGap / averageMonthlySurplus
+                : null
+    const reserveCoverageRatio = cashCoverageMonths === null
+        ? null
+        : cashCoverageMonths / reserveTargetMonths
     const projectedNegativeMonths = projection.filter((item) => Number(item.projectedBalance) < 0)
     const nextProjection = projection[0]
     const showIntermediateSections = reportDepth !== 'basic'
@@ -754,7 +779,7 @@ export function Reports() {
         50 +
         (periodBalance >= 0 ? 10 : -12) +
         (savingsRate >= 20 ? 18 : savingsRate >= 10 ? 12 : savingsRate >= 0 ? 4 : -16) +
-        (cashCoverageMonths === null ? 0 : cashCoverageMonths >= 6 ? 18 : cashCoverageMonths >= 3 ? 12 : cashCoverageMonths >= 1 ? 4 : -14) +
+        (reserveCoverageRatio === null ? 0 : reserveCoverageRatio >= 1 ? 18 : reserveCoverageRatio >= 0.5 ? 12 : cashCoverageMonths !== null && cashCoverageMonths >= 1 ? 4 : -14) +
         (topCategoryShare > 50 ? -10 : topCategoryShare > 35 ? -5 : categoryTotalAmount > 0 ? 5 : 0) +
         (negativeAccountCount > 0 ? -8 : 3) +
         (projectedNegativeMonths.length > 0 ? -10 : 4),
@@ -784,18 +809,18 @@ export function Reports() {
                 body: 'Nenhuma categoria domina demais o período. Continue classificando movimentos para manter a leitura confiável.',
                 priority: 'Baixa',
             },
-        cashCoverageMonths === null || cashCoverageMonths < 3
+        cashCoverageMonths === null || reserveGap === null || reserveGap > 0
             ? {
-                title: 'Aumentar fôlego de caixa',
+                title: 'Aumentar a reserva',
                 body: cashCoverageMonths === null
                     ? 'Ainda falta despesa média para medir cobertura. Após alguns meses classificados, esse indicador fica mais útil.'
-                    : `A cobertura estimada é de ${cashCoverageMonths.toFixed(1)} meses. Mirar primeiro em 3 meses reduz bastante o susto financeiro.`,
+                    : `A cobertura estimada é de ${cashCoverageMonths.toFixed(1)} meses contra uma meta de ${reserveTargetMonths} meses. Falta ${formatCurrency(reserveGap ?? 0)} para a reserva configurada.`,
                 priority: cashCoverageMonths !== null && cashCoverageMonths < 1 ? 'Alta' : 'Média',
             }
             : {
                 title: 'Preservar a reserva',
-                body: `A cobertura estimada é de ${cashCoverageMonths.toFixed(1)} meses. Evite misturar esse fôlego com gasto cotidiano.`,
-                priority: cashCoverageMonths >= 6 ? 'Baixa' : 'Média',
+                body: `A cobertura estimada é de ${cashCoverageMonths.toFixed(1)} meses e atingiu a meta de ${reserveTargetMonths} meses. Evite misturar esse fôlego com gasto cotidiano.`,
+                priority: 'Baixa',
             },
         projectedNegativeMonths.length > 0
             ? {
@@ -863,10 +888,26 @@ export function Reports() {
         {
             label: 'Cobertura de caixa',
             value: cashCoverageMonths === null ? 'Sem base' : `${cashCoverageMonths.toFixed(1)} meses`,
-            detail: getCashCoverageLabel(cashCoverageMonths),
+            detail: getCashCoverageLabel(cashCoverageMonths, reserveTargetMonths),
             icon: Gauge,
-            color: cashCoverageMonths !== null && cashCoverageMonths < 1 ? 'var(--color-expense)' : 'var(--color-brand)',
-            bg: cashCoverageMonths !== null && cashCoverageMonths < 1 ? 'var(--color-expense-bg)' : 'var(--color-balance-bg)',
+            color: reserveCoverageRatio !== null && reserveCoverageRatio < 0.5 ? 'var(--color-expense)' : 'var(--color-brand)',
+            bg: reserveCoverageRatio !== null && reserveCoverageRatio < 0.5 ? 'var(--color-expense-bg)' : 'var(--color-balance-bg)',
+        },
+        {
+            label: 'Meta de reserva',
+            value: reserveTargetAmount === null ? 'Sem base' : formatCurrency(reserveTargetAmount),
+            detail: `${reserveTargetMonths} meses de despesa média`,
+            icon: Target,
+            color: 'var(--color-count)',
+            bg: 'var(--color-count-bg)',
+        },
+        {
+            label: 'Falta para reserva',
+            value: reserveGap === null ? 'Sem base' : reserveGap === 0 ? 'Meta atingida' : formatCurrency(reserveGap),
+            detail: reserveGap === null ? 'Classifique despesas para calcular' : formatMonthsToTarget(monthsToReserveTarget),
+            icon: PiggyBank,
+            color: reserveGap === null || reserveGap > 0 ? 'var(--color-expense)' : 'var(--color-income)',
+            bg: reserveGap === null || reserveGap > 0 ? 'var(--color-expense-bg)' : 'var(--color-income-bg)',
         },
         {
             label: 'Maior vazamento',
@@ -901,6 +942,19 @@ export function Reports() {
                     ? `Próximo saldo projetado: ${formatCurrency(nextProjection.projectedBalance)}.`
                     : 'Sem meses projetados para avaliar.',
             tone: projectedNegativeMonths.length > 0 ? 'red' : 'green',
+        },
+        {
+            title: reserveGap === null
+                ? 'Reserva sem base suficiente'
+                : reserveGap === 0
+                    ? 'Reserva dentro da meta'
+                    : 'Reserva abaixo da meta',
+            body: reserveGap === null
+                ? 'Ainda falta despesa média no período para calcular a meta configurada.'
+                : reserveGap === 0
+                    ? `O saldo selecionado cobre a meta de ${reserveTargetMonths} meses.`
+                    : `Faltam ${formatCurrency(reserveGap)} para cobrir ${reserveTargetMonths} meses de despesas médias.`,
+            tone: reserveGap === null ? 'yellow' : reserveGap === 0 ? 'green' : 'yellow',
         },
         {
             title: incomeTrend !== null && incomeTrend < 0 ? 'Receita em queda' : 'Receita estável ou em alta',
@@ -1186,7 +1240,8 @@ export function Reports() {
         <p class="subtitle">Relatório financeiro ${escapeHtml(depthLabel.toLowerCase())}: ${escapeHtml(depthDescription)}.</p>
         <div class="meta-row">
             <span class="badge">Período: ${escapeHtml(reportPeriodLabel)}</span>
-            <span class="badge">Nivel: ${escapeHtml(depthLabel)}</span>
+            <span class="badge">Nível: ${escapeHtml(depthLabel)}</span>
+            <span class="badge">Reserva: ${escapeHtml(`${reserveTargetMonths} meses`)}</span>
             <span class="badge">Contas: ${escapeHtml(`${selectedAccounts.length} de ${financialAccounts.length}`)}</span>
             <span class="badge">Gerado em: ${escapeHtml(generatedAt)}</span>
         </div>
@@ -1741,11 +1796,12 @@ export function Reports() {
         y += 9
         ;[
             `Período: ${reportPeriodLabel}`,
-            `Nivel: ${getReportDepthLabel(depth)}`,
+            `Nível: ${getReportDepthLabel(depth)}`,
+            `Reserva: ${reserveTargetMonths} meses`,
             `Contas: ${selectedAccounts.length} de ${financialAccounts.length}`,
             `Gerado em: ${new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date())}`,
         ].forEach((badge, index) => {
-            const badgeWidth = index === 3 ? 126 : 112
+            const badgeWidth = index === 4 ? 126 : 112
             const badgeX = margin + (index % 2) * (badgeWidth + 12)
             const badgeY = y + Math.floor(index / 2) * 25
 
@@ -1754,7 +1810,7 @@ export function Reports() {
             pdf.roundedRect(badgeX, badgeY, badgeWidth, 20, 10, 10, 'FD')
             writeText(badge, badgeX + 8, badgeY + 4, badgeWidth - 16, { color: text, fontSize: 7, lineHeight: 9 })
         })
-        y += 62
+        y += 87
 
         drawSectionTitle('Resumo financeiro', 'Indicadores principais para entender sobra, pressão de gastos e fôlego de caixa.')
         drawMetricGrid(financialSignals)
@@ -2117,7 +2173,7 @@ export function Reports() {
                                                         {account.name}
                                                     </p>
                                                     {account.isArchived && (
-                                                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
+                                                        <span className="app-chip app-chip-muted px-2 py-0.5 text-xs">
                                                             Arquivada
                                                         </span>
                                                     )}
@@ -2455,7 +2511,7 @@ export function Reports() {
                                     Exportar relatório
                                 </h2>
                                 <p className="mt-1 text-sm" style={{ color: 'var(--color-text-muted)' }}>
-                                    Escolha o nivel e o formato do arquivo.
+                                    Escolha o nível e o formato do arquivo.
                                 </p>
                             </div>
                             <button
@@ -2474,7 +2530,7 @@ export function Reports() {
                                 <div>
                                     <h3 className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>Nível do relatório</h3>
                                     <p className="mt-1 text-xs" style={{ color: 'var(--color-text-muted)' }}>
-                                        O arquivo sera montado com o nivel escolhido aqui.
+                                        O arquivo será montado com o nível escolhido aqui.
                                     </p>
                                 </div>
                                 <div className="grid gap-3 md:grid-cols-3">
@@ -2508,7 +2564,7 @@ export function Reports() {
                                 <div>
                                     <h3 className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>Formato</h3>
                                     <p className="mt-1 text-xs" style={{ color: 'var(--color-text-muted)' }}>
-                                        HTML baixa como pagina visual. PDF abre pronto em uma aba com botao de download do navegador.
+                                        HTML baixa como página visual. PDF abre pronto em uma aba com botão de download do navegador.
                                     </p>
                                 </div>
                                 <div className="grid gap-3 sm:grid-cols-2">

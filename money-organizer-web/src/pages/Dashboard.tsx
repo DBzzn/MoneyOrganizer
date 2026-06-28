@@ -718,12 +718,12 @@ export function Dashboard() {
                             {account.name}
                           </p>
                           {account.isArchived && (
-                            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
+                            <span className="app-chip app-chip-muted px-2 py-0.5 text-xs">
                               Arquivada
                             </span>
                           )}
                           {!account.includeInDashboard && !account.isArchived && (
-                            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
+                            <span className="app-chip app-chip-muted px-2 py-0.5 text-xs">
                               Fora
                             </span>
                           )}
@@ -815,7 +815,7 @@ export function Dashboard() {
                             {reminder.title}
                           </p>
                           {overdue && (
-                            <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">
+                            <span className="app-chip app-chip-danger px-2 py-0.5 text-xs font-medium">
                               Vencido
                             </span>
                           )}

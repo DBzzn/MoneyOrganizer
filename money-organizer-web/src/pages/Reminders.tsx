@@ -75,9 +75,9 @@ function toInputDate(isoString: string): string {
 }
 
 function statusClass(status: ReminderStatus): string {
-    if (status === 'DONE') return 'bg-green-100 text-green-700'
-    if (status === 'CANCELED') return 'bg-slate-100 text-slate-600'
-    return 'bg-yellow-100 text-yellow-700'
+    if (status === 'DONE') return 'app-chip app-chip-success'
+    if (status === 'CANCELED') return 'app-chip app-chip-muted'
+    return 'app-chip app-chip-warning'
 }
 
 function isOverdue(reminder: Reminder): boolean {
@@ -558,7 +558,7 @@ export function Reminders() {
                                                 {reminder.amount ? formatCurrency(reminder.amount) : 'Sem valor'}
                                             </div>
                                             {isOverdue(reminder) && (
-                                                <span className="rounded-full bg-red-100 px-2.5 py-1 text-xs font-medium text-red-700">
+                                                <span className="app-chip app-chip-danger px-2.5 py-1 text-xs font-medium">
                                                     Vencido
                                                 </span>
                                             )}
@@ -651,7 +651,7 @@ export function Reminders() {
                                                 <td className="px-4 py-3 text-sm" style={{ color: 'var(--color-text-muted)' }}>
                                                     {formatDate(reminder.dueDate)}
                                                     {isOverdue(reminder) && (
-                                                        <span className="ml-2 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">
+                                                        <span className="app-chip app-chip-danger ml-2 px-2 py-0.5 text-xs font-medium">
                                                             Vencido
                                                         </span>
                                                     )}

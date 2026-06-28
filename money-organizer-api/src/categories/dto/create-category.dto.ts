@@ -5,14 +5,14 @@ import { CategoryKind } from '../../../generated/prisma/client';
 export class CreateCategoryDto {
   @ApiProperty({
     description: 'Nome da categoria',
-    example: 'Educacao',
+    example: 'Educação',
   })
   @IsString()
   @IsNotEmpty()
   name: string;
 
   @ApiProperty({
-    description: 'Icone da categoria em uma chave lucide:* selecionada no app',
+    description: 'Ícone da categoria em uma chave lucide:* selecionada no app',
     example: 'lucide:book-open',
     required: false,
   })

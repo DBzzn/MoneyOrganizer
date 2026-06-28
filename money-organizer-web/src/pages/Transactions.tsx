@@ -130,7 +130,7 @@ function ImportSourceBadge({ source }: { source: AppliedImportSource | null }) {
         <Link
             to={`/statement-imports?batch=${encodeURIComponent(source.file.batchId)}`}
             title={`Abrir lote de origem: ${source.file.originalName}`}
-            className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700 transition hover:bg-blue-100"
+            className="app-chip app-chip-info inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium transition hover:opacity-85"
         >
             <FileSearch size={12} />
             Importado
@@ -361,7 +361,7 @@ export function Transactions() {
             })
             .catch(() => {
                 if (isActive) {
-                    toast.error('Erro ao abrir a transacao pelo extrato!')
+                    toast.error('Erro ao abrir a transação pelo extrato!')
                 }
             })
 
@@ -471,7 +471,7 @@ export function Transactions() {
                     setConfirmModal((prev) => ({ ...prev, isOpen: false }))
                     toast.success('Transação removida com sucesso!')
                 } catch (error) {
-                    toast.error(apiErrorMessage(error, 'Erro ao remover a transacao!'))
+                    toast.error(apiErrorMessage(error, 'Erro ao remover a transação!'))
                 }
             },
             ...(isInstallment && {
@@ -503,12 +503,12 @@ export function Transactions() {
         })
     }
     const typeColor: Record<string, string> = {
-        INCOME: 'bg-green-100 text-green-700',
-        CREDIT_CASH: 'bg-blue-100 text-blue-700',
-        CREDIT_INSTALLMENT: 'bg-purple-100 text-purple-700',
-        DEBIT: 'bg-orange-100 text-orange-700',
-        PIX: 'bg-teal-100 text-teal-700',
-        CASH: 'bg-gray-100 text-gray-700',
+        INCOME: 'app-chip app-chip-success',
+        CREDIT_CASH: 'app-chip app-chip-info',
+        CREDIT_INSTALLMENT: 'app-chip app-chip-info',
+        DEBIT: 'app-chip app-chip-warning',
+        PIX: 'app-chip app-chip-info',
+        CASH: 'app-chip app-chip-muted',
     }
 
     const goToPrevMonth = () => {
@@ -1059,7 +1059,7 @@ export function Transactions() {
                                             </span>
                                         )}
                                         {t.isPending && (
-                                            <span className="inline-flex items-center whitespace-nowrap rounded-full bg-yellow-100 px-2 py-0.5 text-xs text-yellow-700">
+                                            <span className="app-chip app-chip-warning inline-flex items-center whitespace-nowrap px-2 py-0.5 text-xs">
                                                 Pendente
                                             </span>
                                         )}
@@ -1134,7 +1134,7 @@ export function Transactions() {
                                                                 </span>
                                                             )}
                                                             {t.isPending && (
-                                                                <span className="inline-flex items-center whitespace-nowrap text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full">
+                                                                <span className="app-chip app-chip-warning inline-flex items-center whitespace-nowrap px-2 py-0.5 text-xs">
                                                                     Pendente
                                                                 </span>
                                                             )}

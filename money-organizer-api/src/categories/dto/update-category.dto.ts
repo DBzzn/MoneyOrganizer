@@ -5,7 +5,7 @@ import { CategoryKind } from '../../../generated/prisma/client';
 export class UpdateCategoryDto {
   @ApiProperty({
     description: 'Nome da categoria',
-    example: 'Educacao Online',
+    example: 'Educação Online',
     required: false,
   })
   @IsString()
@@ -13,7 +13,7 @@ export class UpdateCategoryDto {
   name?: string;
 
   @ApiProperty({
-    description: 'Icone da categoria em uma chave lucide:* selecionada no app',
+    description: 'Ícone da categoria em uma chave lucide:* selecionada no app',
     example: 'lucide:graduation-cap',
     required: false,
   })
@@ -33,7 +33,7 @@ export class UpdateCategoryDto {
   kind?: CategoryKind;
 
   @ApiProperty({
-    description: 'Indica se a categoria esta arquivada',
+    description: 'Indica se a categoria está arquivada',
     example: false,
     required: false,
   })

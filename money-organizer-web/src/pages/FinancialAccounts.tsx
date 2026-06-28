@@ -102,7 +102,7 @@ function ledgerItemDetail(item: AccountLedgerItem): string {
             : 'Transferencia entre contas'
     }
 
-    return 'Conciliacao manual'
+    return 'Conciliação manual'
 }
 
 function ledgerStatusLabel(item: AccountLedgerItem): string {
@@ -115,12 +115,12 @@ function ledgerStatusLabel(item: AccountLedgerItem): string {
 
 function ledgerStatusClass(item: AccountLedgerItem): string {
     if (!item.affectsCurrentBalance) {
-        return 'bg-blue-100 text-blue-700'
+        return 'app-chip app-chip-info'
     }
 
     return item.isPending
-        ? 'bg-yellow-100 text-yellow-800'
-        : 'bg-green-100 text-green-700'
+        ? 'app-chip app-chip-warning'
+        : 'app-chip app-chip-success'
 }
 
 function LedgerMovementIcon({ item }: { item: AccountLedgerItem }) {
@@ -352,7 +352,7 @@ export function FinancialAccounts() {
         const adjustment = adjustments.find((entry) => entry.id === item.sourceId)
 
         if (!adjustment) {
-            toast.error('Ajuste nao encontrado na lista atual.')
+            toast.error('Ajuste não encontrado na lista atual.')
             return
         }
 
@@ -511,7 +511,7 @@ export function FinancialAccounts() {
         nextParams.delete('adjustment')
 
         if (!adjustment) {
-            toast.error('Ajuste nao encontrado para edicao.')
+            toast.error('Ajuste não encontrado para edição.')
             setSearchParams(nextParams, { replace: true })
             return
         }
@@ -619,7 +619,7 @@ export function FinancialAccounts() {
                                     <p className="mt-1 text-sm text-red-500">{errors.initialBalance.message}</p>
                                 )}
                                 {editing && (
-                                    <div className="mt-2 flex gap-2 rounded-lg border border-yellow-300 bg-yellow-50 px-3 py-2 text-xs leading-5 text-yellow-800">
+                                    <div className="app-inline-alert app-inline-alert-warning mt-2 flex gap-2 px-3 py-2 text-xs leading-5">
                                         <AlertTriangle size={15} className="mt-0.5 shrink-0" />
                                         <span>
                                             Alterar o saldo inicial reescreve a base histórica desta conta. Use isso só se o saldo de abertura estava errado; para corrigir diferença real, o ideal futuramente será conciliação ou ajuste de saldo.
@@ -751,7 +751,7 @@ export function FinancialAccounts() {
                             <div className="flex gap-2 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs leading-5 text-emerald-800 sm:col-span-2">
                                 <AlertTriangle size={15} className="mt-0.5 shrink-0" />
                                 <span>
-                                    Use valor positivo para aumentar o saldo calculado e negativo para reduzir. Este registro nao entra como receita ou despesa.
+                                    Use valor positivo para aumentar o saldo calculado e negativo para reduzir. Este registro não entra como receita ou despesa.
                                 </span>
                             </div>
 
@@ -810,7 +810,7 @@ export function FinancialAccounts() {
                                     </div>
 
                                     {account.isArchived && (
-                                        <span className="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-600">
+                                        <span className="app-chip app-chip-muted px-2.5 py-1 text-xs font-medium">
                                             Arquivada
                                         </span>
                                     )}
@@ -874,7 +874,7 @@ export function FinancialAccounts() {
                         <div>
                             <h2 className="text-lg font-semibold" style={{ color: 'var(--color-text)' }}>Extrato da conta</h2>
                             <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
-                                Transacoes, transferencias e ajustes em ordem cronologica
+                                Transações, transferências e ajustes em ordem cronológica
                             </p>
                         </div>
 
@@ -918,7 +918,7 @@ export function FinancialAccounts() {
                                 }}
                                 disabled={!ledgerStartDate && !ledgerEndDate}
                                 className="app-icon-control flex h-11 items-center justify-center gap-2 rounded-lg px-3 text-sm disabled:cursor-not-allowed disabled:opacity-50"
-                                title="Limpar periodo"
+                                title="Limpar período"
                             >
                                 <X size={15} />
                                 <span className="lg:hidden xl:inline">Limpar</span>

@@ -28,7 +28,7 @@ export default function ConfirmModal({
     onCancel,
     confirmLabel = 'Confirmar',
     secondaryAction,
-    title = 'Confirmacao',
+    title = 'Confirmação',
     children,
     maxWidthClassName = 'max-w-sm',
     confirmButtonClassName = 'bg-red-500 hover:bg-red-600',

@@ -54,14 +54,14 @@ describe('BalanceAdjustmentsService', () => {
       id: 'adjustment-1',
       amount: new Prisma.Decimal(-42.35),
       date: new Date(2026, 5, 10, 12),
-      reason: 'Conciliacao',
+      reason: 'Conciliação',
       financialAccountId: 'account-1',
     });
 
     await service.create('user-1', {
       amount: -42.35,
       date: '2026-06-10',
-      reason: '  Conciliacao  ',
+      reason: '  Conciliação  ',
       financialAccountId: 'account-1',
     });
 
@@ -77,7 +77,7 @@ describe('BalanceAdjustmentsService', () => {
       expect.objectContaining({
         data: expect.objectContaining({
           amount: expect.any(Prisma.Decimal),
-          reason: 'Conciliacao',
+          reason: 'Conciliação',
           financialAccountId: 'account-1',
           userId: 'user-1',
         }),

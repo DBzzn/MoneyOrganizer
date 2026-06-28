@@ -12,6 +12,7 @@ import {
 } from '../../generated/prisma/client';
 import { CreateUserDto } from './dto/create-user.dto';
 import { ConfirmUserPasswordDto } from './dto/confirm-user-password.dto';
+import { UpdateUserPreferencesDto } from './dto/update-user-preferences.dto';
 import { UpdateUserPasswordDto } from './dto/update-user-password.dto';
 import { UpdateUserProfileDto } from './dto/update-user-profile.dto';
 import * as bcrypt from 'bcrypt';
@@ -30,6 +31,7 @@ const USER_SELECT = {
   id: true,
   name: true,
   email: true,
+  reserveTargetMonths: true,
   createdAt: true,
 };
 
@@ -213,6 +215,20 @@ export class UsersService {
     });
 
     return { message: 'Senha atualizada com sucesso.' };
+  }
+
+  async updatePreferences(userId: string, dto: UpdateUserPreferencesDto) {
+    if (dto.reserveTargetMonths === undefined) {
+      throw new BadRequestException('Informe ao menos uma preferência para salvar.');
+    }
+
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        reserveTargetMonths: dto.reserveTargetMonths,
+      },
+      select: USER_SELECT,
+    });
   }
 
   async clearMyData(userId: string, dto: ConfirmUserPasswordDto) {

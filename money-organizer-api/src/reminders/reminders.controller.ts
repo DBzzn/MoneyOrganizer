@@ -39,8 +39,8 @@ export class RemindersController {
 
   @ApiOperation({ summary: 'Criar lembrete financeiro' })
   @ApiResponse({ status: 201, description: 'Lembrete criado com sucesso' })
-  @ApiResponse({ status: 400, description: 'Dados invalidos' })
-  @ApiResponse({ status: 401, description: 'Nao autenticado' })
+  @ApiResponse({ status: 400, description: 'Dados inválidos' })
+  @ApiResponse({ status: 401, description: 'Não autenticado' })
   @Post()
   create(
     @Request() req: AuthenticatedRequest,
@@ -51,7 +51,7 @@ export class RemindersController {
 
   @ApiOperation({ summary: 'Listar lembretes financeiros' })
   @ApiResponse({ status: 200, description: 'Lista de lembretes retornada com sucesso' })
-  @ApiResponse({ status: 401, description: 'Nao autenticado' })
+  @ApiResponse({ status: 401, description: 'Não autenticado' })
   @Get()
   findAll(
     @Request() req: AuthenticatedRequest,
@@ -62,8 +62,8 @@ export class RemindersController {
 
   @ApiOperation({ summary: 'Buscar lembrete por ID' })
   @ApiResponse({ status: 200, description: 'Lembrete retornado com sucesso' })
-  @ApiResponse({ status: 401, description: 'Nao autenticado' })
-  @ApiResponse({ status: 404, description: 'Lembrete nao encontrado' })
+  @ApiResponse({ status: 401, description: 'Não autenticado' })
+  @ApiResponse({ status: 404, description: 'Lembrete não encontrado' })
   @Get(':id')
   findOne(
     @Request() req: AuthenticatedRequest,
@@ -74,9 +74,9 @@ export class RemindersController {
 
   @ApiOperation({ summary: 'Atualizar lembrete financeiro' })
   @ApiResponse({ status: 200, description: 'Lembrete atualizado com sucesso' })
-  @ApiResponse({ status: 400, description: 'Dados invalidos' })
-  @ApiResponse({ status: 401, description: 'Nao autenticado' })
-  @ApiResponse({ status: 404, description: 'Lembrete nao encontrado' })
+  @ApiResponse({ status: 400, description: 'Dados inválidos' })
+  @ApiResponse({ status: 401, description: 'Não autenticado' })
+  @ApiResponse({ status: 404, description: 'Lembrete não encontrado' })
   @Patch(':id')
   update(
     @Request() req: AuthenticatedRequest,
@@ -88,8 +88,8 @@ export class RemindersController {
 
   @ApiOperation({ summary: 'Remover lembrete financeiro' })
   @ApiResponse({ status: 200, description: 'Lembrete removido com sucesso' })
-  @ApiResponse({ status: 401, description: 'Nao autenticado' })
-  @ApiResponse({ status: 404, description: 'Lembrete nao encontrado' })
+  @ApiResponse({ status: 401, description: 'Não autenticado' })
+  @ApiResponse({ status: 404, description: 'Lembrete não encontrado' })
   @Delete(':id')
   remove(
     @Request() req: AuthenticatedRequest,

@@ -51,6 +51,11 @@ export const getStatementImportBatches = () =>
 export const getStatementImportBatch = (id: string) =>
   api.get<StatementImportBatch>(`/statement-imports/batches/${id}`);
 
+export const updateStatementImportBatch = (
+  id: string,
+  data: { name?: string | null },
+) => api.patch<StatementImportBatch>(`/statement-imports/batches/${id}`, data);
+
 export const deleteStatementImportBatch = (id: string) =>
   api.delete<{ message: string }>(`/statement-imports/batches/${id}`);
 

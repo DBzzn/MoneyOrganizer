@@ -47,6 +47,13 @@ export function Register() {
         <span className="register-step register-step-c" />
         <span className="register-balance-strip register-balance-strip-a" />
         <span className="register-balance-strip register-balance-strip-b" />
+        <span className="register-growth-line register-growth-line-a" />
+        <span className="register-growth-line register-growth-line-b" />
+        <span className="register-check-node register-check-node-a" />
+        <span className="register-check-node register-check-node-b" />
+        <span className="register-check-node register-check-node-c" />
+        <span className="register-goal-card register-goal-card-a" />
+        <span className="register-goal-card register-goal-card-b" />
       </div>
 
       <div className="glass-heavy relative z-10 w-full max-w-md rounded-2xl p-8 shadow-sm"

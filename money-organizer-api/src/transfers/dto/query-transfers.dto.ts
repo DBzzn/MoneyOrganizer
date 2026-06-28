@@ -9,7 +9,7 @@ import { ApiProperty } from '@nestjs/swagger';
 
 export class QueryTransfersDto {
   @ApiProperty({
-    description: 'Data inicial do periodo',
+    description: 'Data inicial do período',
     example: '2026-06-01',
     required: false,
   })
@@ -18,7 +18,7 @@ export class QueryTransfersDto {
   startDate?: string;
 
   @ApiProperty({
-    description: 'Data final do periodo',
+    description: 'Data final do período',
     example: '2026-06-30',
     required: false,
   })

@@ -41,8 +41,8 @@ export class BalanceAdjustmentsController {
 
   @ApiOperation({ summary: 'Criar ajuste de saldo' })
   @ApiResponse({ status: 201, description: 'Ajuste de saldo criado com sucesso' })
-  @ApiResponse({ status: 400, description: 'Dados invalidos' })
-  @ApiResponse({ status: 401, description: 'Nao autenticado' })
+  @ApiResponse({ status: 400, description: 'Dados inválidos' })
+  @ApiResponse({ status: 401, description: 'Não autenticado' })
   @Post()
   create(
     @Request() req: AuthenticatedRequest,
@@ -56,7 +56,7 @@ export class BalanceAdjustmentsController {
 
   @ApiOperation({ summary: 'Listar ajustes de saldo' })
   @ApiResponse({ status: 200, description: 'Lista de ajustes retornada com sucesso' })
-  @ApiResponse({ status: 401, description: 'Nao autenticado' })
+  @ApiResponse({ status: 401, description: 'Não autenticado' })
   @Get()
   findAll(
     @Request() req: AuthenticatedRequest,
@@ -67,9 +67,9 @@ export class BalanceAdjustmentsController {
 
   @ApiOperation({ summary: 'Atualizar ajuste de saldo' })
   @ApiResponse({ status: 200, description: 'Ajuste atualizado com sucesso' })
-  @ApiResponse({ status: 400, description: 'Dados invalidos' })
-  @ApiResponse({ status: 401, description: 'Nao autenticado' })
-  @ApiResponse({ status: 404, description: 'Ajuste nao encontrado' })
+  @ApiResponse({ status: 400, description: 'Dados inválidos' })
+  @ApiResponse({ status: 401, description: 'Não autenticado' })
+  @ApiResponse({ status: 404, description: 'Ajuste não encontrado' })
   @Patch(':id')
   update(
     @Request() req: AuthenticatedRequest,
@@ -85,8 +85,8 @@ export class BalanceAdjustmentsController {
 
   @ApiOperation({ summary: 'Remover ajuste de saldo' })
   @ApiResponse({ status: 200, description: 'Ajuste removido com sucesso' })
-  @ApiResponse({ status: 401, description: 'Nao autenticado' })
-  @ApiResponse({ status: 404, description: 'Ajuste nao encontrado' })
+  @ApiResponse({ status: 401, description: 'Não autenticado' })
+  @ApiResponse({ status: 404, description: 'Ajuste não encontrado' })
   @Delete(':id')
   remove(
     @Request() req: AuthenticatedRequest,

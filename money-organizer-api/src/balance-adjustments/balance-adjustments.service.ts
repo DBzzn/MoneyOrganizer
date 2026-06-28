@@ -54,7 +54,7 @@ export class BalanceAdjustmentsService {
 
   private ensureNonZeroAmount(amount: number) {
     if (amount === 0) {
-      throw new BadRequestException('O ajuste de saldo nao pode ser zero.');
+      throw new BadRequestException('O ajuste de saldo não pode ser zero.');
     }
   }
 
@@ -79,7 +79,7 @@ export class BalanceAdjustmentsService {
     });
 
     if (!account) {
-      throw new BadRequestException('Conta financeira nao encontrada ou arquivada.');
+      throw new BadRequestException('Conta financeira não encontrada ou arquivada.');
     }
   }
 
@@ -93,7 +93,7 @@ export class BalanceAdjustmentsService {
     });
 
     if (!account) {
-      throw new BadRequestException('Conta financeira nao encontrada.');
+      throw new BadRequestException('Conta financeira não encontrada.');
     }
   }
 
@@ -169,7 +169,7 @@ export class BalanceAdjustmentsService {
       });
     } catch (error: any) {
       if (error?.code === 'P2025') {
-        throw new NotFoundException('Ajuste de saldo nao encontrado.');
+        throw new NotFoundException('Ajuste de saldo não encontrado.');
       }
       throw error;
     }
@@ -187,7 +187,7 @@ export class BalanceAdjustmentsService {
       return { message: 'Ajuste de saldo removido com sucesso!' };
     } catch (error: any) {
       if (error?.code === 'P2025') {
-        throw new NotFoundException('Ajuste de saldo nao encontrado.');
+        throw new NotFoundException('Ajuste de saldo não encontrado.');
       }
       throw error;
     }

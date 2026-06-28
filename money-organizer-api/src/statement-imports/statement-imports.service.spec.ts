@@ -145,6 +145,42 @@ describe('StatementImportsService', () => {
     expect(service).toBeDefined();
   });
 
+  it('updates a batch name scoped to the user', async () => {
+    prisma.statementImportBatch.findFirst.mockResolvedValue({ id: 'batch-1' });
+    prisma.statementImportBatch.update.mockResolvedValue({ id: 'batch-1' });
+    const renamedBatch = {
+      id: 'batch-1',
+      name: 'Nubank maio',
+      files: [],
+    };
+    jest.spyOn(service, 'findBatch').mockResolvedValue(renamedBatch as never);
+
+    await expect(
+      service.updateBatch('user-1', 'batch-1', { name: ' Nubank maio ' }),
+    ).resolves.toBe(renamedBatch);
+
+    expect(prisma.statementImportBatch.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: 'batch-1',
+        userId: 'user-1',
+      },
+      select: {
+        id: true,
+      },
+    });
+    expect(prisma.statementImportBatch.update).toHaveBeenCalledWith({
+      where: {
+        id: 'batch-1',
+      },
+      data: {
+        name: 'Nubank maio',
+      },
+      select: {
+        id: true,
+      },
+    });
+  });
+
   it('selects the parser by priority when multiple parsers accept a file', async () => {
     const buffer = Buffer.from('ambiguous statement');
     ofxParser.priority = 30;
@@ -1323,7 +1359,7 @@ describe('StatementImportsService', () => {
     });
 
     await expect(service.removeBatch('user-1', 'batch-1')).resolves.toEqual({
-      message: 'Lote de importacao excluido com sucesso.',
+      message: 'Lote de importação excluído com sucesso.',
     });
 
     expect(prisma.statementImportBatch.findFirst).toHaveBeenCalledWith({

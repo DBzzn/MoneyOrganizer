@@ -6,6 +6,7 @@ import {
 import { createHash } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { BulkReviewCategoryDto } from './dto/bulk-review-category.dto';
+import { UpdateStatementImportBatchDto } from './dto/update-statement-import-batch.dto';
 import { UpdateImportedMovementDto } from './dto/update-imported-movement.dto';
 import { ReviewableImportedMovementStatus } from './dto/update-imported-movement-status.dto';
 import { CsvStatementParser } from './parsers/csv-statement.parser';
@@ -54,6 +55,7 @@ const REVIEW_CATEGORY_SELECT = {
 
 const STATEMENT_IMPORT_BATCH_SELECT = {
   id: true,
+  name: true,
   status: true,
   createdAt: true,
   updatedAt: true,
@@ -141,6 +143,7 @@ const TRANSACTION_REVIEW_TYPES_BY_DIRECTION: Record<
 
 const STATEMENT_IMPORT_BATCH_SUMMARY_SELECT = {
   id: true,
+  name: true,
   status: true,
   createdAt: true,
   updatedAt: true,
@@ -273,7 +276,7 @@ function trimEditableText(value: string | undefined, fieldLabel: string) {
 
   const trimmed = value.trim();
   if (!trimmed) {
-    throw new BadRequestException(`${fieldLabel} nao pode ficar em branco.`);
+    throw new BadRequestException(`${fieldLabel} não pode ficar em branco.`);
   }
 
   return trimmed;
@@ -296,11 +299,11 @@ function validateTransactionReviewType(
     return;
   }
 
-  const directionLabel = direction === 'IN' ? 'entrada' : 'saida';
+  const directionLabel = direction === 'IN' ? 'entrada' : 'saída';
   const allowedLabel = [...allowedTypes].join(', ');
 
   throw new BadRequestException(
-    `Tipo revisado invalido para ${directionLabel}. Use um destes tipos: ${allowedLabel}. Para movimento entre contas, use TRANSFERENCIA.`,
+    `Tipo revisado inválido para ${directionLabel}. Use um destes tipos: ${allowedLabel}. Para movimento entre contas, use TRANSFERENCIA.`,
   );
 }
 
@@ -402,8 +405,8 @@ export class StatementImportsService {
     if (!category) {
       throw new NotFoundException(
         direction === 'IN'
-          ? 'Categoria de receita revisada nao encontrada ou incompativel.'
-          : 'Categoria de despesa revisada nao encontrada ou incompativel.',
+          ? 'Categoria de receita revisada não encontrada ou incompatível.'
+          : 'Categoria de despesa revisada não encontrada ou incompatível.',
       );
     }
 
@@ -423,7 +426,7 @@ export class StatementImportsService {
     });
 
     if (!account) {
-      throw new NotFoundException('Conta de transferencia nao encontrada.');
+      throw new NotFoundException('Conta de transferência não encontrada.');
     }
 
     return account;
@@ -548,7 +551,7 @@ export class StatementImportsService {
           amountCents,
           label:
             transfer.description?.trim() ||
-            `Transferencia recebida de ${transfer.fromAccount.name}`,
+            `Transferência recebida de ${transfer.fromAccount.name}`,
         });
       }
 
@@ -565,7 +568,7 @@ export class StatementImportsService {
           amountCents,
           label:
             transfer.description?.trim() ||
-            `Transferencia enviada para ${transfer.toAccount.name}`,
+            `Transferência enviada para ${transfer.toAccount.name}`,
         });
       }
     }
@@ -620,7 +623,7 @@ export class StatementImportsService {
 
     if (!movement.rawDescription.trim()) {
       throw new BadRequestException(
-        'Movimento pronto precisa ter descricao revisada.',
+        'Movimento pronto precisa ter descrição revisada.',
       );
     }
 
@@ -635,7 +638,7 @@ export class StatementImportsService {
       ImportedMovementReconciliationStatus.CONFIRMED_DUPLICATE
     ) {
       throw new BadRequestException(
-        'Movimento confirmado como duplicidade nao pode ser marcado como pronto.',
+        'Movimento confirmado como duplicidade não pode ser marcado como pronto.',
       );
     }
 
@@ -655,7 +658,7 @@ export class StatementImportsService {
         ImportedMovementReconciliationStatus.CONFIRMED_UNIQUE
     ) {
       throw new BadRequestException(
-        'Existe possivel match no ledger. Confirme a conciliacao antes de marcar como pronto.',
+        'Existe possível match no ledger. Confirme a conciliação antes de marcar como pronto.',
       );
     }
 
@@ -665,7 +668,7 @@ export class StatementImportsService {
     if (reviewTarget === ImportedMovementReviewTarget.TRANSFER) {
       if (!movement.reviewTransferAccountId) {
         throw new BadRequestException(
-          'Transferencia pronta precisa ter a outra conta informada.',
+          'Transferência pronta precisa ter a outra conta informada.',
         );
       }
 
@@ -673,7 +676,7 @@ export class StatementImportsService {
         movement.reviewTransferAccountId === movement.file.financialAccountId
       ) {
         throw new BadRequestException(
-          'Transferencia pronta precisa usar contas diferentes.',
+          'Transferência pronta precisa usar contas diferentes.',
         );
       }
 
@@ -691,7 +694,7 @@ export class StatementImportsService {
 
     if (!movement.reviewCategoryId) {
       throw new BadRequestException(
-        'Transacao pronta precisa ter categoria revisada.',
+        'Transação pronta precisa ter categoria revisada.',
       );
     }
 
@@ -716,7 +719,7 @@ export class StatementImportsService {
 
     if (financialAccountId && !targetAccount) {
       throw new BadRequestException(
-        'Conta financeira nao encontrada ou arquivada.',
+        'Conta financeira não encontrada ou arquivada.',
       );
     }
 
@@ -967,7 +970,7 @@ export class StatementImportsService {
           amountCents,
           label:
             transfer.description?.trim() ||
-            `Transferencia recebida de ${transfer.fromAccount.name}`,
+            `Transferência recebida de ${transfer.fromAccount.name}`,
         });
       }
 
@@ -980,7 +983,7 @@ export class StatementImportsService {
           amountCents,
           label:
             transfer.description?.trim() ||
-            `Transferencia enviada para ${transfer.toAccount.name}`,
+            `Transferência enviada para ${transfer.toAccount.name}`,
         });
       }
     }
@@ -1403,10 +1406,50 @@ export class StatementImportsService {
     });
 
     if (!batch) {
-      throw new NotFoundException('Lote de importacao nao encontrado.');
+      throw new NotFoundException('Lote de importação não encontrado.');
     }
 
     return this.attachMovementReviewHints(userId, batch);
+  }
+
+  async updateBatch(
+    userId: string,
+    batchId: string,
+    dto: UpdateStatementImportBatchDto,
+  ) {
+    if (dto.name === undefined) {
+      throw new BadRequestException('Informe o nome do lote para atualizar.');
+    }
+
+    const name = dto.name?.trim() || null;
+
+    const batch = await this.prisma.statementImportBatch.findFirst({
+      where: {
+        id: batchId,
+        userId,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    if (!batch) {
+      throw new NotFoundException('Lote de importação não encontrado.');
+    }
+
+    await this.prisma.statementImportBatch.update({
+      where: {
+        id: batch.id,
+      },
+      data: {
+        name,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    return this.findBatch(userId, batch.id);
   }
 
   async removeBatch(userId: string, batchId: string) {
@@ -1421,7 +1464,7 @@ export class StatementImportsService {
     });
 
     if (!batch) {
-      throw new NotFoundException('Lote de importacao nao encontrado.');
+      throw new NotFoundException('Lote de importação não encontrado.');
     }
 
     const appliedMovements = await this.prisma.importedMovement.count({
@@ -1437,7 +1480,7 @@ export class StatementImportsService {
 
     if (appliedMovements > 0) {
       throw new BadRequestException(
-        'Lote com movimentos aplicados nao pode ser excluido para preservar a rastreabilidade.',
+        'Lote com movimentos aplicados não pode ser excluído para preservar a rastreabilidade.',
       );
     }
 
@@ -1448,7 +1491,7 @@ export class StatementImportsService {
     });
 
     return {
-      message: 'Lote de importacao excluido com sucesso.',
+      message: 'Lote de importação excluído com sucesso.',
     };
   }
 
@@ -1470,7 +1513,7 @@ export class StatementImportsService {
     });
 
     if (!batch) {
-      throw new NotFoundException('Lote de importacao nao encontrado.');
+      throw new NotFoundException('Lote de importação não encontrado.');
     }
 
     const movements = await this.prisma.importedMovement.findMany({
@@ -1492,7 +1535,7 @@ export class StatementImportsService {
 
     if (movements.length !== movementIds.length) {
       throw new NotFoundException(
-        'Um ou mais movimentos selecionados nao pertencem ao lote.',
+        'Um ou mais movimentos selecionados não pertencem ao lote.',
       );
     }
 
@@ -1505,7 +1548,7 @@ export class StatementImportsService {
 
     if (invalidMovement) {
       throw new BadRequestException(
-        'Apenas transacoes importadas editaveis podem receber categoria em massa.',
+        'Apenas transações importadas editáveis podem receber categoria em massa.',
       );
     }
 
@@ -1619,17 +1662,17 @@ export class StatementImportsService {
     });
 
     if (!movement) {
-      throw new NotFoundException('Movimento importado nao encontrado.');
+      throw new NotFoundException('Movimento importado não encontrado.');
     }
 
     if (movement.status === ImportedMovementStatus.APPLIED) {
       throw new BadRequestException(
-        'Movimentos ja aplicados nao podem ser editados.',
+        'Movimentos já aplicados não podem ser editados.',
       );
     }
 
     const rawType = trimEditableText(dto.rawType, 'Tipo');
-    const rawDescription = trimEditableText(dto.rawDescription, 'Descricao');
+    const rawDescription = trimEditableText(dto.rawDescription, 'Descrição');
     const hasChanges = [
       dto.date,
       dto.amountCents,
@@ -1691,26 +1734,26 @@ export class StatementImportsService {
         reviewTransferAccountId
       ) {
         throw new BadRequestException(
-          'Conta de transferencia so pode ser informada quando o alvo revisado for TRANSFER.',
+          'Conta de transferência só pode ser informada quando o alvo revisado for TRANSFER.',
         );
       }
 
       if (effectiveReviewTarget === ImportedMovementReviewTarget.TRANSFER) {
         if (!movement.file.financialAccountId) {
           throw new BadRequestException(
-            'Selecione uma conta financeira para o arquivo antes de revisar transferencia.',
+            'Selecione uma conta financeira para o arquivo antes de revisar transferência.',
           );
         }
 
         if (!reviewTransferAccountId) {
           throw new BadRequestException(
-            'Informe a outra conta da transferencia.',
+            'Informe a outra conta da transferência.',
           );
         }
 
         if (reviewTransferAccountId === movement.file.financialAccountId) {
           throw new BadRequestException(
-            'A conta da transferencia deve ser diferente da conta do extrato.',
+            'A conta da transferência deve ser diferente da conta do extrato.',
           );
         }
 
@@ -1888,12 +1931,12 @@ export class StatementImportsService {
     });
 
     if (!movement) {
-      throw new NotFoundException('Movimento importado nao encontrado.');
+      throw new NotFoundException('Movimento importado não encontrado.');
     }
 
     if (movement.status === 'APPLIED') {
       throw new BadRequestException(
-        'Movimentos ja aplicados nao podem ser revisados.',
+        'Movimentos já aplicados não podem ser revisados.',
       );
     }
 
@@ -1952,7 +1995,7 @@ export class StatementImportsService {
     });
 
     if (!batch) {
-      throw new NotFoundException('Lote de importacao nao encontrado.');
+      throw new NotFoundException('Lote de importação não encontrado.');
     }
 
     const readyMovements = batch.files.flatMap((file) =>
@@ -2004,7 +2047,7 @@ export class StatementImportsService {
         if (reviewTarget === ImportedMovementReviewTarget.TRANSFER) {
           if (!movement.reviewTransferAccountId) {
             throw new BadRequestException(
-              'Transferencia pronta precisa ter a outra conta informada.',
+              'Transferência pronta precisa ter a outra conta informada.',
             );
           }
 
@@ -2045,7 +2088,7 @@ export class StatementImportsService {
 
           if (updated.count !== 1) {
             throw new BadRequestException(
-              'Movimento pronto ja foi alterado antes da aplicacao.',
+              'Movimento pronto já foi alterado antes da aplicação.',
             );
           }
 
@@ -2055,7 +2098,7 @@ export class StatementImportsService {
 
         if (!movement.reviewCategoryId) {
           throw new BadRequestException(
-            'Transacao pronta precisa ter categoria revisada.',
+            'Transação pronta precisa ter categoria revisada.',
           );
         }
 
@@ -2094,7 +2137,7 @@ export class StatementImportsService {
 
         if (updated.count !== 1) {
           throw new BadRequestException(
-            'Movimento pronto ja foi alterado antes da aplicacao.',
+            'Movimento pronto já foi alterado antes da aplicação.',
           );
         }
 
@@ -2156,7 +2199,7 @@ export class StatementImportsService {
     });
 
     if (!batch) {
-      throw new NotFoundException('Lote de importacao nao encontrado.');
+      throw new NotFoundException('Lote de importação não encontrado.');
     }
 
     const requestedMovementIds = selectedMovementIds
@@ -2191,7 +2234,7 @@ export class StatementImportsService {
       appliedMovements.length !== requestedMovementIds.length
     ) {
       throw new BadRequestException(
-        'Alguns movimentos selecionados nao estao aplicados neste lote.',
+        'Alguns movimentos selecionados não estão aplicados neste lote.',
       );
     }
 
@@ -2213,7 +2256,7 @@ export class StatementImportsService {
 
     if (transactionIds.length + transferIds.length === 0) {
       throw new BadRequestException(
-        'Movimentos aplicados nao possuem vinculo rastreavel para desfazer.',
+        'Movimentos aplicados não possuem vínculo rastreável para desfazer.',
       );
     }
 
@@ -2228,7 +2271,7 @@ export class StatementImportsService {
 
         if (deletedTransactions.count !== transactionIds.length) {
           throw new BadRequestException(
-            'Nao foi possivel desfazer todas as transacoes vinculadas ao lote.',
+            'Não foi possível desfazer todas as transações vinculadas ao lote.',
           );
         }
       }
@@ -2243,7 +2286,7 @@ export class StatementImportsService {
 
         if (deletedTransfers.count !== transferIds.length) {
           throw new BadRequestException(
-            'Nao foi possivel desfazer todas as transferencias vinculadas ao lote.',
+            'Não foi possível desfazer todas as transferências vinculadas ao lote.',
           );
         }
       }

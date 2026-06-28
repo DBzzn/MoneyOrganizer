@@ -18,6 +18,7 @@ model User {
   name                   String
   email                  String                 @unique
   password               String
+  reserveTargetMonths    Int                    @default(6)
   createdAt              DateTime               @default(now())
   categories             Category[]
   transactions           Transaction[]
@@ -243,6 +244,7 @@ model Reminder {
 
 model StatementImportBatch {
   id        String                     @id @default(uuid())
+  name      String?                    @db.VarChar(120)
   status    StatementImportBatchStatus @default(REVIEWING)
   userId    String
   user      User                       @relation(fields: [userId], references: [id])

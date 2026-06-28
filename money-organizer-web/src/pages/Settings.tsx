@@ -11,6 +11,7 @@ import {
   FileUp,
   Loader2,
   Moon,
+  PiggyBank,
   Save,
   SlidersHorizontal,
   Sun,
@@ -26,6 +27,7 @@ import { Layout } from '../components/Layout'
 import {
   clearUserData,
   deleteMyAccount,
+  updateUserPreferences,
   updateUserPassword,
   updateUserProfile,
 } from '../api/users'
@@ -59,14 +61,14 @@ function apiErrorMessage(error: unknown, fallback: string) {
 }
 
 type StatusTone = 'green' | 'yellow' | 'blue' | 'gray'
-type SavingAction = 'account' | null
+type SavingAction = 'account' | 'preferences' | null
 type DangerAction = 'clear' | 'delete'
 
 const statusToneClassName: Record<StatusTone, string> = {
-  green: 'border-emerald-200 bg-emerald-50 text-emerald-700',
-  yellow: 'border-yellow-200 bg-yellow-50 text-yellow-700',
-  blue: 'border-blue-200 bg-blue-50 text-blue-700',
-  gray: 'border-slate-200 bg-slate-50 text-slate-700',
+  green: 'app-chip app-chip-success',
+  yellow: 'app-chip app-chip-warning',
+  blue: 'app-chip app-chip-info',
+  gray: 'app-chip app-chip-muted',
 }
 
 const dangerCopy: Record<
@@ -289,6 +291,9 @@ export function Settings() {
   const [savingAction, setSavingAction] = useState<SavingAction>(null)
   const [name, setName] = useState(user?.name ?? '')
   const [email, setEmail] = useState(user?.email ?? '')
+  const [reserveTargetMonths, setReserveTargetMonths] = useState(
+    String(user?.reserveTargetMonths ?? 6),
+  )
   const [newPassword, setNewPassword] = useState('')
   const [confirmNewPassword, setConfirmNewPassword] = useState('')
   const [isAccountConfirmOpen, setIsAccountConfirmOpen] = useState(false)
@@ -296,14 +301,15 @@ export function Settings() {
   const [dangerAction, setDangerAction] = useState<DangerAction | null>(null)
   const [dangerPassword, setDangerPassword] = useState('')
   const [isDangerSubmitting, setIsDangerSubmitting] = useState(false)
-  const displayName = useMemo(() => user?.name?.trim() || 'Usuario', [user?.name])
+  const displayName = useMemo(() => user?.name?.trim() || 'Usuário', [user?.name])
   const displayEmail = user?.email ?? 'Sem email carregado'
   const activeDangerCopy = dangerAction ? dangerCopy[dangerAction] : null
 
   useEffect(() => {
     setName(user?.name ?? '')
     setEmail(user?.email ?? '')
-  }, [user?.email, user?.name])
+    setReserveTargetMonths(String(user?.reserveTargetMonths ?? 6))
+  }, [user?.email, user?.name, user?.reserveTargetMonths])
 
   const handleContextHelpChange = () => {
     setShowContextHelp((current) => {
@@ -418,6 +424,38 @@ export function Settings() {
     }
   }
 
+  const handlePreferencesSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const parsedReserveTargetMonths = Number(reserveTargetMonths)
+
+    if (
+      !Number.isInteger(parsedReserveTargetMonths) ||
+      parsedReserveTargetMonths < 1 ||
+      parsedReserveTargetMonths > 36
+    ) {
+      toast.error('Informe uma meta de reserva entre 1 e 36 meses.')
+      return
+    }
+
+    if (parsedReserveTargetMonths === (user?.reserveTargetMonths ?? 6)) {
+      toast('Nenhuma preferência para salvar.')
+      return
+    }
+
+    setSavingAction('preferences')
+    try {
+      await updateUserPreferences({
+        reserveTargetMonths: parsedReserveTargetMonths,
+      })
+      await refreshUser()
+      toast.success('Preferências salvas.')
+    } catch (error) {
+      toast.error(apiErrorMessage(error, 'Erro ao salvar as preferências.'))
+    } finally {
+      setSavingAction(null)
+    }
+  }
+
   const closeDangerModal = () => {
     if (isDangerSubmitting) {
       return
@@ -484,6 +522,52 @@ export function Settings() {
 
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,0.85fr)]">
           <div className="space-y-5">
+            <SettingsCard
+              title="Planejamento"
+              description="Meta pessoal usada para medir reserva, fôlego de caixa e relatórios."
+              icon={PiggyBank}
+            >
+              <form onSubmit={handlePreferencesSubmit} className="space-y-4">
+                <div
+                  className="rounded-xl border p-4"
+                  style={{
+                    borderColor: 'var(--color-border-soft)',
+                    backgroundColor: 'var(--color-bg-input)',
+                  }}
+                >
+                  <FieldGroup label="Reserva mínima">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                      <input
+                        value={reserveTargetMonths}
+                        onChange={(event) => setReserveTargetMonths(event.target.value)}
+                        type="number"
+                        min={1}
+                        max={36}
+                        step={1}
+                        inputMode="numeric"
+                        className="app-control sm:max-w-40"
+                      />
+                      <span
+                        className="text-sm"
+                        style={{ color: 'var(--color-text-muted)' }}
+                      >
+                        meses de despesas cobertos pelo saldo disponível.
+                      </span>
+                    </div>
+                  </FieldGroup>
+                  <p className="mt-3 text-xs leading-5" style={{ color: 'var(--color-text-muted)' }}>
+                    O Reports usa essa meta para calcular valor-alvo, falta para reserva e tempo estimado até a meta.
+                  </p>
+                </div>
+                <div className="flex justify-end">
+                  <SaveButton
+                    label="Salvar preferências"
+                    isLoading={savingAction === 'preferences'}
+                  />
+                </div>
+              </form>
+            </SettingsCard>
+
             <SettingsCard
               title="Conta"
               description="Identidade, acesso e dados vinculados ao usuário autenticado."
@@ -712,7 +796,7 @@ export function Settings() {
                 size={18}
                 className={dangerAction === 'delete' ? 'text-red-600' : 'text-amber-700'}
               />
-              <span>VOCE DESEJA MESMO ISSO?</span>
+              <span>VOCÊ DESEJA MESMO ISSO?</span>
             </div>
             <ul className="space-y-2 text-sm leading-6" style={{ color: 'var(--color-text-muted)' }}>
               {activeDangerCopy.details.map((detail) => (

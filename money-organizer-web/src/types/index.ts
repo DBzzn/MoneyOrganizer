@@ -2,6 +2,7 @@ export interface User {
   id: string;
   name: string;
   email: string;
+  reserveTargetMonths: number;
   createdAt: string;
 }
 
@@ -298,6 +299,7 @@ export interface StatementImportFile {
 
 export interface StatementImportBatch {
   id: string;
+  name?: string | null;
   status: StatementImportBatchStatus;
   createdAt: string;
   updatedAt: string;
@@ -341,6 +343,7 @@ export interface StatementImportBatchSummaryFile {
 
 export interface StatementImportBatchSummary {
   id: string;
+  name?: string | null;
   status: StatementImportBatchStatus;
   createdAt: string;
   updatedAt: string;

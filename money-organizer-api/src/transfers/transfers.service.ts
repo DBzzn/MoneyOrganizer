@@ -297,7 +297,7 @@ export class TransfersService {
     });
 
     if (!transfer) {
-      throw new NotFoundException('TransferÃªncia nÃ£o encontrada.');
+      throw new NotFoundException('Transferência não encontrada.');
     }
 
     const importedMovementCount = await this.prisma.importedMovement.count({
@@ -310,7 +310,7 @@ export class TransfersService {
 
     if (importedMovementCount > 0) {
       throw new BadRequestException(
-        'Transferencia criada por importacao nao pode ser excluida diretamente. Mantenha a rastreabilidade ate existir um fluxo de desfazer para importacoes.',
+        'Transferência criada por importação não pode ser excluída diretamente. Mantenha a rastreabilidade até existir um fluxo de desfazer para importações.',
       );
     }
 

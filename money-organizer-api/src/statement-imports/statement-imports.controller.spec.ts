@@ -10,6 +10,7 @@ describe('StatementImportsController', () => {
   let controller: StatementImportsController;
   let service: {
     undoAppliedMovements: jest.Mock;
+    updateBatch: jest.Mock;
   };
 
   const request = {
@@ -22,6 +23,7 @@ describe('StatementImportsController', () => {
   beforeEach(async () => {
     service = {
       undoAppliedMovements: jest.fn(),
+      updateBatch: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -81,5 +83,21 @@ describe('StatementImportsController', () => {
       'batch-1',
       undefined,
     );
+  });
+
+  it('passes batch rename payload scoped to the authenticated user', async () => {
+    const response = {
+      id: 'batch-1',
+      name: 'Nubank maio',
+    };
+    service.updateBatch.mockResolvedValue(response);
+
+    await expect(
+      controller.updateBatch(request, 'batch-1', { name: 'Nubank maio' }),
+    ).resolves.toBe(response);
+
+    expect(service.updateBatch).toHaveBeenCalledWith('user-1', 'batch-1', {
+      name: 'Nubank maio',
+    });
   });
 });

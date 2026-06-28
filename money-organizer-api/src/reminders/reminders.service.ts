@@ -106,7 +106,7 @@ export class RemindersService {
     });
 
     if (!account) {
-      throw new BadRequestException('Conta financeira nao encontrada ou arquivada.');
+      throw new BadRequestException('Conta financeira não encontrada ou arquivada.');
     }
   }
 
@@ -120,7 +120,7 @@ export class RemindersService {
     });
 
     if (!account) {
-      throw new BadRequestException('Conta financeira nao encontrada.');
+      throw new BadRequestException('Conta financeira não encontrada.');
     }
   }
 
@@ -135,7 +135,7 @@ export class RemindersService {
     });
 
     if (!category) {
-      throw new BadRequestException('Categoria nao encontrada ou arquivada.');
+      throw new BadRequestException('Categoria não encontrada ou arquivada.');
     }
   }
 
@@ -149,7 +149,7 @@ export class RemindersService {
     });
 
     if (!category) {
-      throw new BadRequestException('Categoria nao encontrada.');
+      throw new BadRequestException('Categoria não encontrada.');
     }
   }
 
@@ -229,7 +229,7 @@ export class RemindersService {
     });
 
     if (!reminder) {
-      throw new NotFoundException('Lembrete nao encontrado.');
+      throw new NotFoundException('Lembrete não encontrado.');
     }
 
     return reminder;
@@ -277,7 +277,7 @@ export class RemindersService {
       });
     } catch (error: any) {
       if (error?.code === 'P2025') {
-        throw new NotFoundException('Lembrete nao encontrado.');
+        throw new NotFoundException('Lembrete não encontrado.');
       }
       throw error;
     }
@@ -295,7 +295,7 @@ export class RemindersService {
       return { message: 'Lembrete removido com sucesso!' };
     } catch (error: any) {
       if (error?.code === 'P2025') {
-        throw new NotFoundException('Lembrete nao encontrado.');
+        throw new NotFoundException('Lembrete não encontrado.');
       }
       throw error;
     }

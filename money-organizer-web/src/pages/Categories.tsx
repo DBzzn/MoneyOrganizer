@@ -22,7 +22,7 @@ import { getStoredIconOption } from '../components/storedIconRegistry'
 
 const categorySchema = z.object({
     name: z.string().min(1, 'O Nome é obrigatório!'),
-    icon: z.string().max(64, 'Icone muito longo').optional(),
+    icon: z.string().max(64, 'Ícone muito longo').optional(),
     kind: z.enum(['EXPENSE', 'INCOME', 'BOTH']),
 })
 
@@ -252,7 +252,7 @@ export function Categories() {
                         <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4 sm:flex-row sm:items-start">
                             <div className="w-full sm:w-72">
                                 <label className="block text-sm font-medium mb-1" style={{ color: 'var(--color-text)' }}>
-                                    Icone
+                                    Ícone
                                 </label>
                                 <StoredIconPicker
                                     value={selectedIcon}
@@ -336,11 +336,11 @@ export function Categories() {
                                                 {category.name}
                                             </span>
                                             {category.isArchived && (
-                                                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
+                                                <span className="app-chip app-chip-muted px-2 py-0.5 text-xs font-medium">
                                                     Arquivada
                                                 </span>
                                             )}
-                                            <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700">
+                                            <span className="app-chip app-chip-info px-2 py-0.5 text-xs font-medium">
                                                 {CATEGORY_KIND_LABELS[category.kind]}
                                             </span>
                                         </div>

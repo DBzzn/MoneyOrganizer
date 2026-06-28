@@ -95,7 +95,7 @@ export class UpdateImportedMovementDto {
 
   @ApiProperty({
     description: 'Optional note explaining the reconciliation decision',
-    example: 'Nao e duplicidade; compra recorrente no mesmo dia.',
+    example: 'Não é duplicidade; compra recorrente no mesmo dia.',
     required: false,
     nullable: true,
   })

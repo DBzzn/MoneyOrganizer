@@ -11,6 +11,7 @@ import { AuthGuard } from '@nestjs/passport';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserProfileDto } from './dto/update-user-profile.dto';
+import { UpdateUserPreferencesDto } from './dto/update-user-preferences.dto';
 import { UpdateUserPasswordDto } from './dto/update-user-password.dto';
 import { ConfirmUserPasswordDto } from './dto/confirm-user-password.dto';
 import {
@@ -69,6 +70,20 @@ export class UsersController {
     @Body() dto: UpdateUserPasswordDto,
   ) {
     return this.usersService.updatePassword(req.user.id, dto);
+  }
+
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Atualizar preferências financeiras do usuário autenticado' })
+  @ApiResponse({ status: 200, description: 'Preferências atualizadas com sucesso' })
+  @ApiResponse({ status: 400, description: 'Dados inválidos' })
+  @ApiResponse({ status: 401, description: 'Token inválido' })
+  @UseGuards(AuthGuard('jwt'))
+  @Patch('me/preferences')
+  updatePreferences(
+    @Request() req: AuthenticatedRequest,
+    @Body() dto: UpdateUserPreferencesDto,
+  ) {
+    return this.usersService.updatePreferences(req.user.id, dto);
   }
 
   @ApiBearerAuth('JWT-auth')

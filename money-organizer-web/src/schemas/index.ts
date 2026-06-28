@@ -71,7 +71,7 @@ export const financialAccountSchema = z.object({
     name: z.string().min(1, 'O nome é obrigatório!'),
     type: z.enum(['BANK_ACCOUNT', 'CASH_WALLET', 'OTHER']),
     institutionName: z.string().optional(),
-    icon: z.string().max(64, 'Icone muito longo').optional(),
+    icon: z.string().max(64, 'Ícone muito longo').optional(),
     color: z.string().optional(),
     initialBalance: z.number().min(0, 'O saldo inicial não pode ser negativo'),
     includeInDashboard: z.boolean(),
@@ -93,18 +93,18 @@ export const transferSchema = z.object({
 })
 
 export const balanceAdjustmentSchema = z.object({
-    amount: z.number().refine((value) => value !== 0, 'O ajuste nao pode ser zero'),
-    date: z.string().min(1, 'A data e obrigatoria!'),
-    financialAccountId: z.string().min(1, 'A conta e obrigatoria!'),
-    reason: z.string().trim().min(1, 'O motivo e obrigatorio!').max(240, 'Use ate 240 caracteres'),
+    amount: z.number().refine((value) => value !== 0, 'O ajuste não pode ser zero'),
+    date: z.string().min(1, 'A data é obrigatória!'),
+    financialAccountId: z.string().min(1, 'A conta é obrigatória!'),
+    reason: z.string().trim().min(1, 'O motivo é obrigatório!').max(240, 'Use até 240 caracteres'),
 })
 
 export const reminderSchema = z.object({
-    title: z.string().trim().min(1, 'O titulo e obrigatorio!').max(120, 'Use ate 120 caracteres'),
-    dueDate: z.string().min(1, 'A data de vencimento e obrigatoria!'),
+    title: z.string().trim().min(1, 'O título é obrigatório!').max(120, 'Use até 120 caracteres'),
+    dueDate: z.string().min(1, 'A data de vencimento é obrigatória!'),
     amount: z.number().min(0.01, 'O valor deve ser maior que zero').nullable().optional(),
     status: z.enum(['PENDING', 'DONE', 'CANCELED']),
-    note: z.string().max(500, 'Use ate 500 caracteres').nullable().optional(),
+    note: z.string().max(500, 'Use até 500 caracteres').nullable().optional(),
     financialAccountId: z.string().nullable().optional(),
     categoryId: z.string().nullable().optional(),
 })
