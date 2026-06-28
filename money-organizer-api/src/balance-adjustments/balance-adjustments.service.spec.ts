@@ -105,7 +105,7 @@ describe('BalanceAdjustmentsService', () => {
       service.create('user-1', {
         amount: 25,
         date: '2026-06-10',
-        reason: 'Conferencia',
+        reason: 'Conferência',
         financialAccountId: 'account-1',
       }),
     ).rejects.toThrow(BadRequestException);
@@ -149,14 +149,14 @@ describe('BalanceAdjustmentsService', () => {
       id: 'adjustment-1',
       amount: new Prisma.Decimal(25),
       date: new Date(2026, 5, 11, 12),
-      reason: 'Conferencia final',
+      reason: 'Conferência final',
       financialAccountId: 'account-1',
     });
 
     await service.update('user-1', 'adjustment-1', {
       amount: 25,
       date: '2026-06-11',
-      reason: '  Conferencia final  ',
+      reason: '  Conferência final  ',
     });
 
     expect(prisma.balanceAdjustment.update).toHaveBeenCalledWith(
@@ -168,7 +168,7 @@ describe('BalanceAdjustmentsService', () => {
         data: expect.objectContaining({
           amount: expect.any(Prisma.Decimal),
           date: new Date(2026, 5, 11, 12),
-          reason: 'Conferencia final',
+          reason: 'Conferência final',
         }),
       }),
     );
@@ -192,7 +192,7 @@ describe('BalanceAdjustmentsService', () => {
     prisma.balanceAdjustment.update.mockRejectedValue({ code: 'P2025' });
 
     await expect(
-      service.update('user-1', 'adjustment-1', { reason: 'Conferencia' }),
+      service.update('user-1', 'adjustment-1', { reason: 'Conferência' }),
     ).rejects.toThrow(NotFoundException);
   });
 });

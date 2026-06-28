@@ -384,7 +384,7 @@ describe('FinancialAccountsService', () => {
         id: 'adjustment-1',
         amount: new Prisma.Decimal(5),
         date: new Date('2026-06-04T12:00:00.000Z'),
-        reason: 'Conferencia',
+        reason: 'Conferência',
         createdAt: new Date('2026-06-04T13:00:00.000Z'),
       },
     ]);
@@ -580,7 +580,7 @@ describe('FinancialAccountsService', () => {
         id: 'adjustment-1',
         amount: new Prisma.Decimal(5),
         date: new Date('2026-06-04T12:00:00.000Z'),
-        reason: 'Conferencia',
+        reason: 'Conferência',
         createdAt: new Date('2026-06-04T13:00:00.000Z'),
       },
     ]);

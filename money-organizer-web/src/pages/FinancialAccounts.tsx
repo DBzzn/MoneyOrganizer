@@ -741,7 +741,7 @@ export function FinancialAccounts() {
                                     type="text"
                                     maxLength={240}
                                     className="app-control w-full"
-                                    placeholder="Ex: Conferencia com banco"
+                                    placeholder="Ex: Conferência com banco"
                                 />
                                 {adjustmentForm.formState.errors.reason && (
                                     <p className="mt-1 text-sm text-red-500">{adjustmentForm.formState.errors.reason.message}</p>

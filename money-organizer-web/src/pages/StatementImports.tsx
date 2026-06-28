@@ -3963,7 +3963,7 @@ export function StatementImports() {
         </ConfirmModal>
         <ConfirmModal
           isOpen={isUndoConfirmOpen}
-          message="Escolha exatamente quais aplicacoes deste lote devem ser desfeitas."
+          message="Escolha exatamente quais aplicações deste lote devem ser desfeitas."
           title="Desfazer aplicados"
           confirmLabel="Desfazer aplicados"
           maxWidthClassName="max-w-5xl"
@@ -4130,7 +4130,7 @@ function SelectedReviewActionsMenu({
     <div
       ref={menuRef}
       role="menu"
-      aria-label="Acoes dos movimentos selecionados"
+      aria-label="Ações dos movimentos selecionados"
       onContextMenu={(event) => event.preventDefault()}
       className="fixed z-[10000] w-72 overflow-hidden rounded-xl border p-2 shadow-2xl"
       style={{
@@ -4147,7 +4147,7 @@ function SelectedReviewActionsMenu({
             className="text-sm font-semibold"
             style={{ color: "var(--color-text)" }}
           >
-            Acoes dos selecionados
+            Ações dos selecionados
           </p>
           <p
             className="mt-0.5 text-xs"
@@ -5841,7 +5841,7 @@ function UndoAppliedConfirmationContent({
                   className="block text-sm font-semibold"
                   style={{ color: "var(--color-text)" }}
                 >
-                  Todas as aplicacoes do lote aberto
+                  Todas as aplicações do lote aberto
                 </span>
                 <span
                   className="block text-xs"
@@ -6068,8 +6068,8 @@ function UndoAppliedConfirmationContent({
                       O desfazer remove lancamentos financeiros reais.
                     </p>
                     <p className="mt-1 text-sm leading-5 text-rose-800">
-                      Apenas as aplicacoes selecionadas serao excluidas. Os
-                      movimentos voltam para Pronto e continuam revisaveis no
+                      Apenas as aplicações selecionadas serão excluídas. Os
+                      movimentos voltam para Pronto e continuam revisáveis no
                       lote.
                     </p>
                   </div>
@@ -6254,7 +6254,7 @@ function ApplyReadyConfirmationGrid({
             className="text-sm font-semibold"
             style={{ color: "var(--color-text)" }}
           >
-            Movimentos que serao aplicados
+            Movimentos que serão aplicados
           </p>
           <p className="text-xs" style={{ color: "var(--color-text-muted)" }}>
             Confira conta, destino, arquivo de origem e valor.

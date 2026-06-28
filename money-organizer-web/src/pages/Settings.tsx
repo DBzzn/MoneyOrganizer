@@ -830,7 +830,7 @@ export function Settings() {
               <div>
                 <h2 className="text-lg font-semibold">Ajuda do Money Organizer</h2>
                 <p className="mt-2 text-sm leading-6" style={{ color: 'var(--color-text-muted)' }}>
-                  Espaco reservado para o tutorial guiado e ajuda por tela.
+                  Espaço reservado para o tutorial guiado e ajuda por tela.
                 </p>
               </div>
               <button
