@@ -125,8 +125,8 @@ export function Register() {
           </div>
 
           {serverError && (
-            <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3">
-              <p className="text-red-600 text-sm">{serverError}</p>
+            <div className="app-inline-alert app-inline-alert-danger px-4 py-3">
+              <p className="text-sm">{serverError}</p>
             </div>
           )}
 

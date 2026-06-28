@@ -1009,6 +1009,18 @@ html,
     color: var(--color-text);
 }
 
+.app-inline-alert-success {
+    border-color: color-mix(in srgb, var(--color-income) 45%, transparent);
+    background-color: color-mix(in srgb, var(--color-income) 14%, var(--color-bg-solid));
+    color: var(--color-text);
+}
+
+.app-inline-alert-info {
+    border-color: color-mix(in srgb, var(--color-brand) 40%, transparent);
+    background-color: color-mix(in srgb, var(--color-brand) 12%, var(--color-bg-solid));
+    color: var(--color-text);
+}
+
 .app-soft-button-info,
 .app-soft-button-success,
 .app-soft-button-warning,

@@ -994,8 +994,8 @@ export function Transactions() {
                             </label>
 
                             {editingTransaction.type === 'CREDIT_INSTALLMENT' && (
-                                <div className="sm:col-span-2 bg-yellow-50 border border-yellow-200 rounded-lg px-4 py-3">
-                                    <p className="text-yellow-700 text-sm">
+                                <div className="app-inline-alert app-inline-alert-warning px-4 py-3 sm:col-span-2">
+                                    <p className="text-sm">
                                         ⚠️ Parcela {editingTransaction.currentInstallment}/{editingTransaction.totalInstallments}x — tipo e dados de parcelamento são imutáveis
                                     </p>
                                 </div>

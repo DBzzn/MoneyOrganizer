@@ -748,7 +748,7 @@ export function FinancialAccounts() {
                                 )}
                             </div>
 
-                            <div className="flex gap-2 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs leading-5 text-emerald-800 sm:col-span-2">
+                            <div className="app-inline-alert app-inline-alert-success flex gap-2 px-3 py-2 text-xs leading-5 sm:col-span-2">
                                 <AlertTriangle size={15} className="mt-0.5 shrink-0" />
                                 <span>
                                     Use valor positivo para aumentar o saldo calculado e negativo para reduzir. Este registro não entra como receita ou despesa.

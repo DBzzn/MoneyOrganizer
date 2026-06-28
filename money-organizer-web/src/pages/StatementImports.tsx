@@ -3607,7 +3607,7 @@ export function StatementImports() {
                     title={undoAppliedDisabledReason ?? "Desfazer aplicados"}
                     onClick={openUndoAppliedDialog}
                     disabled={Boolean(undoAppliedDisabledReason)}
-                    className="flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-4 text-sm font-semibold text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:border-rose-100 disabled:bg-rose-50 disabled:text-rose-300 sm:w-auto"
+                    className="app-soft-button-danger flex h-10 w-full items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
                   >
                     {isUndoingApplied ? (
                       <RefreshCw size={16} className="animate-spin" />
@@ -5855,22 +5855,14 @@ function UndoAppliedConfirmationContent({
               <button
                 type="button"
                 onClick={() => onSelectMany(allMovementIds, true)}
-                className="rounded-lg border px-3 py-2 text-xs font-semibold transition hover:bg-rose-50"
-                style={{
-                  borderColor: "var(--color-border)",
-                  color: "var(--color-text)",
-                }}
+                className="app-soft-button-danger rounded-lg px-3 py-2 text-xs font-semibold transition"
               >
                 Selecionar tudo
               </button>
               <button
                 type="button"
                 onClick={() => onSelectMany(allMovementIds, false)}
-                className="rounded-lg border px-3 py-2 text-xs font-semibold transition hover:bg-rose-50"
-                style={{
-                  borderColor: "var(--color-border)",
-                  color: "var(--color-text)",
-                }}
+                className="app-soft-button-muted rounded-lg px-3 py-2 text-xs font-semibold transition"
               >
                 Limpar seleção
               </button>
@@ -5891,7 +5883,7 @@ function UndoAppliedConfirmationContent({
 
               return (
                 <div key={batchGroup.batchId} className="space-y-3">
-                  <div className="rounded-xl border border-rose-100 bg-rose-50/70 p-3">
+                  <div className="app-inline-alert app-inline-alert-danger p-3">
                     <label className="flex items-start gap-3">
                       <input
                         type="checkbox"
