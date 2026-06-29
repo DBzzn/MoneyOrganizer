@@ -271,7 +271,7 @@ export class CsvStatementParser implements StatementParser {
       movements,
       warnings: [
         ...(movements.length === 0
-          ? ['Nenhuma movimentacao foi identificada no CSV enviado.']
+          ? ['Nenhuma movimentação foi identificada no CSV enviado.']
           : []),
         ...(skippedRows.length > 0
           ? [

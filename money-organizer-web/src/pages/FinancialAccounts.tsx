@@ -80,8 +80,8 @@ function ledgerMovementLabel(item: AccountLedgerItem): string {
     const labels: Record<AccountLedgerItem['movementType'], string> = {
         TRANSACTION_INCOME: 'Receita',
         TRANSACTION_EXPENSE: 'Despesa',
-        TRANSFER_IN: 'Transferencia recebida',
-        TRANSFER_OUT: 'Transferencia enviada',
+        TRANSFER_IN: 'Transferência recebida',
+        TRANSFER_OUT: 'Transferência enviada',
         BALANCE_ADJUSTMENT: 'Ajuste de saldo',
     }
 
@@ -90,7 +90,7 @@ function ledgerMovementLabel(item: AccountLedgerItem): string {
 
 function ledgerItemDetail(item: AccountLedgerItem): string {
     if (item.sourceType === 'TRANSACTION') {
-        const typeLabel = item.transactionType ? transactionTypeLabel(item.transactionType) : 'Transacao'
+        const typeLabel = item.transactionType ? transactionTypeLabel(item.transactionType) : 'Transação'
         const categoryName = item.category?.name
 
         return categoryName ? `${typeLabel} - ${categoryName}` : typeLabel
@@ -99,7 +99,7 @@ function ledgerItemDetail(item: AccountLedgerItem): string {
     if (item.sourceType === 'TRANSFER') {
         return item.relatedAccount
             ? `Conta relacionada: ${accountLabel(item.relatedAccount)}`
-            : 'Transferencia entre contas'
+            : 'Transferência entre contas'
     }
 
     return 'Conciliação manual'
@@ -764,7 +764,7 @@ export function FinancialAccounts() {
                                     <Check size={16} />
                                     {adjustmentForm.formState.isSubmitting
                                         ? 'Salvando...'
-                                        : editingAdjustment ? 'Salvar alteracoes' : 'Salvar ajuste'}
+                                        : editingAdjustment ? 'Salvar alterações' : 'Salvar ajuste'}
                                 </button>
                             </div>
                         </form>
@@ -1133,7 +1133,7 @@ export function FinancialAccounts() {
                         <div>
                             <h2 className="text-lg font-semibold" style={{ color: 'var(--color-text)' }}>Ajustes recentes</h2>
                             <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
-                                Conciliacoes manuais que alteram o saldo das contas
+                                Conciliações manuais que alteram o saldo das contas
                             </p>
                         </div>
                     </div>

@@ -597,8 +597,8 @@ export class FinancialAccountsService {
         date: transfer.date,
         createdAt: transfer.createdAt,
         title: isIncoming
-          ? `Transferencia recebida de ${relatedAccount.name}`
-          : `Transferencia enviada para ${relatedAccount.name}`,
+          ? `Transferência recebida de ${relatedAccount.name}`
+          : `Transferência enviada para ${relatedAccount.name}`,
         description: transfer.description ?? null,
         amount: centsToFixed(amountCents),
         signedAmount: centsToFixed(signedAmountCents),

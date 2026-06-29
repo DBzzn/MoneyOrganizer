@@ -663,7 +663,14 @@ export function Transactions() {
                         style={{ backgroundColor: 'var(--color-bg-card)', border: '1px solid var(--color-border)' }}>
                         <div className="flex items-center justify-between mb-4">
                             <h2 className="text-lg font-semibold" style={{ color: 'var(--color-text)' }}>Nova transação</h2>
-                            <button onClick={handleClose} className="transition" style={{ color: 'var(--color-text-muted)' }}>
+                            <button
+                                type="button"
+                                onClick={handleClose}
+                                aria-label="Fechar formulário de transação"
+                                title="Fechar"
+                                className="transition"
+                                style={{ color: 'var(--color-text-muted)' }}
+                            >
                                 <X size={20} />
                             </button>
                         </div>
@@ -787,7 +794,14 @@ export function Transactions() {
                         style={{ backgroundColor: 'var(--color-bg-card)', border: '1px solid var(--color-border)' }}>
                         <div className="flex items-center justify-between mb-4">
                             <h2 className="text-lg font-semibold" style={{ color: 'var(--color-text)' }}>Novo parcelamento</h2>
-                            <button onClick={handleClose} className="transition" style={{ color: 'var(--color-text-muted)' }}>
+                            <button
+                                type="button"
+                                onClick={handleClose}
+                                aria-label="Fechar formulário de parcelamento"
+                                title="Fechar"
+                                className="transition"
+                                style={{ color: 'var(--color-text-muted)' }}
+                            >
                                 <X size={20} />
                             </button>
                         </div>
@@ -894,7 +908,14 @@ export function Transactions() {
                         style={{ backgroundColor: 'var(--color-bg-card)', border: '1px solid var(--color-border)' }}>
                         <div className="flex items-center justify-between mb-4">
                             <h2 className="text-lg font-semibold" style={{ color: 'var(--color-text)' }}>Editar transação</h2>
-                            <button onClick={handleClose} className="transition" style={{ color: 'var(--color-text-muted)' }}>
+                            <button
+                                type="button"
+                                onClick={handleClose}
+                                aria-label="Fechar edição de transação"
+                                title="Fechar"
+                                className="transition"
+                                style={{ color: 'var(--color-text-muted)' }}
+                            >
                                 <X size={20} />
                             </button>
                         </div>
@@ -1162,14 +1183,20 @@ export function Transactions() {
                                             </td>
                                             <td className="px-6 py-4 flex gap-1">
                                                 <button
+                                                    type="button"
                                                     onClick={() => handleOpenEdit(t)}
+                                                    aria-label="Editar transação"
+                                                    title="Editar transação"
                                                     className="p-1.5 rounded-lg transition hover:bg-blue-50"
                                                     style={{ color: 'var(--color-text-muted)' }}
                                                 >
                                                     <Pencil size={15} />
                                                 </button>
                                                 <button
+                                                    type="button"
                                                     onClick={() => handleDelete(t)}
+                                                    aria-label="Deletar transação"
+                                                    title="Deletar transação"
                                                     className="p-1.5 rounded-lg transition hover:bg-red-50"
                                                     style={{ color: 'var(--color-text-muted)' }}
                                                 >

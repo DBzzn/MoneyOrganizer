@@ -87,7 +87,7 @@ export class OfxParser implements StatementParser {
       },
       movements,
       warnings: movements.length === 0
-        ? ['Nenhuma movimentacao foi identificada no OFX enviado.']
+        ? ['Nenhuma movimentação foi identificada no OFX enviado.']
         : [],
     };
   }

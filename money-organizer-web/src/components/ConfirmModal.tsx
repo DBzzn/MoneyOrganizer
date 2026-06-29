@@ -53,7 +53,12 @@ export default function ConfirmModal({
             >
                 <div className="mb-4 flex shrink-0 items-center justify-between gap-4">
                     <h2 className="text-lg font-semibold">{title}</h2>
-                    <button onClick={onCancel}>
+                    <button
+                        type="button"
+                        onClick={onCancel}
+                        aria-label="Fechar confirmação"
+                        title="Fechar"
+                    >
                         <X size={20} style={{ color: 'var(--color-text-muted)' }} />
                     </button>
                 </div>

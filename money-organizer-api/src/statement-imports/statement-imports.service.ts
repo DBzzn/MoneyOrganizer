@@ -1594,7 +1594,7 @@ export class StatementImportsService {
 
       if (updatedMovements.count !== movementIds.length) {
         throw new BadRequestException(
-          'Movimentos selecionados foram alterados antes da categorizacao em massa.',
+          'Movimentos selecionados foram alterados antes da categorização em massa.',
         );
       }
 

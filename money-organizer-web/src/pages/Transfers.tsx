@@ -433,7 +433,14 @@ export function Transfers() {
                             <h2 className="text-lg font-semibold" style={{ color: 'var(--color-text)' }}>
                                 {formMode === 'edit' ? 'Editar transferência' : 'Nova transferência'}
                             </h2>
-                            <button onClick={handleClose} className="transition" style={{ color: 'var(--color-text-muted)' }}>
+                            <button
+                                type="button"
+                                onClick={handleClose}
+                                aria-label="Fechar formulário de transferência"
+                                title="Fechar"
+                                className="transition"
+                                style={{ color: 'var(--color-text-muted)' }}
+                            >
                                 <X size={20} />
                             </button>
                         </div>

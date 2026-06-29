@@ -241,7 +241,10 @@ export function Categories() {
                                 {editing ? 'Editar categoria' : 'Nova categoria'}
                             </h2>
                             <button
+                                type="button"
                                 onClick={handleClose}
+                                aria-label="Fechar formulário de categoria"
+                                title="Fechar"
                                 className="transition"
                                 style={{ color: 'var(--color-text-muted)' }}
                             >

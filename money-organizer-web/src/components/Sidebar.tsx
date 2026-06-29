@@ -141,7 +141,7 @@ const pageNudges: Record<RouteKey, string[]> = {
     ],
     '/settings': [
         'Preferencia boa reduz atrito.',
-        'O app tambem precisa caber em voce.',
+        'O app também precisa caber em você.',
         'Controle pequeno, rotina melhor.',
         'Regra clara evita surpresa.',
         'Ajuste fino sem mexer no saldo.',

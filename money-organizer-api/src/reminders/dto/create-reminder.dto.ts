@@ -13,7 +13,7 @@ import { ReminderStatus } from '../../../generated/prisma/client';
 export class CreateReminderDto {
   @ApiProperty({
     description: 'Reminder title',
-    example: 'Pagar fatura do cartao',
+    example: 'Pagar fatura do cartão',
   })
   @IsString()
   @MaxLength(120)

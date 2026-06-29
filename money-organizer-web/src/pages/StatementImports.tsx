@@ -5704,7 +5704,7 @@ function PaginationControls({
       <div className="flex items-center gap-2">
         <button
           type="button"
-          title="Pagina anterior"
+          title="Página anterior"
           onClick={() => onPageChange(Math.max(1, page - 1))}
           disabled={page <= 1}
           className="flex h-9 w-9 items-center justify-center rounded-lg border transition disabled:cursor-not-allowed disabled:opacity-50"

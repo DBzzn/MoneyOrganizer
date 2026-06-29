@@ -237,7 +237,7 @@ export class NubankPdfParser implements StatementParser {
       },
       movements,
       warnings: movements.length === 0
-        ? ['Nenhuma movimentacao foi identificada no PDF enviado.']
+        ? ['Nenhuma movimentação foi identificada no PDF enviado.']
         : [],
     };
   }
