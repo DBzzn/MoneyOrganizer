@@ -5,6 +5,12 @@ import { jsPDF } from 'jspdf'
 import { getMonthlyBalance, getEvolution, getProjection, getTotalsByCategory } from '../api/transactions'
 import { getFinancialAccounts } from '../api/financialAccounts'
 import { buildAccountIdsParam, formatCurrency, formatMonth } from '../utils'
+import {
+    calculateFinancialHealthScore,
+    calculateReserveMetrics,
+    getFinancialHealth,
+    type FinancialHealthTone,
+} from '../utils/reportMetrics'
 import { ChartTooltip } from '../components/ChartTooltip'
 import { AccountFilter } from '../components/AccountFilter'
 import { formatStoredIconPrefix } from '../components/storedIconRegistry'
@@ -46,7 +52,7 @@ import {
 const EXPENSE_TYPES: TransactionType[] = ['CREDIT_CASH', 'CREDIT_INSTALLMENT', 'DEBIT', 'PIX', 'CASH']
 type ReportDepth = 'basic' | 'intermediate' | 'complete'
 type ExportFormat = 'html' | 'pdf' | 'csv' | 'xlsx'
-type InsightTone = 'green' | 'blue' | 'yellow' | 'red'
+type InsightTone = FinancialHealthTone
 type ActionPriority = 'Alta' | 'Média' | 'Baixa'
 
 type ReportActionItem = {
@@ -250,46 +256,6 @@ function formatMonthsToTarget(months: number | null): string {
     if (months < 1) return 'Menos de 1 mês'
 
     return `${months.toFixed(1)} meses`
-}
-
-function clampScore(score: number): number {
-    return Math.max(0, Math.min(100, Math.round(score)))
-}
-
-function getFinancialHealth(score: number): {
-    label: string
-    description: string
-    tone: InsightTone
-} {
-    if (score >= 80) {
-        return {
-            label: 'Excelente',
-            description: 'Boa combinação entre sobra, caixa e previsibilidade.',
-            tone: 'green',
-        }
-    }
-
-    if (score >= 65) {
-        return {
-            label: 'Saudável',
-            description: 'Base positiva, mas ainda vale monitorar concentração e projeção.',
-            tone: 'blue',
-        }
-    }
-
-    if (score >= 45) {
-        return {
-            label: 'Atenção',
-            description: 'Existem sinais de aperto ou dependência de poucos pontos do orçamento.',
-            tone: 'yellow',
-        }
-    }
-
-    return {
-        label: 'Crítico',
-        description: 'Priorize caixa, cortes recorrentes e revisão de pendências.',
-        tone: 'red',
-    }
 }
 
 type EvolutionChartPoint = {
@@ -756,34 +722,34 @@ export function Reports() {
     const topCategory = categoryTotals[0]
     const topCategoryAmount = Number(topCategory?.totalAmount ?? 0)
     const topCategoryShare = categoryTotalAmount > 0 ? (topCategoryAmount / categoryTotalAmount) * 100 : 0
-    const cashCoverageMonths = averageExpenses > 0 ? Math.max(0, currentCashBalance / averageExpenses) : null
-    const reserveTargetAmount = averageExpenses > 0 ? averageExpenses * reserveTargetMonths : null
-    const reserveGap = reserveTargetAmount === null ? null : Math.max(0, reserveTargetAmount - currentCashBalance)
-    const averageMonthlySurplus = evolution.length > 0 ? periodBalance / evolution.length : 0
-    const monthsToReserveTarget = reserveGap === null
-        ? null
-        : reserveGap === 0
-            ? 0
-            : averageMonthlySurplus > 0
-                ? reserveGap / averageMonthlySurplus
-                : null
-    const reserveCoverageRatio = cashCoverageMonths === null
-        ? null
-        : cashCoverageMonths / reserveTargetMonths
+    const {
+        cashCoverageMonths,
+        monthsToReserveTarget,
+        reserveCoverageRatio,
+        reserveGap,
+        reserveTargetAmount,
+    } = calculateReserveMetrics({
+        averageExpenses,
+        currentCashBalance,
+        evolutionMonthCount: evolution.length,
+        periodBalance,
+        reserveTargetMonths,
+    })
     const projectedNegativeMonths = projection.filter((item) => Number(item.projectedBalance) < 0)
     const nextProjection = projection[0]
     const showIntermediateSections = reportDepth !== 'basic'
     const showCompleteSections = reportDepth === 'complete'
     const reportPeriodLabel = `${formatMonth(evolutionStart)} até ${formatMonth(evolutionEnd)}`
-    const financialHealthScore = clampScore(
-        50 +
-        (periodBalance >= 0 ? 10 : -12) +
-        (savingsRate >= 20 ? 18 : savingsRate >= 10 ? 12 : savingsRate >= 0 ? 4 : -16) +
-        (reserveCoverageRatio === null ? 0 : reserveCoverageRatio >= 1 ? 18 : reserveCoverageRatio >= 0.5 ? 12 : cashCoverageMonths !== null && cashCoverageMonths >= 1 ? 4 : -14) +
-        (topCategoryShare > 50 ? -10 : topCategoryShare > 35 ? -5 : categoryTotalAmount > 0 ? 5 : 0) +
-        (negativeAccountCount > 0 ? -8 : 3) +
-        (projectedNegativeMonths.length > 0 ? -10 : 4),
-    )
+    const financialHealthScore = calculateFinancialHealthScore({
+        cashCoverageMonths,
+        categoryTotalAmount,
+        negativeAccountCount,
+        periodBalance,
+        projectedNegativeMonthCount: projectedNegativeMonths.length,
+        reserveCoverageRatio,
+        savingsRate,
+        topCategoryShare,
+    })
     const financialHealth = getFinancialHealth(financialHealthScore)
     const financialHealthStyle = insightToneStyle[financialHealth.tone]
     const actionItems: ReportActionItem[] = [

@@ -3065,7 +3065,7 @@ export function StatementImports() {
                 const isDeletingThisBatch =
                   isDeletingBatch && batchToDeleteId === summary.id;
                 const deleteDisabledReason = deleteBlockedByAppliedMovements
-                  ? "Desfaca os movimentos aplicados antes de excluir o lote."
+                  ? "Desfaça os movimentos aplicados antes de excluir o lote."
                   : isDeletingBatch
                     ? "Aguarde a exclusão do lote terminar."
                     : isUploading
@@ -3894,10 +3894,14 @@ export function StatementImports() {
                   </button>
                 </div>
 
-                <label className="mb-1 block text-sm font-medium">
+                <label
+                  htmlFor="statement-import-batch-name"
+                  className="mb-1 block text-sm font-medium"
+                >
                   Nome do lote
                 </label>
                 <input
+                  id="statement-import-batch-name"
                   value={batchRenameDraft}
                   onChange={(event) => setBatchRenameDraft(event.target.value)}
                   className="app-control w-full"
@@ -4348,7 +4352,7 @@ function BulkReviewCategoryPanel({
           </p>
         </div>
 
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-[auto_auto_auto_minmax(14rem,1fr)_auto_auto_auto_auto_auto_auto]">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-[auto_auto_auto_minmax(14rem,1fr)_auto_auto_auto_auto_auto_auto]">
           <button
             type="button"
             onClick={onSelectAll}
@@ -4778,7 +4782,7 @@ function MovementEditDialog({
               className="mb-1 block text-sm font-medium"
               style={{ color: "var(--color-text)" }}
             >
-              Direcao
+              Direção
             </label>
             <select
               value={form.direction}
@@ -5211,7 +5215,7 @@ const StatementImportFilePanel = memo(function StatementImportFilePanel({
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <h2
-              className="break-words text-lg font-semibold"
+              className="break-all text-lg font-semibold"
               style={{ color: "var(--color-text)" }}
             >
               {file.originalName}
@@ -5433,13 +5437,13 @@ const StatementImportFilePanel = memo(function StatementImportFilePanel({
                     className="px-4 py-3 text-left text-sm font-semibold"
                     style={{ color: "var(--color-text-muted)" }}
                   >
-                    Sugestoes
+                    Sugestões
                   </th>
                   <th
                     className="px-4 py-3 text-left text-sm font-semibold"
                     style={{ color: "var(--color-text-muted)" }}
                   >
-                    Direcao
+                    Direção
                   </th>
                   <th
                     className="px-4 py-3 text-right text-sm font-semibold"
@@ -5968,7 +5972,7 @@ function UndoAppliedConfirmationContent({
                               style={{ color: "var(--color-text-muted)" }}
                             >
                               {fileSelectedCount} de {fileMovementIds.length}{" "}
-                              alteracao(oes)
+                              alterações
                             </span>
                           </span>
                         </label>
