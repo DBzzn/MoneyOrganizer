@@ -3644,7 +3644,7 @@ export function StatementImports() {
                       type="button"
                       onClick={() => setMovementStatusFilter(filter.value)}
                       className={`rounded-lg border px-3 py-2 text-xs font-medium transition ${
-                        isActive ? "bg-blue-600 text-white" : "hover:bg-gray-50"
+                        isActive ? "bg-blue-600 text-white" : "app-hover-muted"
                       }`}
                       style={{
                         borderColor: isActive
@@ -4331,7 +4331,7 @@ function BulkReviewCategoryPanel({
               className="text-sm font-semibold"
               style={{ color: "var(--color-text)" }}
             >
-              Só com selecionados
+              Selecionados da revisão
             </p>
             <span
               className="rounded-full border px-2 py-0.5 text-xs font-medium"
@@ -4347,8 +4347,8 @@ function BulkReviewCategoryPanel({
             className="mt-1 text-xs"
             style={{ color: "var(--color-text-muted)" }}
           >
-            Use as checkboxes dos movimentos para aplicar categoria ou mudar
-            status em massa sem sair da revisão.
+            Selecione movimentos editáveis para aplicar categoria, status ou
+            sugestões sem sair da revisão.
           </p>
         </div>
 
@@ -4362,9 +4362,8 @@ function BulkReviewCategoryPanel({
               isApplyingSuggestions ||
               isUpdatingStatus
             }
-            className="h-10 rounded-lg border px-3 text-xs font-semibold transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+            className="app-soft-button-muted h-10 rounded-lg px-3 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-60"
             style={{
-              borderColor: "var(--color-border)",
               color: "var(--color-text)",
             }}
           >
@@ -4379,9 +4378,8 @@ function BulkReviewCategoryPanel({
               isApplyingSuggestions ||
               isUpdatingStatus
             }
-            className="h-10 rounded-lg border px-3 text-xs font-semibold transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+            className="app-soft-button-muted h-10 rounded-lg px-3 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-60"
             style={{
-              borderColor: "var(--color-border)",
               color: "var(--color-text)",
             }}
           >
@@ -4496,7 +4494,7 @@ function BulkReviewCategoryPanel({
               title={statusDisabledReason ?? "Voltar selecionados para novo"}
               onClick={onResetSelected}
               disabled={Boolean(statusDisabledReason)}
-              className="flex h-10 items-center justify-center gap-2 rounded-lg border px-4 text-sm font-semibold transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+              className="app-hover-muted flex h-10 items-center justify-center gap-2 rounded-lg border px-4 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60"
               style={{
                 borderColor: "var(--color-border)",
                 color: "var(--color-text)",
@@ -4584,7 +4582,7 @@ function QuickCategoryDialog({
             aria-label="Fechar"
             onClick={onClose}
             disabled={isSaving}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+            className="app-hover-muted flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border transition disabled:cursor-not-allowed disabled:opacity-60"
             style={{
               borderColor: "var(--color-border)",
               color: "var(--color-text)",
@@ -4629,7 +4627,7 @@ function QuickCategoryDialog({
             type="button"
             onClick={onClose}
             disabled={isSaving}
-            className="rounded-lg border px-4 py-2 text-sm font-medium transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+            className="app-hover-muted rounded-lg border px-4 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-60"
             style={{
               borderColor: "var(--color-border)",
               color: "var(--color-text)",
@@ -4732,7 +4730,7 @@ function MovementEditDialog({
             aria-label="Fechar"
             onClick={onClose}
             disabled={isSaving}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+            className="app-hover-muted flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border transition disabled:cursor-not-allowed disabled:opacity-60"
             style={{
               borderColor: "var(--color-border)",
               color: "var(--color-text)",
@@ -4987,7 +4985,7 @@ function MovementEditDialog({
             type="button"
             onClick={onClose}
             disabled={isSaving}
-            className="rounded-lg border px-4 py-2 text-sm font-medium transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+            className="app-hover-muted rounded-lg border px-4 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-60"
             style={{
               borderColor: "var(--color-border)",
               color: "var(--color-text)",
@@ -5813,7 +5811,7 @@ function UndoAppliedConfirmationContent({
           >
             Saldo líquido
           </p>
-          <p className="truncate text-sm font-semibold text-rose-700">
+          <p className="truncate text-sm font-semibold" style={{ color: "var(--color-expense)" }}>
             {centsToCurrency(selectedSummary.netCents)}
           </p>
         </div>
@@ -5898,10 +5896,10 @@ function UndoAppliedConfirmationContent({
                         className="app-checkbox mt-0.5"
                       />
                       <span className="min-w-0">
-                        <span className="block text-sm font-semibold text-rose-900">
+                        <span className="block text-sm font-semibold" style={{ color: "var(--color-text)" }}>
                           {batchGroup.batchLabel}
                         </span>
-                        <span className="block text-xs text-rose-800">
+                        <span className="block text-xs" style={{ color: "var(--color-text-muted)" }}>
                           {batchSelectedCount} de {batchMovementIds.length}{" "}
                           selecionada(s)
                         </span>
@@ -5977,7 +5975,7 @@ function UndoAppliedConfirmationContent({
                           </span>
                         </label>
 
-                        <div className="mt-3 divide-y divide-gray-100">
+                        <div className="app-divider-soft mt-3">
                           {fileGroup.movements.map((movement) => {
                             const isSelected = selectedIds.has(movement.id);
 
@@ -5985,7 +5983,7 @@ function UndoAppliedConfirmationContent({
                               <label
                                 key={movement.id}
                                 className={`grid cursor-pointer grid-cols-[auto_1fr] gap-3 px-1 py-3 transition first:pt-0 last:pb-0 ${
-                                  isSelected ? "bg-rose-50/50" : ""
+                                  isSelected ? "app-selected-danger-row" : ""
                                 }`}
                               >
                                 <input
@@ -6051,19 +6049,19 @@ function UndoAppliedConfirmationContent({
         </div>
 
         <div className="space-y-3">
-          <div className="overflow-hidden rounded-xl border border-rose-200 bg-rose-50 shadow-sm">
+          <div className="app-inline-alert app-inline-alert-danger overflow-hidden rounded-xl shadow-sm">
             <div className="grid grid-cols-[4px_1fr]">
-              <div className="bg-rose-500" aria-hidden="true" />
+              <div className="app-danger-accent" aria-hidden="true" />
               <div className="p-4">
                 <div className="flex gap-3">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-rose-100 text-rose-700">
+                  <div className="app-danger-icon-surface flex h-9 w-9 shrink-0 items-center justify-center rounded-lg">
                     <Undo2 size={18} />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-sm font-semibold text-rose-900">
-                      O desfazer remove lancamentos financeiros reais.
+                    <p className="text-sm font-semibold" style={{ color: "var(--color-text)" }}>
+                      O desfazer remove lançamentos financeiros reais.
                     </p>
-                    <p className="mt-1 text-sm leading-5 text-rose-800">
+                    <p className="mt-1 text-sm leading-5" style={{ color: "var(--color-text-muted)" }}>
                       Apenas as aplicações selecionadas serão excluídas. Os
                       movimentos voltam para Pronto e continuam revisáveis no
                       lote.
@@ -6555,7 +6553,7 @@ const MovementStatusActions = memo(function MovementStatusActions({
     }
 
     return (
-      <span className="inline-flex h-9 items-center rounded-lg px-3 text-xs font-medium text-gray-500">
+      <span className="app-chip app-chip-muted inline-flex h-9 items-center rounded-lg px-3 text-xs font-medium">
         {movementStatusLabel(movement.status)}
       </span>
     );

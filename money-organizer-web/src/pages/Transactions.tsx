@@ -560,9 +560,10 @@ export function Transactions() {
                         <div className="glass flex w-full items-center justify-between gap-2 rounded-xl px-2 py-1 sm:w-auto"
                             style={{ backgroundColor: 'var(--color-bg-card)', border: '1px solid var(--color-border)' }}>
                             <button
+                                type="button"
                                 onClick={goToPrevMonth}
                                 aria-label="Mês anterior"
-                                className="p-1.5 rounded-lg transition hover:bg-gray-100"
+                                className="app-hover-muted rounded-lg p-1.5 transition"
                                 style={{ color: 'var(--color-text-muted)' }}
                             >
                                 ‹
@@ -571,9 +572,10 @@ export function Transactions() {
                                 {formatMonthLabel(currentMonth)}
                             </span>
                             <button
+                                type="button"
                                 onClick={goToNextMonth}
                                 aria-label="Próximo mês"
-                                className="p-1.5 rounded-lg transition hover:bg-gray-100"
+                                className="app-hover-muted rounded-lg p-1.5 transition"
                                 style={{ color: 'var(--color-text-muted)' }}
                             >
                                 ›
@@ -1187,7 +1189,7 @@ export function Transactions() {
                                                     onClick={() => handleOpenEdit(t)}
                                                     aria-label="Editar transação"
                                                     title="Editar transação"
-                                                    className="p-1.5 rounded-lg transition hover:bg-blue-50"
+                                                    className="app-hover-muted rounded-lg p-1.5 transition"
                                                     style={{ color: 'var(--color-text-muted)' }}
                                                 >
                                                     <Pencil size={15} />
@@ -1197,7 +1199,7 @@ export function Transactions() {
                                                     onClick={() => handleDelete(t)}
                                                     aria-label="Deletar transação"
                                                     title="Deletar transação"
-                                                    className="p-1.5 rounded-lg transition hover:bg-red-50"
+                                                    className="app-hover-muted rounded-lg p-1.5 transition"
                                                     style={{ color: 'var(--color-text-muted)' }}
                                                 >
                                                     <Trash2 size={15} />

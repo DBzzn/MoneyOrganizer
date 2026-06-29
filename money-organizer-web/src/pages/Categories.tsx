@@ -375,27 +375,33 @@ export function Categories() {
                                 </div>
                                 <div className="flex shrink-0 items-center gap-2">
                                     <button
+                                        type="button"
                                         onClick={() => handleOpenEdit(category)}
+                                        aria-label="Editar categoria"
                                         title="Editar categoria"
-                                        className="p-2 rounded-lg transition hover:bg-blue-50"
+                                        className="app-hover-muted rounded-lg p-2 transition"
                                         style={{ color: 'var(--color-text-muted)' }}
                                     >
                                         <Pencil size={16} />
                                     </button>
                                     {category.isArchived ? (
                                         <button
+                                            type="button"
                                             onClick={() => handleRestore(category)}
+                                            aria-label="Reativar categoria"
                                             title="Reativar categoria"
-                                            className="p-2 rounded-lg transition hover:bg-green-50"
+                                            className="app-hover-muted rounded-lg p-2 transition"
                                             style={{ color: 'var(--color-text-muted)' }}
                                         >
                                             <RotateCcw size={16} />
                                         </button>
                                     ) : (
                                         <button
+                                            type="button"
                                             onClick={() => setConfirmModal({ isOpen: true, categoryId: category.id })}
+                                            aria-label="Remover ou arquivar categoria"
                                             title="Remover ou arquivar categoria"
-                                            className="p-2 rounded-lg transition hover:bg-red-50"
+                                            className="app-hover-muted rounded-lg p-2 transition"
                                             style={{ color: 'var(--color-text-muted)' }}
                                         >
                                             <Trash2 size={16} />

@@ -12,7 +12,7 @@ export function PrivateRoute({ children }: PrivateRouteProps) {
     if (isLoading) {
         return (
             <div className="flex items-center justify-center min-h-screen">
-                <span className="text-gray-500 text-lg">Carregando...</span>
+                <span className="text-lg" style={{ color: 'var(--color-text-muted)' }}>Carregando...</span>
             </div>
         )
     }

@@ -863,6 +863,27 @@ html,
     opacity: 0.82;
 }
 
+.app-hover-muted:hover:not(:disabled) {
+    background-color: var(--color-bg-muted-card);
+}
+
+.app-divider-soft > :not([hidden]) ~ :not([hidden]) {
+    border-top: 1px solid var(--color-border-soft);
+}
+
+.app-selected-danger-row {
+    background-color: color-mix(in srgb, var(--color-expense) 7%, transparent);
+}
+
+.app-danger-accent {
+    background-color: var(--color-expense);
+}
+
+.app-danger-icon-surface {
+    background-color: color-mix(in srgb, var(--color-expense) 14%, var(--color-bg-solid));
+    color: var(--color-expense);
+}
+
 .app-icon-control:disabled {
     cursor: not-allowed;
     opacity: 0.5;

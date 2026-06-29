@@ -655,15 +655,21 @@ export function Transfers() {
                                             </td>
                                             <td className="flex gap-1 px-6 py-4">
                                                 <button
+                                                    type="button"
                                                     onClick={() => handleOpenEdit(transfer)}
-                                                    className="rounded-lg p-1.5 transition hover:bg-blue-50"
+                                                    aria-label="Editar transferência"
+                                                    title="Editar transferência"
+                                                    className="app-hover-muted rounded-lg p-1.5 transition"
                                                     style={{ color: 'var(--color-text-muted)' }}
                                                 >
                                                     <Pencil size={15} />
                                                 </button>
                                                 <button
+                                                    type="button"
                                                     onClick={() => setConfirmModal({ isOpen: true, transferId: transfer.id })}
-                                                    className="rounded-lg p-1.5 transition hover:bg-red-50"
+                                                    aria-label="Remover transferência"
+                                                    title="Remover transferência"
+                                                    className="app-hover-muted rounded-lg p-1.5 transition"
                                                     style={{ color: 'var(--color-text-muted)' }}
                                                 >
                                                     <Trash2 size={15} />
