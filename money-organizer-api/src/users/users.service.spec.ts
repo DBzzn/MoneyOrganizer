@@ -187,6 +187,18 @@ describe('UsersService', () => {
     expect(prisma.statementImportFile.deleteMany).toHaveBeenCalledWith({
       where: { userId: 'user-1' },
     });
+    expect(prisma.statementImportBatch.deleteMany).toHaveBeenCalledWith({
+      where: { userId: 'user-1' },
+    });
+    expect(prisma.reminder.deleteMany).toHaveBeenCalledWith({
+      where: { userId: 'user-1' },
+    });
+    expect(prisma.balanceAdjustment.deleteMany).toHaveBeenCalledWith({
+      where: { userId: 'user-1' },
+    });
+    expect(prisma.transfer.deleteMany).toHaveBeenCalledWith({
+      where: { userId: 'user-1' },
+    });
     expect(prisma.transaction.deleteMany).toHaveBeenCalledWith({
       where: { userId: 'user-1' },
     });
@@ -216,6 +228,33 @@ describe('UsersService', () => {
     await service.deleteMyAccount('user-1', { password: 'current-password' });
 
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(prisma.importedMovement.deleteMany).toHaveBeenCalledWith({
+      where: { userId: 'user-1' },
+    });
+    expect(prisma.statementImportFile.deleteMany).toHaveBeenCalledWith({
+      where: { userId: 'user-1' },
+    });
+    expect(prisma.statementImportBatch.deleteMany).toHaveBeenCalledWith({
+      where: { userId: 'user-1' },
+    });
+    expect(prisma.reminder.deleteMany).toHaveBeenCalledWith({
+      where: { userId: 'user-1' },
+    });
+    expect(prisma.balanceAdjustment.deleteMany).toHaveBeenCalledWith({
+      where: { userId: 'user-1' },
+    });
+    expect(prisma.transfer.deleteMany).toHaveBeenCalledWith({
+      where: { userId: 'user-1' },
+    });
+    expect(prisma.transaction.deleteMany).toHaveBeenCalledWith({
+      where: { userId: 'user-1' },
+    });
+    expect(prisma.category.deleteMany).toHaveBeenCalledWith({
+      where: { userId: 'user-1' },
+    });
+    expect(prisma.financialAccount.deleteMany).toHaveBeenCalledWith({
+      where: { userId: 'user-1' },
+    });
     expect(prisma.user.delete).toHaveBeenCalledWith({
       where: { id: 'user-1' },
       select: { id: true },
