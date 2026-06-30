@@ -409,6 +409,58 @@ function normalizeReviewType(value: string) {
     .replace(/^_+|_+$/g, '');
 }
 
+function inferTransactionReviewType(
+  direction: ParsedStatementDirection,
+  rawType: string,
+  rawDescription: string,
+) {
+  const normalizedRawType = normalizeReviewType(rawType);
+  const allowedTypes = TRANSACTION_REVIEW_TYPES_BY_DIRECTION[direction];
+
+  if (allowedTypes.has(normalizedRawType)) {
+    return normalizedRawType;
+  }
+
+  const searchableText = normalizeReviewType(`${rawType} ${rawDescription}`);
+
+  if (direction === 'IN') {
+    if (searchableText.includes('PIX')) return 'PIX';
+    if (
+      searchableText.includes('DINHEIRO') ||
+      searchableText.includes('CASH')
+    ) {
+      return 'DINHEIRO';
+    }
+    if (searchableText.includes('REND')) return 'RENDIMENTO';
+    if (searchableText.includes('ESTORNO')) return 'ESTORNO';
+    return 'OUTRA_ENTRADA';
+  }
+
+  if (searchableText.includes('PIX')) return 'PIX';
+  if (searchableText.includes('BOLETO')) return 'BOLETO';
+  if (
+    searchableText.includes('CREDITO') ||
+    searchableText.includes('CREDIT')
+  ) {
+    return 'CREDITO';
+  }
+  if (
+    searchableText.includes('DEBITO') ||
+    searchableText.includes('DEBIT') ||
+    searchableText.includes('COMPRA')
+  ) {
+    return 'DEBITO';
+  }
+  if (
+    searchableText.includes('DINHEIRO') ||
+    searchableText.includes('CASH')
+  ) {
+    return 'DINHEIRO';
+  }
+
+  return 'OUTRA_SAIDA';
+}
+
 function validateTransactionReviewType(
   direction: ParsedStatementDirection,
   rawType: string,
@@ -430,8 +482,12 @@ function validateTransactionReviewType(
 function reviewTypeToTransactionType(
   direction: ParsedStatementDirection,
   rawType: string,
+  rawDescription?: string,
 ) {
-  const normalizedRawType = normalizeReviewType(rawType);
+  const normalizedRawType =
+    rawDescription === undefined
+      ? normalizeReviewType(rawType)
+      : inferTransactionReviewType(direction, rawType, rawDescription);
   validateTransactionReviewType(direction, normalizedRawType);
 
   if (direction === 'IN') {
@@ -839,7 +895,11 @@ export class StatementImportsService {
 
     validateTransactionReviewType(
       movement.direction,
-      normalizeReviewType(movement.rawType),
+      inferTransactionReviewType(
+        movement.direction,
+        movement.rawType,
+        movement.rawDescription,
+      ),
     );
 
     if (!movement.reviewCategoryId) {
@@ -2405,6 +2465,7 @@ export class StatementImportsService {
             type: reviewTypeToTransactionType(
               movement.direction,
               movement.rawType,
+              movement.rawDescription,
             ),
             amount: centsToDecimal(movement.amountCents),
             date: movement.date,

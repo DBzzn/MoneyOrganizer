@@ -1181,6 +1181,53 @@ describe('StatementImportsService', () => {
     });
   });
 
+  it('marks imported CSV transaction as ready when review type is inferred from description', async () => {
+    const updatedMovement = {
+      id: 'movement-1',
+      status: ImportedMovementStatus.READY,
+    };
+    prisma.importedMovement.findFirst.mockResolvedValue({
+      id: 'movement-1',
+      status: ImportedMovementStatus.NEEDS_REVIEW,
+      date: new Date(2026, 5, 15, 12),
+      direction: 'OUT',
+      amountCents: 4990,
+      rawType: 'CSV',
+      rawDescription: 'Compra no debito - Padaria Central',
+      reviewTarget: ImportedMovementReviewTarget.TRANSACTION,
+      reviewCategoryId: 'category-1',
+      reviewTransferAccountId: null,
+      reconciliationStatus: ImportedMovementReconciliationStatus.PENDING,
+      file: {
+        financialAccountId: 'account-1',
+      },
+    });
+    prisma.category.findFirst.mockResolvedValue({
+      id: 'category-1',
+    });
+    prisma.importedMovement.update.mockResolvedValue(updatedMovement);
+
+    await expect(
+      service.updateMovementStatus(
+        'user-1',
+        'movement-1',
+        ImportedMovementStatus.READY,
+      ),
+    ).resolves.toBe(updatedMovement);
+
+    expect(prisma.category.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: 'category-1',
+        userId: 'user-1',
+        isArchived: false,
+        kind: { in: [CategoryKind.EXPENSE, CategoryKind.BOTH] },
+      },
+      select: {
+        id: true,
+      },
+    });
+  });
+
   it('does not mark a movement as ready when a ledger match still needs reconciliation', async () => {
     const movementDate = new Date(2026, 5, 15, 12);
     prisma.importedMovement.findFirst.mockResolvedValue({
@@ -1395,7 +1442,7 @@ describe('StatementImportsService', () => {
               date: movementDate,
               direction: 'OUT',
               amountCents: 12990,
-              rawType: 'DEBITO',
+              rawType: 'CSV',
               rawDescription: 'Compra no debito',
               reviewTarget: ImportedMovementReviewTarget.TRANSACTION,
               reviewCategoryId: 'category-1',

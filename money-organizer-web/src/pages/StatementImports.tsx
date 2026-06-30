@@ -602,7 +602,11 @@ function getSafePrepareBlockReason(
     return "Transferência exige revisão manual";
   }
 
-  const rawType = normalizeReviewTypeValue(movement.rawType);
+  const rawType = inferReviewType(
+    movement,
+    movement.direction,
+    movement.reviewTarget ?? "TRANSACTION",
+  );
   const validType = getReviewTypeOptions(
     movement.direction,
     "TRANSACTION",
@@ -652,7 +656,11 @@ function getMovementReadinessIssue(
     return null;
   }
 
-  const rawType = normalizeReviewTypeValue(movement.rawType);
+  const rawType = inferReviewType(
+    movement,
+    movement.direction,
+    movement.reviewTarget ?? "TRANSACTION",
+  );
   const validType = getReviewTypeOptions(
     movement.direction,
     "TRANSACTION",
