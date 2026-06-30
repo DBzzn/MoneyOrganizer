@@ -11,6 +11,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { Throttle } from '@nestjs/throttler';
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -22,6 +23,7 @@ import { BalanceAdjustmentsService } from './balance-adjustments.service';
 import { CreateBalanceAdjustmentDto } from './dto/create-balance-adjustment.dto';
 import { QueryBalanceAdjustmentsDto } from './dto/query-balance-adjustments.dto';
 import { UpdateBalanceAdjustmentDto } from './dto/update-balance-adjustment.dto';
+import { RATE_LIMITS } from '../rate-limit.constants';
 
 interface AuthenticatedRequest extends ExpressRequest {
   user: {
@@ -87,6 +89,7 @@ export class BalanceAdjustmentsController {
   @ApiResponse({ status: 200, description: 'Ajuste removido com sucesso' })
   @ApiResponse({ status: 401, description: 'Não autenticado' })
   @ApiResponse({ status: 404, description: 'Ajuste não encontrado' })
+  @Throttle({ default: RATE_LIMITS.destructive })
   @Delete(':id')
   remove(
     @Request() req: AuthenticatedRequest,

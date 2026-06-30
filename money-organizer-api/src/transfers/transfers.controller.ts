@@ -11,6 +11,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { Throttle } from '@nestjs/throttler';
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -22,6 +23,7 @@ import { TransfersService } from './transfers.service';
 import { CreateTransferDto } from './dto/create-transfer.dto';
 import { UpdateTransferDto } from './dto/update-transfer.dto';
 import { QueryTransfersDto } from './dto/query-transfers.dto';
+import { RATE_LIMITS } from '../rate-limit.constants';
 
 interface AuthenticatedRequest extends ExpressRequest {
   user: {
@@ -90,6 +92,7 @@ export class TransfersController {
   @ApiResponse({ status: 200, description: 'Transferência removida com sucesso' })
   @ApiResponse({ status: 401, description: 'Não autenticado' })
   @ApiResponse({ status: 404, description: 'Transferência não encontrada' })
+  @Throttle({ default: RATE_LIMITS.destructive })
   @Delete(':id')
   remove(
     @Request() req: AuthenticatedRequest,

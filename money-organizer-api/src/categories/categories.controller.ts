@@ -10,10 +10,12 @@
     UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { Throttle } from '@nestjs/throttler';
 import { CategoriesService } from './categories.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import { RATE_LIMITS } from '../rate-limit.constants';
 
 interface AuthenticatedRequest extends Request {
     user: { id: string, email: string };
@@ -67,6 +69,7 @@ export class CategoriesController {
     @ApiResponse({ status: 200, description: 'Categoria removida ou arquivada com sucesso' })
     @ApiResponse({ status: 401, description: 'Não autenticado' })
     @ApiResponse({ status: 404, description: 'Categoria não encontrada ou não pertence ao usuário' })
+    @Throttle({ default: RATE_LIMITS.destructive })
     @Delete(':id')
     remove(
         @Request() req: AuthenticatedRequest,

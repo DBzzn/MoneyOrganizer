@@ -8,6 +8,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { Throttle } from '@nestjs/throttler';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserProfileDto } from './dto/update-user-profile.dto';
@@ -21,6 +22,7 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { Request as ExpressRequest } from 'express';
+import { RATE_LIMITS } from '../rate-limit.constants';
 
 interface AuthenticatedRequest extends ExpressRequest {
   user: {
@@ -91,6 +93,7 @@ export class UsersController {
   @ApiResponse({ status: 200, description: 'Dados limpos com sucesso' })
   @ApiResponse({ status: 401, description: 'Senha atual inválida ou token inválido' })
   @UseGuards(AuthGuard('jwt'))
+  @Throttle({ default: RATE_LIMITS.destructive })
   @Post('me/clear-data')
   clearMyData(
     @Request() req: AuthenticatedRequest,
@@ -104,6 +107,7 @@ export class UsersController {
   @ApiResponse({ status: 200, description: 'Conta excluída com sucesso' })
   @ApiResponse({ status: 401, description: 'Senha atual inválida ou token inválido' })
   @UseGuards(AuthGuard('jwt'))
+  @Throttle({ default: RATE_LIMITS.destructive })
   @Delete('me')
   deleteMyAccount(
     @Request() req: AuthenticatedRequest,

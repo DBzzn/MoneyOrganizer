@@ -11,6 +11,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { Throttle } from '@nestjs/throttler';
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -22,6 +23,7 @@ import { CreateReminderDto } from './dto/create-reminder.dto';
 import { QueryRemindersDto } from './dto/query-reminders.dto';
 import { UpdateReminderDto } from './dto/update-reminder.dto';
 import { RemindersService } from './reminders.service';
+import { RATE_LIMITS } from '../rate-limit.constants';
 
 interface AuthenticatedRequest extends ExpressRequest {
   user: {
@@ -90,6 +92,7 @@ export class RemindersController {
   @ApiResponse({ status: 200, description: 'Lembrete removido com sucesso' })
   @ApiResponse({ status: 401, description: 'Não autenticado' })
   @ApiResponse({ status: 404, description: 'Lembrete não encontrado' })
+  @Throttle({ default: RATE_LIMITS.destructive })
   @Delete(':id')
   remove(
     @Request() req: AuthenticatedRequest,

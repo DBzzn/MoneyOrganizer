@@ -11,12 +11,14 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { Throttle } from '@nestjs/throttler';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Request as ExpressRequest } from 'express';
 import { FinancialAccountsService } from './financial-accounts.service';
 import { CreateFinancialAccountDto } from './dto/create-financial-account.dto';
 import { UpdateFinancialAccountDto } from './dto/update-financial-account.dto';
 import { QueryAccountLedgerDto } from './dto/query-account-ledger.dto';
+import { RATE_LIMITS } from '../rate-limit.constants';
 
 interface AuthenticatedRequest extends ExpressRequest {
   user: {
@@ -97,6 +99,7 @@ export class FinancialAccountsController {
   @ApiResponse({ status: 200, description: 'Conta financeira arquivada com sucesso' })
   @ApiResponse({ status: 401, description: 'Não autenticado' })
   @ApiResponse({ status: 404, description: 'Conta financeira não encontrada ou não pertence ao usuário' })
+  @Throttle({ default: RATE_LIMITS.destructive })
   @Delete(':id')
   remove(
     @Request() req: AuthenticatedRequest,

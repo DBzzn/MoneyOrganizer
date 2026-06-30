@@ -11,6 +11,7 @@
     Request,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { Throttle } from '@nestjs/throttler';
 import { TransactionsService } from './transactions.service';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
 import { BulkDeleteTransactionsDto } from './dto/bulk-delete-transactions.dto';
@@ -20,6 +21,7 @@ import { QueryTransactionsDto } from './dto/query-transactions.dto';
 import { ReportFiltersDto } from './dto/report-filters.dto';
 import { Request as ExpressRequest } from 'express';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import { RATE_LIMITS } from '../rate-limit.constants';
 
 interface AuthenticatedRequest extends ExpressRequest {
     user: {
@@ -119,6 +121,7 @@ export class TransactionsController {
     @ApiOperation({ summary: 'Remover múltiplas transações (bulk delete)' })
     @ApiResponse({ status: 200, description: 'Transações removidas com sucesso' })
     @ApiResponse({ status: 404, description: 'Uma ou mais transações não encontradas' })
+    @Throttle({ default: RATE_LIMITS.destructive })
     @Delete('bulk')
     removeBulk(
         @Request() req: AuthenticatedRequest,
@@ -164,6 +167,7 @@ export class TransactionsController {
     @ApiResponse({ status: 200, description: 'Transação removida com sucesso' })
     @ApiResponse({ status: 401, description: 'Não autenticado' })
     @ApiResponse({ status: 404, description: 'Transação não encontrada ou não pertence ao usuário' })
+    @Throttle({ default: RATE_LIMITS.destructive })
     @Delete(':id')
     remove(@Request() req: AuthenticatedRequest, @Param('id') id: string) {
         return this.transactionsService.remove(req.user.id, id);

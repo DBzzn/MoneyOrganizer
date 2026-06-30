@@ -6,10 +6,12 @@
   UseGuards,
   Request,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import { RATE_LIMITS } from '../rate-limit.constants';
 
 interface AuthenticatedRequest extends Request {
   user: {
@@ -26,6 +28,7 @@ export class AuthController {
   @ApiOperation({ summary: 'Fazer login e obter token JWT' })
   @ApiResponse({ status: 200, description: 'Login realizado com sucesso, retorna access_token' })
   @ApiResponse({ status: 401, description: 'Credenciais inválidas' })
+  @Throttle({ default: RATE_LIMITS.login })
   @Post('login')
   async login(@Body() loginDto: LoginDto) {
     return this.authService.login(loginDto.email, loginDto.password);

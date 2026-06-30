@@ -14,6 +14,7 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { AuthGuard } from '@nestjs/passport';
+import { Throttle } from '@nestjs/throttler';
 import {
   ApiBearerAuth,
   ApiBody,
@@ -30,6 +31,7 @@ import { UndoAppliedMovementsDto } from './dto/undo-applied-movements.dto';
 import { BulkReviewCategoryDto } from './dto/bulk-review-category.dto';
 import { StatementImportsService } from './statement-imports.service';
 import { UploadedStatementFile } from './types';
+import { RATE_LIMITS } from '../rate-limit.constants';
 
 interface AuthenticatedRequest extends ExpressRequest {
   user: {
@@ -70,6 +72,7 @@ export class StatementImportsController {
   @UseInterceptors(
     FileInterceptor('file', { limits: { fileSize: 5 * 1024 * 1024 } }),
   )
+  @Throttle({ default: RATE_LIMITS.upload })
   @Post('preview')
   preview(
     @Request() req: AuthenticatedRequest,
@@ -109,6 +112,7 @@ export class StatementImportsController {
   @UseInterceptors(
     FilesInterceptor('files', 10, { limits: { fileSize: 5 * 1024 * 1024 } }),
   )
+  @Throttle({ default: RATE_LIMITS.upload })
   @Post('batches')
   createBatch(
     @Request() req: AuthenticatedRequest,
@@ -161,6 +165,7 @@ export class StatementImportsController {
   @ApiResponse({ status: 400, description: 'Lote aplicado não pode ser excluído' })
   @ApiResponse({ status: 401, description: 'Não autenticado' })
   @ApiResponse({ status: 404, description: 'Lote não encontrado' })
+  @Throttle({ default: RATE_LIMITS.destructive })
   @Delete('batches/:id')
   removeBatch(@Request() req: AuthenticatedRequest, @Param('id') id: string) {
     return this.statementImportsService.removeBatch(req.user.id, id);
@@ -173,6 +178,7 @@ export class StatementImportsController {
   @ApiResponse({ status: 400, description: 'Lote sem movimentos prontos válidos' })
   @ApiResponse({ status: 401, description: 'Não autenticado' })
   @ApiResponse({ status: 404, description: 'Lote não encontrado' })
+  @Throttle({ default: RATE_LIMITS.destructive })
   @Post('batches/:id/apply-ready')
   applyReadyMovements(
     @Request() req: AuthenticatedRequest,
@@ -188,6 +194,7 @@ export class StatementImportsController {
   @ApiResponse({ status: 400, description: 'Lote sem movimentos aplicados' })
   @ApiResponse({ status: 401, description: 'Não autenticado' })
   @ApiResponse({ status: 404, description: 'Lote não encontrado' })
+  @Throttle({ default: RATE_LIMITS.destructive })
   @Post('batches/:id/undo-applied')
   undoAppliedMovements(
     @Request() req: AuthenticatedRequest,
