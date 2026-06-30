@@ -1,5 +1,11 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { ArrayNotEmpty, IsArray, IsString, MaxLength } from 'class-validator';
+import {
+  ArrayMaxSize,
+  ArrayNotEmpty,
+  IsArray,
+  IsString,
+  MaxLength,
+} from 'class-validator';
 
 export class BulkReviewCategoryDto {
   @ApiProperty({
@@ -9,6 +15,7 @@ export class BulkReviewCategoryDto {
   })
   @IsArray()
   @ArrayNotEmpty()
+  @ArrayMaxSize(1000)
   @IsString({ each: true })
   @MaxLength(80, { each: true })
   movementIds: string[];

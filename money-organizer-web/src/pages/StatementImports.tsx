@@ -939,6 +939,57 @@ function getBatchMovementStatusCounts(
   );
 }
 
+function getAutoCategorizedMovementCount(batch: StatementImportBatch): number {
+  return batch.files
+    .flatMap((file) => file.movements)
+    .filter((movement) => {
+      const suggestion = movement.reviewHints?.categorySuggestion;
+
+      return Boolean(
+        suggestion &&
+          movement.reviewCategoryId === suggestion.categoryId &&
+          movement.status === "NEEDS_REVIEW",
+      );
+    }).length;
+}
+
+function getDetectedAccountFileCount(
+  batch: StatementImportBatch,
+  explicitAccountId: string,
+): number {
+  if (explicitAccountId) {
+    return 0;
+  }
+
+  return batch.files.filter((file) => Boolean(file.financialAccountId)).length;
+}
+
+function formatCreatedBatchToast(
+  batch: StatementImportBatch,
+  explicitAccountId: string,
+): string {
+  const autoCategoryCount = getAutoCategorizedMovementCount(batch);
+  const detectedAccountCount = getDetectedAccountFileCount(
+    batch,
+    explicitAccountId,
+  );
+  const details: string[] = [];
+
+  if (autoCategoryCount > 0) {
+    details.push(`${autoCategoryCount} categoria(s) por histórico`);
+  }
+
+  if (detectedAccountCount > 0) {
+    details.push(`${detectedAccountCount} conta(s) detectada(s)`);
+  }
+
+  if (details.length === 0) {
+    return "Lote salvo para revisão!";
+  }
+
+  return `Lote salvo para revisão: ${details.join(" e ")}.`;
+}
+
 function getCompletedMovementCount(
   counts: Record<MovementStatusFilter, number>,
 ): number {
@@ -1719,12 +1770,14 @@ export function StatementImports() {
       if (!isActive) return;
 
       if (accountsResult.status === "fulfilled") {
-        setAccounts(accountsResult.value.data);
-        const firstActiveAccount = accountsResult.value.data.find(
-          (account) => !account.isArchived,
-        );
-        setSelectedAccountId(
-          (current) => current || firstActiveAccount?.id || "",
+        const loadedAccounts = accountsResult.value.data;
+        setAccounts(loadedAccounts);
+        setSelectedAccountId((current) =>
+          loadedAccounts.some(
+            (account) => !account.isArchived && account.id === current,
+          )
+            ? current
+            : "",
         );
       } else {
         toast.error("Erro ao carregar contas.");
@@ -2020,7 +2073,7 @@ export function StatementImports() {
       setSelectedFiles([]);
       form.reset();
       await refreshBatches(response.data.id);
-      toast.success("Lote salvo para revisão!");
+      toast.success(formatCreatedBatchToast(response.data, selectedAccountId));
     } catch {
       toast.error("Erro ao criar lote de importação.");
     } finally {
@@ -2942,7 +2995,7 @@ export function StatementImports() {
                 className="app-control"
                 disabled={isLoadingAccounts}
               >
-                <option value="">Sem conta selecionada</option>
+                <option value="">Detectar por histórico</option>
                 {activeAccounts.map((account) => (
                   <option key={account.id} value={account.id}>
                     {account.name}

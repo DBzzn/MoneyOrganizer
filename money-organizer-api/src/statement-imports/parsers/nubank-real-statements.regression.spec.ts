@@ -3,7 +3,9 @@ import { existsSync, readFileSync, readdirSync } from 'fs';
 import { extname, join, resolve } from 'path';
 import { ParsedStatement } from '../types';
 import { CsvStatementParser } from './csv-statement.parser';
+import { NubankPdfParser } from './nubank-pdf.parser';
 import { OfxParser } from './ofx.parser';
+import { inferAccountNumberFromFileName } from './parser-utils';
 
 type RawMovement = {
   date: string;
@@ -46,7 +48,7 @@ const BR_MONTHS: Record<string, string> = {
   DEZ: '12',
 };
 
-function fixtureFiles(extension: '.csv' | '.ofx') {
+function fixtureFiles(extension: '.csv' | '.ofx' | '.pdf') {
   if (!existsSync(FIXTURES_DIR)) {
     return [];
   }
@@ -58,6 +60,16 @@ function fixtureFiles(extension: '.csv' | '.ofx') {
 
 function fixtureBuffer(fileName: string) {
   return readFileSync(join(FIXTURES_DIR, fileName));
+}
+
+function fixtureAccountNumber(fileName: string) {
+  const accountNumber = inferAccountNumberFromFileName(fileName);
+
+  if (!accountNumber) {
+    throw new Error(`Invalid fixture account token: ${fileName}`);
+  }
+
+  return accountNumber;
 }
 
 function parseSignedCents(value: string) {
@@ -97,7 +109,7 @@ function parseFileNameDate(token: string) {
 function periodFromFileName(fileName: string) {
   const match = fileName
     .toUpperCase()
-    .match(/_(\d{2}[A-Z]{3}\d{4})_(\d{2}[A-Z]{3}\d{4})\.(CSV|OFX)$/);
+    .match(/_(\d{2}[A-Z]{3}\d{4})_(\d{2}[A-Z]{3}\d{4})\.(CSV|OFX|PDF)$/);
 
   if (!match) {
     throw new Error(`Invalid fixture file name: ${fileName}`);
@@ -157,7 +169,7 @@ function csvExpectation(fileName: string) {
   return summarizeRawMovements(
     movements,
     periodFromFileName(fileName),
-    '47085206-7',
+    fixtureAccountNumber(fileName),
   );
 }
 
@@ -224,8 +236,10 @@ function fileHash(fileName: string) {
 
 describeRealFixtures('Nubank real statement fixtures regression', () => {
   const csvParser = new CsvStatementParser();
+  const pdfParser = new NubankPdfParser();
   const ofxParser = new OfxParser();
   const csvFiles = fixtureFiles('.csv');
+  const pdfFiles = fixtureFiles('.pdf');
   const ofxFiles = fixtureFiles('.ofx');
 
   it('parses all real Nubank OFX files with account, period, totals and FITID', () => {
@@ -327,6 +341,39 @@ describeRealFixtures('Nubank real statement fixtures regression', () => {
     }
   });
 
+  it('keeps PDF exports aligned with CSV exports for each real monthly pair', () => {
+    expect(csvFiles).toHaveLength(19);
+    expect(pdfFiles).toHaveLength(19);
+
+    for (const pdfFileName of pdfFiles) {
+      const csvFileName = pdfFileName.replace(/\.pdf$/i, '.csv');
+      expect(csvFiles).toContain(csvFileName);
+
+      const pdfBuffer = fixtureBuffer(pdfFileName);
+      const pdfParsed = pdfParser.parse(pdfBuffer, pdfFileName);
+      const csvParsed = csvParser.parse(
+        fixtureBuffer(csvFileName),
+        csvFileName,
+      );
+
+      expect(
+        pdfParser.canParse(pdfFileName, 'application/pdf', pdfBuffer),
+      ).toBe(true);
+      expect(pdfParsed.provider).toBe('NUBANK');
+      expect(pdfParsed.sourceType).toBe('PDF');
+      expect(pdfParsed.accountNumber).toBe(csvParsed.accountNumber);
+      expect(pdfParsed.periodStart).toBe(csvParsed.periodStart);
+      expect(pdfParsed.periodEnd).toBe(csvParsed.periodEnd);
+      expect(pdfParsed.warnings).toEqual([]);
+      expect(pdfParsed.movements).toHaveLength(csvParsed.movements.length);
+      expect(parsedTotals(pdfParsed)).toEqual(parsedTotals(csvParsed));
+      expect(
+        new Set(pdfParsed.movements.map((movement) => movement.fingerprint))
+          .size,
+      ).toBe(pdfParsed.movements.length);
+    }
+  });
+
   it('preserves the duplicated October 2025 exports as duplicate-file fixtures', () => {
     const octoberCsvFiles = csvFiles.filter((fileName) =>
       fileName.includes('01OUT2025_31OUT2025'),
@@ -334,11 +381,16 @@ describeRealFixtures('Nubank real statement fixtures regression', () => {
     const octoberOfxFiles = ofxFiles.filter((fileName) =>
       fileName.includes('01OUT2025_31OUT2025'),
     );
+    const octoberPdfFiles = pdfFiles.filter((fileName) =>
+      fileName.includes('01OUT2025_31OUT2025'),
+    );
 
     expect(octoberCsvFiles).toHaveLength(2);
     expect(octoberOfxFiles).toHaveLength(2);
+    expect(octoberPdfFiles).toHaveLength(2);
     expect(new Set(octoberCsvFiles.map(fileHash)).size).toBe(1);
     expect(new Set(octoberOfxFiles.map(fileHash)).size).toBe(1);
+    expect(new Set(octoberPdfFiles.map(fileHash)).size).toBe(1);
 
     const [firstCsv, secondCsv] = octoberCsvFiles.map((fileName) =>
       csvParser.parse(fixtureBuffer(fileName), fileName),
@@ -346,12 +398,18 @@ describeRealFixtures('Nubank real statement fixtures regression', () => {
     const [firstOfx, secondOfx] = octoberOfxFiles.map((fileName) =>
       ofxParser.parse(fixtureBuffer(fileName), fileName),
     );
+    const [firstPdf, secondPdf] = octoberPdfFiles.map((fileName) =>
+      pdfParser.parse(fixtureBuffer(fileName), fileName),
+    );
 
     expect(firstCsv.movements.map((movement) => movement.fingerprint)).toEqual(
       secondCsv.movements.map((movement) => movement.fingerprint),
     );
     expect(firstOfx.movements.map((movement) => movement.fingerprint)).toEqual(
       secondOfx.movements.map((movement) => movement.fingerprint),
+    );
+    expect(firstPdf.movements.map((movement) => movement.fingerprint)).toEqual(
+      secondPdf.movements.map((movement) => movement.fingerprint),
     );
   });
 });

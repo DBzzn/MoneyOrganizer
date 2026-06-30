@@ -19,6 +19,7 @@ import {
 } from './parsers/parser-utils';
 import { StatementParser } from './parsers/statement-parser';
 import {
+  ImportedMovementCategorySuggestion,
   ImportedMovementReviewHints,
   ImportedMovementReviewMatch,
   ParsedStatement,
@@ -238,6 +239,125 @@ function externalDedupeKey(input: {
   ].join('|');
 }
 
+const STATEMENT_DESCRIPTION_DEDUPE_PREFIXES = [
+  /^TRANSFERENCIA RECEBIDA PELO PIX\s+/,
+  /^TRANSFERENCIA ENVIADA PELO PIX\s+/,
+  /^TRANSFERENCIA RECEBIDA\s+/,
+  /^TRANSFERENCIA ENVIADA\s+/,
+  /^TRANSFERENCIA DE SALDO NUINVEST\s+/,
+  /^VALOR ADICIONADO NA CONTA POR CARTAO DE CREDITO\s+/,
+  /^VALOR ADICIONADO NA CONTA POR CARTAO\s+/,
+  /^VALOR ADICIONADO NA CONTA\s+/,
+  /^PAGAMENTO DE FATURA\s+/,
+  /^PAGAMENTO DE BOLETO EFETUADO\s+/,
+  /^PAGAMENTO DE BOLETO\s+/,
+  /^COMPRA NO DEBITO VIA NUPAY\s+/,
+  /^COMPRA NO DEBITO\s+/,
+  /^COMPRA NO CREDITO VIA NUPAY\s+/,
+  /^COMPRA NO CREDITO\s+/,
+  /^REEMBOLSO RECEBIDO PELO PIX\s+/,
+  /^PIX RECEBIDO\s+/,
+  /^PIX ENVIADO\s+/,
+  /^RENDIMENTO\s+/,
+  /^DEPOSITO\s+/,
+  /^ESTORNO\s+/,
+];
+
+const STATEMENT_DESCRIPTION_DEDUPE_SUFFIXES = [/\s+PAGAMENTO$/];
+
+function normalizeStatementMovementDescriptionForDedupe(
+  value?: string | null,
+) {
+  let normalized = normalizeReviewDescription(value);
+
+  if (!normalized) {
+    return undefined;
+  }
+
+  const original = normalized;
+  let previous: string;
+  do {
+    previous = normalized;
+    for (const prefix of STATEMENT_DESCRIPTION_DEDUPE_PREFIXES) {
+      normalized = normalized.replace(prefix, '').trim();
+    }
+    for (const suffix of STATEMENT_DESCRIPTION_DEDUPE_SUFFIXES) {
+      normalized = normalized.replace(suffix, '').trim();
+    }
+  } while (normalized && normalized !== previous);
+
+  return normalized || original;
+}
+
+function statementMovementDescriptionDedupeKeys(
+  value?: string | null,
+): string[] {
+  const original = normalizeReviewDescription(value);
+  const normalized = normalizeStatementMovementDescriptionForDedupe(value);
+  const keys = new Set<string>();
+
+  if (!original && !normalized) {
+    return [];
+  }
+
+  const addKeyVariants = (description: string | undefined) => {
+    if (!description) {
+      return;
+    }
+
+    keys.add(description);
+    const tokens = description.split(' ').filter(Boolean);
+    for (const size of [4, 5, 6]) {
+      if (tokens.length >= size) {
+        keys.add(tokens.slice(0, size).join(' '));
+      }
+    }
+  };
+
+  addKeyVariants(normalized);
+
+  const normalizedTokenCount =
+    normalized?.split(' ').filter(Boolean).length ?? 0;
+  if (normalizedTokenCount < 4) {
+    addKeyVariants(original);
+  }
+
+  return [...keys];
+}
+
+function statementMovementDedupeKeys(input: {
+  provider: ParsedStatement['provider'];
+  accountNumber?: string | null;
+  date: Date | string;
+  direction: string;
+  amountCents: number;
+  rawType?: string | null;
+  rawDescription?: string | null;
+  normalizedDescription?: string | null;
+}) {
+  const accountKey = normalizeAccountKey(input.accountNumber ?? undefined);
+  const descriptionKeys = new Set([
+    ...statementMovementDescriptionDedupeKeys(input.normalizedDescription),
+    ...statementMovementDescriptionDedupeKeys(input.rawDescription),
+    ...statementMovementDescriptionDedupeKeys(input.rawType),
+  ]);
+
+  if (!accountKey || descriptionKeys.size === 0) {
+    return [];
+  }
+
+  return [...descriptionKeys].map((descriptionKey) =>
+    [
+      input.provider,
+      accountKey,
+      toDateKey(input.date),
+      input.direction,
+      input.amountCents,
+      descriptionKey,
+    ].join('|'),
+  );
+}
+
 function toCents(value: Prisma.Decimal | number | string): number {
   return new Prisma.Decimal(value).mul(100).toDecimalPlaces(0).toNumber();
 }
@@ -368,6 +488,42 @@ type PreparedStatementFile = {
   sha256: string;
   parsed: ParsedStatement;
 };
+
+type CategorySuggestionLookup = Map<
+  string,
+  Map<
+    string,
+    {
+      categoryId: string;
+      categoryName: string;
+      categoryIcon: string | null;
+      count: number;
+    }
+  >
+>;
+
+type StatementFinancialAccount = {
+  id: string;
+  name: string;
+  type: string;
+  institutionName: string | null;
+  icon: string | null;
+  color: string | null;
+  isArchived: boolean;
+};
+
+function statementAccountKey(
+  provider: ParsedStatement['provider'],
+  accountNumber?: string | null,
+) {
+  const accountKey = normalizeAccountKey(accountNumber ?? undefined);
+
+  if (!accountKey) {
+    return undefined;
+  }
+
+  return [provider, accountKey].join('|');
+}
 
 @Injectable()
 export class StatementImportsService {
@@ -518,10 +674,7 @@ export class StatementImportsService {
         transaction.type === TransactionType.INCOME ? 'IN' : 'OUT';
       const amountCents = toCents(transaction.amount);
 
-      if (
-        direction !== input.direction ||
-        amountCents !== input.amountCents
-      ) {
+      if (direction !== input.direction || amountCents !== input.amountCents) {
         continue;
       }
 
@@ -578,10 +731,7 @@ export class StatementImportsService {
       const direction = signedDirection(signedAmountCents);
       const amountCents = Math.abs(signedAmountCents);
 
-      if (
-        direction !== input.direction ||
-        amountCents !== input.amountCents
-      ) {
+      if (direction !== input.direction || amountCents !== input.amountCents) {
         continue;
       }
 
@@ -726,6 +876,228 @@ export class StatementImportsService {
     return targetAccount;
   }
 
+  private addCategorySuggestionHistory(
+    categorySuggestions: CategorySuggestionLookup,
+    description: string | null | undefined,
+    direction: ParsedStatementDirection,
+    category: {
+      id: string;
+      name: string;
+      icon: string | null;
+      kind: CategoryKind;
+      isArchived?: boolean;
+    },
+  ) {
+    if (
+      category.isArchived ||
+      !categoryKindMatchesDirection(category.kind, direction)
+    ) {
+      return;
+    }
+
+    const descriptionKey = normalizeReviewDescription(description);
+    if (!descriptionKey) {
+      return;
+    }
+
+    const suggestionKey = [descriptionKey, direction].join('|');
+    const suggestionsByCategory =
+      categorySuggestions.get(suggestionKey) ?? new Map();
+    const current = suggestionsByCategory.get(category.id) ?? {
+      categoryId: category.id,
+      categoryName: category.name,
+      categoryIcon: category.icon,
+      count: 0,
+    };
+
+    current.count += 1;
+    suggestionsByCategory.set(category.id, current);
+    categorySuggestions.set(suggestionKey, suggestionsByCategory);
+  }
+
+  private getCategorySuggestion(
+    categorySuggestions: CategorySuggestionLookup,
+    description: string,
+    direction: ParsedStatementDirection,
+  ): ImportedMovementCategorySuggestion | undefined {
+    const descriptionKey = normalizeReviewDescription(description);
+    if (!descriptionKey) {
+      return undefined;
+    }
+
+    const suggestionKey = [descriptionKey, direction].join('|');
+    const suggestionsByCategory = categorySuggestions.get(suggestionKey);
+
+    if (!suggestionsByCategory) {
+      return undefined;
+    }
+
+    const [bestSuggestion] = [...suggestionsByCategory.values()].sort(
+      (left, right) => right.count - left.count,
+    );
+
+    if (!bestSuggestion) {
+      return undefined;
+    }
+
+    return {
+      categoryId: bestSuggestion.categoryId,
+      categoryName: bestSuggestion.categoryName,
+      categoryIcon: bestSuggestion.categoryIcon,
+      confidence: 'EXACT_DESCRIPTION',
+      basedOnCount: bestSuggestion.count,
+    };
+  }
+
+  private async buildCategorySuggestionLookup(userId: string) {
+    const [transactionCategoryHistory, importedMovementCategoryHistory] =
+      await Promise.all([
+        this.prisma.transaction.findMany({
+          where: {
+            userId,
+            description: { not: null },
+          },
+          select: {
+            description: true,
+            type: true,
+            category: {
+              select: {
+                id: true,
+                name: true,
+                icon: true,
+                kind: true,
+                isArchived: true,
+              },
+            },
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 500,
+        }),
+        this.prisma.importedMovement.findMany({
+          where: {
+            userId,
+            reviewTarget: ImportedMovementReviewTarget.TRANSACTION,
+            reviewCategoryId: { not: null },
+            status: {
+              notIn: [
+                ImportedMovementStatus.DUPLICATE,
+                ImportedMovementStatus.IGNORED,
+              ],
+            },
+          },
+          select: {
+            direction: true,
+            rawDescription: true,
+            normalizedDescription: true,
+            reviewCategory: {
+              select: {
+                id: true,
+                name: true,
+                icon: true,
+                kind: true,
+                isArchived: true,
+              },
+            },
+          },
+          orderBy: { updatedAt: 'desc' },
+          take: 500,
+        }),
+      ]);
+
+    const categorySuggestions: CategorySuggestionLookup = new Map();
+
+    for (const transaction of transactionCategoryHistory) {
+      this.addCategorySuggestionHistory(
+        categorySuggestions,
+        transaction.description,
+        transaction.type === TransactionType.INCOME ? 'IN' : 'OUT',
+        transaction.category,
+      );
+    }
+
+    for (const movement of importedMovementCategoryHistory) {
+      if (!movement.reviewCategory) {
+        continue;
+      }
+
+      this.addCategorySuggestionHistory(
+        categorySuggestions,
+        movement.normalizedDescription || movement.rawDescription,
+        movement.direction,
+        movement.reviewCategory,
+      );
+    }
+
+    return categorySuggestions;
+  }
+
+  private async findKnownFinancialAccountsByStatementAccount(
+    userId: string,
+    statements: ParsedStatement[],
+  ) {
+    const statementFiltersByKey = new Map<
+      string,
+      {
+        provider: ParsedStatement['provider'];
+        accountNumber: string;
+      }
+    >();
+
+    for (const statement of statements) {
+      const key = statementAccountKey(
+        statement.provider,
+        statement.accountNumber,
+      );
+
+      if (!key || !statement.accountNumber) {
+        continue;
+      }
+
+      statementFiltersByKey.set(key, {
+        provider: statement.provider,
+        accountNumber: statement.accountNumber,
+      });
+    }
+
+    if (statementFiltersByKey.size === 0) {
+      return new Map<string, StatementFinancialAccount>();
+    }
+
+    const files = await this.prisma.statementImportFile.findMany({
+      where: {
+        userId,
+        financialAccountId: { not: null },
+        OR: [...statementFiltersByKey.values()],
+      },
+      select: {
+        provider: true,
+        accountNumber: true,
+        financialAccount: {
+          select: FINANCIAL_ACCOUNT_SELECT,
+        },
+      },
+      orderBy: { updatedAt: 'desc' },
+      take: 200,
+    });
+
+    const accountsByStatement = new Map<string, StatementFinancialAccount>();
+    const requestedKeys = new Set(statementFiltersByKey.keys());
+    for (const file of files) {
+      if (!file.financialAccount || file.financialAccount.isArchived) {
+        continue;
+      }
+
+      const key = statementAccountKey(file.provider, file.accountNumber);
+      if (!key || !requestedKeys.has(key) || accountsByStatement.has(key)) {
+        continue;
+      }
+
+      accountsByStatement.set(key, file.financialAccount);
+    }
+
+    return accountsByStatement;
+  }
+
   private parseUploadedFile(
     file: UploadedStatementFile | undefined,
   ): PreparedStatementFile {
@@ -794,13 +1166,8 @@ export class StatementImportsService {
     startDate.setHours(0, 0, 0, 0);
     endDate.setHours(23, 59, 59, 999);
 
-    const [
-      transactions,
-      transfers,
-      adjustments,
-      transactionCategoryHistory,
-      importedMovementCategoryHistory,
-    ] = await Promise.all([
+    const [transactions, transfers, adjustments, categorySuggestions] =
+      await Promise.all([
         accountIds.length > 0
           ? this.prisma.transaction.findMany({
               where: {
@@ -873,55 +1240,7 @@ export class StatementImportsService {
               },
             })
           : [],
-        this.prisma.transaction.findMany({
-          where: {
-            userId,
-            description: { not: null },
-          },
-          select: {
-            description: true,
-            type: true,
-            category: {
-              select: {
-                id: true,
-                name: true,
-                icon: true,
-                kind: true,
-              },
-            },
-          },
-          orderBy: { createdAt: 'desc' },
-          take: 500,
-        }),
-        this.prisma.importedMovement.findMany({
-          where: {
-            userId,
-            reviewTarget: ImportedMovementReviewTarget.TRANSACTION,
-            reviewCategoryId: { not: null },
-            status: {
-              notIn: [
-                ImportedMovementStatus.DUPLICATE,
-                ImportedMovementStatus.IGNORED,
-              ],
-            },
-          },
-          select: {
-            direction: true,
-            rawDescription: true,
-            normalizedDescription: true,
-            reviewCategory: {
-              select: {
-                id: true,
-                name: true,
-                icon: true,
-                kind: true,
-                isArchived: true,
-              },
-            },
-          },
-          orderBy: { updatedAt: 'desc' },
-          take: 500,
-        }),
+        this.buildCategorySuggestionLookup(userId),
       ]);
 
     const matchesByKey = new Map<string, ImportedMovementReviewMatch[]>();
@@ -1009,110 +1328,6 @@ export class StatementImportsService {
       );
     }
 
-    const categorySuggestions = new Map<
-      string,
-      Map<
-        string,
-        {
-          categoryId: string;
-          categoryName: string;
-          categoryIcon: string | null;
-          count: number;
-        }
-      >
-    >();
-
-    const addCategorySuggestionHistory = (
-      description: string | null | undefined,
-      direction: ParsedStatementDirection,
-      category: {
-        id: string;
-        name: string;
-        icon: string | null;
-        kind: CategoryKind;
-        isArchived?: boolean;
-      },
-    ) => {
-      if (
-        category.isArchived ||
-        !categoryKindMatchesDirection(category.kind, direction)
-      ) {
-        return;
-      }
-
-      const descriptionKey = normalizeReviewDescription(description);
-      if (!descriptionKey) {
-        return;
-      }
-
-      const suggestionKey = [descriptionKey, direction].join('|');
-      const suggestionsByCategory =
-        categorySuggestions.get(suggestionKey) ?? new Map();
-      const current = suggestionsByCategory.get(category.id) ?? {
-        categoryId: category.id,
-        categoryName: category.name,
-        categoryIcon: category.icon,
-        count: 0,
-      };
-
-      current.count += 1;
-      suggestionsByCategory.set(category.id, current);
-      categorySuggestions.set(suggestionKey, suggestionsByCategory);
-    };
-
-    for (const transaction of transactionCategoryHistory) {
-      addCategorySuggestionHistory(
-        transaction.description,
-        transaction.type === TransactionType.INCOME ? 'IN' : 'OUT',
-        transaction.category,
-      );
-    }
-
-    for (const movement of importedMovementCategoryHistory) {
-      if (!movement.reviewCategory) {
-        continue;
-      }
-
-      addCategorySuggestionHistory(
-        movement.normalizedDescription || movement.rawDescription,
-        movement.direction,
-        movement.reviewCategory,
-      );
-    }
-
-    const getCategorySuggestion = (
-      description: string,
-      direction: ParsedStatementDirection,
-    ) => {
-      const descriptionKey = normalizeReviewDescription(description);
-      if (!descriptionKey) {
-        return undefined;
-      }
-
-      const suggestionKey = [descriptionKey, direction].join('|');
-      const suggestionsByCategory = categorySuggestions.get(suggestionKey);
-
-      if (!suggestionsByCategory) {
-        return undefined;
-      }
-
-      const [bestSuggestion] = [...suggestionsByCategory.values()].sort(
-        (left, right) => right.count - left.count,
-      );
-
-      if (!bestSuggestion) {
-        return undefined;
-      }
-
-      return {
-        categoryId: bestSuggestion.categoryId,
-        categoryName: bestSuggestion.categoryName,
-        categoryIcon: bestSuggestion.categoryIcon,
-        confidence: 'EXACT_DESCRIPTION' as const,
-        basedOnCount: bestSuggestion.count,
-      };
-    };
-
     return {
       ...batch,
       files: batch.files.map((file) => ({
@@ -1152,7 +1367,8 @@ export class StatementImportsService {
 
           const reviewHints: ImportedMovementReviewHints = {
             reconciliationMatches,
-            categorySuggestion: getCategorySuggestion(
+            categorySuggestion: this.getCategorySuggestion(
+              categorySuggestions,
               movement.normalizedDescription,
               movement.direction,
             ),
@@ -1173,11 +1389,25 @@ export class StatementImportsService {
     file: UploadedStatementFile | undefined,
     financialAccountId?: string,
   ) {
-    const targetAccount = await this.getTargetAccount(
+    const explicitTargetAccount = await this.getTargetAccount(
       userId,
       financialAccountId,
     );
     const prepared = this.parseUploadedFile(file);
+    const inferredAccountsByStatement = explicitTargetAccount
+      ? new Map<string, StatementFinancialAccount>()
+      : await this.findKnownFinancialAccountsByStatementAccount(userId, [
+          prepared.parsed,
+        ]);
+    const targetAccount =
+      explicitTargetAccount ??
+      inferredAccountsByStatement.get(
+        statementAccountKey(
+          prepared.parsed.provider,
+          prepared.parsed.accountNumber,
+        ) ?? '',
+      ) ??
+      null;
 
     return {
       file: {
@@ -1227,7 +1457,12 @@ export class StatementImportsService {
     ];
     const externalIdCandidates = externalIdLookupValues(externalIds);
 
-    const [existingFiles, existingMovements] = await Promise.all([
+    const [
+      existingFiles,
+      existingMovements,
+      categorySuggestions,
+      knownAccountsByStatement,
+    ] = await Promise.all([
       fileHashes.length > 0
         ? this.prisma.statementImportFile.findMany({
             where: {
@@ -1258,6 +1493,9 @@ export class StatementImportsService {
               date: true,
               direction: true,
               amountCents: true,
+              rawType: true,
+              rawDescription: true,
+              normalizedDescription: true,
               file: {
                 select: {
                   provider: true,
@@ -1267,6 +1505,13 @@ export class StatementImportsService {
             },
           })
         : [],
+      this.buildCategorySuggestionLookup(userId),
+      targetAccount
+        ? new Map<string, StatementFinancialAccount>()
+        : this.findKnownFinancialAccountsByStatementAccount(
+            userId,
+            preparedFiles.map((file) => file.parsed),
+          ),
     ]);
 
     const firstFileIdByHash = new Map<string, string>();
@@ -1276,9 +1521,10 @@ export class StatementImportsService {
       }
     }
 
-    const seenFingerprints = new Set(
-      existingMovements.map((movement) => movement.fingerprint),
-    );
+    const seenFingerprints = new Set<string>();
+    for (const movement of existingMovements) {
+      seenFingerprints.add(String(movement.fingerprint));
+    }
     const seenExternalIds = new Set(
       existingMovements
         .map((movement) =>
@@ -1293,6 +1539,21 @@ export class StatementImportsService {
         )
         .filter((value): value is string => Boolean(value)),
     );
+    const seenStatementMovementKeys = new Set(
+      existingMovements
+        .flatMap((movement) =>
+          statementMovementDedupeKeys({
+            provider: movement.file.provider,
+            accountNumber: movement.file.accountNumber,
+            date: movement.date,
+            direction: movement.direction,
+            amountCents: movement.amountCents,
+            rawType: movement.rawType,
+            rawDescription: movement.rawDescription,
+            normalizedDescription: movement.normalizedDescription,
+          }),
+        )
+    );
 
     const batch = await this.prisma.$transaction(async (tx) => {
       const createdBatch = await tx.statementImportBatch.create({
@@ -1306,6 +1567,15 @@ export class StatementImportsService {
       for (const preparedFile of preparedFiles) {
         const duplicateOfFileId =
           firstFileIdByHash.get(preparedFile.sha256) ?? null;
+        const inferredTargetAccount =
+          targetAccount ??
+          knownAccountsByStatement.get(
+            statementAccountKey(
+              preparedFile.parsed.provider,
+              preparedFile.parsed.accountNumber,
+            ) ?? '',
+          ) ??
+          null;
         const movementRows = preparedFile.parsed.movements.map((movement) => {
           const movementExternalDedupeKey = externalDedupeKey({
             provider: preparedFile.parsed.provider,
@@ -1318,15 +1588,40 @@ export class StatementImportsService {
           const hasSeenExternalId = movementExternalDedupeKey
             ? seenExternalIds.has(movementExternalDedupeKey)
             : false;
+          const movementStatementDedupeKeys = statementMovementDedupeKeys({
+            provider: preparedFile.parsed.provider,
+            accountNumber: preparedFile.parsed.accountNumber,
+            date: movement.date,
+            direction: movement.direction,
+            amountCents: movement.amountCents,
+            rawType: movement.rawType,
+            rawDescription: movement.rawDescription,
+            normalizedDescription: movement.normalizedDescription,
+          });
+          const hasSeenStatementMovement = movementStatementDedupeKeys.some(
+            (key) => seenStatementMovementKeys.has(key),
+          );
           const isDuplicateMovement =
-            hasSeenExternalId || seenFingerprints.has(movement.fingerprint);
+            hasSeenExternalId ||
+            hasSeenStatementMovement ||
+            seenFingerprints.has(movement.fingerprint);
 
           if (!isDuplicateMovement) {
             seenFingerprints.add(movement.fingerprint);
             if (movementExternalDedupeKey) {
               seenExternalIds.add(movementExternalDedupeKey);
             }
+            for (const key of movementStatementDedupeKeys) {
+              seenStatementMovementKeys.add(key);
+            }
           }
+          const categorySuggestion = isDuplicateMovement
+            ? undefined
+            : this.getCategorySuggestion(
+                categorySuggestions,
+                movement.normalizedDescription,
+                movement.direction,
+              );
 
           return {
             date: toLocalDate(movement.date) ?? new Date(movement.date),
@@ -1341,7 +1636,10 @@ export class StatementImportsService {
             externalId: movement.externalId,
             status: isDuplicateMovement
               ? ('DUPLICATE' as const)
-              : ('NEW' as const),
+              : categorySuggestion
+                ? ('NEEDS_REVIEW' as const)
+                : ('NEW' as const),
+            reviewCategoryId: categorySuggestion?.categoryId,
             userId,
           };
         });
@@ -1367,7 +1665,7 @@ export class StatementImportsService {
             totalOutCents: preparedFile.parsed.summary?.totalOutCents,
             warnings: preparedFile.parsed.warnings as Prisma.InputJsonValue,
             batchId: createdBatch.id,
-            financialAccountId: targetAccount?.id ?? null,
+            financialAccountId: inferredTargetAccount?.id ?? null,
             userId,
             movements: {
               create: movementRows,

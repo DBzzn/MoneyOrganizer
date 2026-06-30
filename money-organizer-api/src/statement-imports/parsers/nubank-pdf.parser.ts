@@ -46,7 +46,11 @@ function normalizeText(value: string): string {
     .trim();
 }
 
-function toIsoDate(day: string, month: string, year: string): string | undefined {
+function toIsoDate(
+  day: string,
+  month: string,
+  year: string,
+): string | undefined {
   const monthNumber = FULL_MONTHS[month] ?? SHORT_MONTHS[month];
 
   if (!monthNumber) {
@@ -57,7 +61,9 @@ function toIsoDate(day: string, month: string, year: string): string | undefined
 }
 
 function parseStatementPeriod(rows: PdfTextRow[]) {
-  const allText = normalizeText(rows.map((row) => row.text).join(' ')).toUpperCase();
+  const allText = normalizeText(
+    rows.map((row) => row.text).join(' '),
+  ).toUpperCase();
   const match = allText.match(
     /(\d{2}) DE ([A-ZÇ]+) DE (\d{4}) A (\d{2}) DE ([A-ZÇ]+) DE (\d{4})/,
   );
@@ -73,7 +79,9 @@ function parseStatementPeriod(rows: PdfTextRow[]) {
 }
 
 function parseShortDate(value: string): string | undefined {
-  const match = normalizeText(value).toUpperCase().match(/^(\d{2}) ([A-Z]{3}) (\d{4})$/);
+  const match = normalizeText(value)
+    .toUpperCase()
+    .match(/^(\d{2}) ([A-Z]{3}) (\d{4})$/);
 
   if (!match) {
     return undefined;
@@ -83,10 +91,7 @@ function parseShortDate(value: string): string | undefined {
 }
 
 function parseMoneyCents(value: string): number | undefined {
-  const normalized = value
-    .replace(/\s+/g, '')
-    .replace(/[R$]/g, '')
-    .trim();
+  const normalized = value.replace(/\s+/g, '').replace(/[R$]/g, '').trim();
   const match = normalized.match(/^([+-]?)(\d{1,3}(?:\.\d{3})*|\d+),(\d{2})$/);
 
   if (!match) {
@@ -116,7 +121,10 @@ function lastMoneyInRow(row?: PdfTextRow): number | undefined {
   return undefined;
 }
 
-function findValueByLabel(rows: PdfTextRow[], label: string): number | undefined {
+function findValueByLabel(
+  rows: PdfTextRow[],
+  label: string,
+): number | undefined {
   const normalizedLabel = normalizeText(label).toUpperCase();
   const row = rows.find((entry) => {
     const startsWithLabel = normalizeText(entry.text)
@@ -144,8 +152,14 @@ function inferDirection(
 
   if (
     normalizedType.includes('RECEBIDA') ||
+    normalizedType.includes('RECEBIDO') ||
     normalizedType.includes('DEPOSITO') ||
-    normalizedType.includes('RENDIMENTO')
+    normalizedType.includes('RENDIMENTO') ||
+    normalizedType.includes('ESTORNO') ||
+    normalizedType.includes('CREDITO EM CONTA') ||
+    normalizedType.includes('VALOR ADICIONADO NA CONTA') ||
+    normalizedType.includes('RESGATE RDB') ||
+    normalizedType.includes('TRANSFERENCIA DE SALDO NUINVEST')
   ) {
     return 'IN';
   }
@@ -176,19 +190,34 @@ function buildFingerprint(
         movement.amountCents,
         normalizeText(movement.rawType).toUpperCase(),
         movement.normalizedDescription,
+        movement.sourcePage ?? '',
+        movement.sourceLine ?? '',
       ].join('|'),
     )
     .digest('hex');
+}
+
+function isRightAlignedTextOnlyHeader(row: PdfTextRow, text: string): boolean {
+  const [element] = row.elements;
+
+  return (
+    row.elements.length === 1 &&
+    element !== undefined &&
+    element.x >= 380 &&
+    text.split(/\s+/).length >= 2 &&
+    !/[0-9$]/.test(text)
+  );
 }
 
 function isFooterOrHeaderRow(row: PdfTextRow): boolean {
   const text = normalizeText(row.text).toUpperCase();
 
   return (
-    text.includes('DIOGO BAZZANELLA') ||
-    text === 'CPF' ||
-    text.includes('AGENCIA 0001') ||
-    text.includes('CONTA 47085206-7') ||
+    isRightAlignedTextOnlyHeader(row, text) ||
+    (text.includes('CPF') &&
+      text.includes('AGENCIA') &&
+      text.includes('CONTA')) ||
+    /^CONTA\s+\d{5,}-\d$/.test(text) ||
     text.includes('VALORES EM R$') ||
     text.includes('NU PAGAMENTOS S.A.') ||
     text.includes('NU FINANCEIRA S.A.') ||
@@ -212,8 +241,7 @@ export class NubankPdfParser implements StatementParser {
 
   canParse(fileName: string, mimeType: string) {
     return (
-      mimeType === 'application/pdf' ||
-      fileName.toLowerCase().endsWith('.pdf')
+      mimeType === 'application/pdf' || fileName.toLowerCase().endsWith('.pdf')
     );
   }
 
@@ -236,9 +264,10 @@ export class NubankPdfParser implements StatementParser {
         totalOutCents: Math.abs(findValueByLabel(rows, 'Total de saidas') ?? 0),
       },
       movements,
-      warnings: movements.length === 0
-        ? ['Nenhuma movimentação foi identificada no PDF enviado.']
-        : [],
+      warnings:
+        movements.length === 0
+          ? ['Nenhuma movimentação foi identificada no PDF enviado.']
+          : [],
     };
   }
 
@@ -251,7 +280,10 @@ export class NubankPdfParser implements StatementParser {
     let currentDate: string | undefined;
     let currentDirection: ParsedStatementDirection | undefined;
     let pending:
-      | (Omit<ParsedStatementMovement, 'fingerprint' | 'rawDescription' | 'normalizedDescription'> & {
+      | (Omit<
+          ParsedStatementMovement,
+          'fingerprint' | 'rawDescription' | 'normalizedDescription'
+        > & {
           descriptionParts: string[];
         })
       | null = null;
@@ -261,7 +293,10 @@ export class NubankPdfParser implements StatementParser {
         return;
       }
 
-      const rawDescription = pending.descriptionParts.join(' ').replace(/\s+/g, ' ').trim();
+      const rawDescription = pending.descriptionParts
+        .join(' ')
+        .replace(/\s+/g, ' ')
+        .trim();
       const normalizedDescription = normalizeText(rawDescription).toUpperCase();
       const movement = {
         date: pending.date,
@@ -319,8 +354,13 @@ export class NubankPdfParser implements StatementParser {
       );
       const amountElement = [...row.elements]
         .reverse()
-        .find((element) => element.x >= 470 && parseMoneyCents(element.text) !== undefined);
-      const amountCents = amountElement ? parseMoneyCents(amountElement.text) : undefined;
+        .find(
+          (element) =>
+            element.x >= 470 && parseMoneyCents(element.text) !== undefined,
+        );
+      const amountCents = amountElement
+        ? parseMoneyCents(amountElement.text)
+        : undefined;
 
       if (currentDate && typeElement && amountCents !== undefined) {
         flushPending();
@@ -340,7 +380,11 @@ export class NubankPdfParser implements StatementParser {
         continue;
       }
 
-      if (pending && row.page === pending.sourcePage && !isFooterOrHeaderRow(row)) {
+      if (
+        pending &&
+        row.page === pending.sourcePage &&
+        !isFooterOrHeaderRow(row)
+      ) {
         const continuation = row.elements
           .filter((element) => element.x >= 230)
           .map((element) => element.text)

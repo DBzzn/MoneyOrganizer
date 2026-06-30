@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import {
+  ArrayMaxSize,
   ArrayNotEmpty,
   IsArray,
   IsOptional,
@@ -18,6 +19,7 @@ export class UndoAppliedMovementsDto {
   @IsOptional()
   @IsArray()
   @ArrayNotEmpty()
+  @ArrayMaxSize(1000)
   @IsString({ each: true })
   @MaxLength(80, { each: true })
   movementIds?: string[];

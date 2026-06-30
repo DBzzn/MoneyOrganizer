@@ -1,5 +1,7 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
+import { readFileSync, readdirSync } from 'fs';
+import { extname, resolve } from 'path';
 import {
   ImportedMovementStatus,
   ImportedMovementReconciliationStatus,
@@ -12,13 +14,82 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CsvStatementParser } from './parsers/csv-statement.parser';
 import { NubankPdfParser } from './parsers/nubank-pdf.parser';
 import { OfxParser } from './parsers/ofx.parser';
+import { inferAccountNumberFromFileName } from './parsers/parser-utils';
 import { StatementImportsService } from './statement-imports.service';
+import { UploadedStatementFile } from './types';
 
 type ParserMock = {
   priority: number;
   label: string;
   canParse: jest.Mock;
   parse: jest.Mock;
+};
+
+type TransactionRunner = <T>(
+  callback: (tx: PrismaMock) => T | Promise<T>,
+) => T | Promise<T>;
+
+type CreatedMovementRow = {
+  status: string;
+  fingerprint: string;
+  reviewCategoryId?: string;
+};
+
+type CreatedStatementFileData = {
+  provider: string;
+  sourceType: string;
+  status: string;
+  duplicateOfFileId: string | null;
+  accountNumber: string | null;
+  batchId: string;
+  financialAccountId: string | null;
+  userId: string;
+  periodStart: Date | undefined;
+  periodEnd: Date | undefined;
+  movements: {
+    create: CreatedMovementRow[];
+  };
+};
+
+type PrismaMock = {
+  $transaction: jest.MockedFunction<TransactionRunner>;
+  statementImportBatch: {
+    create: jest.Mock;
+    findMany: jest.Mock;
+    findFirst: jest.Mock;
+    update: jest.Mock;
+    delete: jest.Mock;
+  };
+  statementImportFile: {
+    findMany: jest.Mock;
+    create: jest.Mock;
+  };
+  transaction: {
+    create: jest.Mock;
+    findMany: jest.Mock;
+    deleteMany: jest.Mock;
+  };
+  transfer: {
+    create: jest.Mock;
+    findMany: jest.Mock;
+    deleteMany: jest.Mock;
+  };
+  balanceAdjustment: {
+    findMany: jest.Mock;
+  };
+  financialAccount: {
+    findFirst: jest.Mock;
+  };
+  category: {
+    findFirst: jest.Mock;
+  };
+  importedMovement: {
+    findMany: jest.Mock;
+    findFirst: jest.Mock;
+    count: jest.Mock;
+    update: jest.Mock;
+    updateMany: jest.Mock;
+  };
 };
 
 function mockStatementParser(priority: number, label: string): ParserMock {
@@ -30,57 +101,98 @@ function mockStatementParser(priority: number, label: string): ParserMock {
   };
 }
 
+const REAL_NU_FIXTURES_DIR = resolve(
+  __dirname,
+  '../../../docs/EXEMPLOS DE EXTRATOS/NU',
+);
+const MOCK_STATEMENT_ACCOUNT_NUMBER = '12345-6';
+const MIME_TYPE_BY_EXTENSION: Record<string, string> = {
+  '.csv': 'text/csv',
+  '.ofx': 'application/x-ofx',
+  '.pdf': 'application/pdf',
+};
+
+function realNuFixtureFilesByExtension(extension: '.csv' | '.ofx' | '.pdf') {
+  return readdirSync(REAL_NU_FIXTURES_DIR)
+    .filter((fileName) => extname(fileName).toLowerCase() === extension)
+    .sort();
+}
+
+function realNuFixtureFiles(
+  extension: '.csv' | '.ofx' | '.pdf',
+  periodStart: string,
+  periodEnd: string,
+) {
+  const periodToken = `_${periodStart}_${periodEnd}`;
+
+  return realNuFixtureFilesByExtension(extension).filter((fileName) =>
+    fileName.includes(periodToken),
+  );
+}
+
+function realNuFixtureFile(
+  extension: '.csv' | '.ofx' | '.pdf',
+  periodStart: string,
+  periodEnd: string,
+) {
+  const [fileName] = realNuFixtureFiles(extension, periodStart, periodEnd);
+
+  if (!fileName) {
+    throw new Error(
+      `Missing real NU fixture for ${periodStart} to ${periodEnd}${extension}`,
+    );
+  }
+
+  return fileName;
+}
+
+function fixtureAccountNumber(fileName: string) {
+  const accountNumber = inferAccountNumberFromFileName(fileName);
+
+  if (!accountNumber) {
+    throw new Error(`Invalid fixture account token: ${fileName}`);
+  }
+
+  return accountNumber;
+}
+
+function realNuUpload(fileName: string): UploadedStatementFile {
+  const buffer = readFileSync(resolve(REAL_NU_FIXTURES_DIR, fileName));
+
+  return {
+    originalname: fileName,
+    mimetype: MIME_TYPE_BY_EXTENSION[extname(fileName).toLowerCase()],
+    size: buffer.length,
+    buffer,
+  };
+}
+
 describe('StatementImportsService', () => {
   let service: StatementImportsService;
   let ofxParser: ParserMock;
   let csvStatementParser: ParserMock;
   let nubankPdfParser: ParserMock;
-  let prisma: {
-    $transaction: jest.Mock;
-    statementImportBatch: {
-      findFirst: jest.Mock;
-      update: jest.Mock;
-      delete: jest.Mock;
-    };
-    transaction: {
-      create: jest.Mock;
-      findMany: jest.Mock;
-      deleteMany: jest.Mock;
-    };
-    transfer: {
-      create: jest.Mock;
-      findMany: jest.Mock;
-      deleteMany: jest.Mock;
-    };
-    balanceAdjustment: {
-      findMany: jest.Mock;
-    };
-    financialAccount: {
-      findFirst: jest.Mock;
-    };
-    category: {
-      findFirst: jest.Mock;
-    };
-    importedMovement: {
-      findMany: jest.Mock;
-      findFirst: jest.Mock;
-      count: jest.Mock;
-      update: jest.Mock;
-      updateMany: jest.Mock;
-    };
-  };
+  let prisma: PrismaMock;
 
   beforeEach(async () => {
     ofxParser = mockStatementParser(10, 'OFX');
     csvStatementParser = mockStatementParser(20, 'CSV/TSV');
     nubankPdfParser = mockStatementParser(30, 'Nubank PDF');
 
+    const runTransaction: TransactionRunner = (callback) => callback(prisma);
+
     prisma = {
-      $transaction: jest.fn((callback) => callback(prisma)),
+      $transaction: jest.fn<TransactionRunner>(runTransaction),
       statementImportBatch: {
+        create: jest.fn(),
+        findMany: jest.fn(),
         findFirst: jest.fn(),
         update: jest.fn(),
         delete: jest.fn(),
+      },
+      statementImportFile: {
+        findMany: jest.fn(),
+        create: jest.fn(),
       },
       transaction: {
         create: jest.fn(),
@@ -113,6 +225,7 @@ describe('StatementImportsService', () => {
     prisma.transaction.findMany.mockResolvedValue([]);
     prisma.transfer.findMany.mockResolvedValue([]);
     prisma.balanceAdjustment.findMany.mockResolvedValue([]);
+    prisma.statementImportFile.findMany.mockResolvedValue([]);
     prisma.importedMovement.findMany.mockResolvedValue([]);
     prisma.importedMovement.count.mockResolvedValue(0);
 
@@ -140,6 +253,32 @@ describe('StatementImportsService', () => {
 
     service = module.get<StatementImportsService>(StatementImportsService);
   });
+
+  function useRealStatementParsers() {
+    const realOfxParser = new OfxParser();
+    const realCsvParser = new CsvStatementParser();
+    const realPdfParser = new NubankPdfParser();
+
+    ofxParser.canParse.mockImplementation((fileName, mimeType, buffer) =>
+      realOfxParser.canParse(fileName, mimeType, buffer),
+    );
+    csvStatementParser.canParse.mockImplementation(
+      (fileName, mimeType, buffer) =>
+        realCsvParser.canParse(fileName, mimeType, buffer),
+    );
+    nubankPdfParser.canParse.mockImplementation((fileName, mimeType, buffer) =>
+      realPdfParser.canParse(fileName, mimeType, buffer),
+    );
+    ofxParser.parse.mockImplementation((buffer, fileName) =>
+      realOfxParser.parse(buffer, fileName),
+    );
+    csvStatementParser.parse.mockImplementation((buffer, fileName) =>
+      realCsvParser.parse(buffer, fileName),
+    );
+    nubankPdfParser.parse.mockImplementation((buffer, fileName) =>
+      realPdfParser.parse(buffer, fileName),
+    );
+  }
 
   it('should be defined', () => {
     expect(service).toBeDefined();
@@ -219,6 +358,449 @@ describe('StatementImportsService', () => {
     );
     expect(nubankPdfParser.canParse).not.toHaveBeenCalled();
     expect(ofxParser.canParse).not.toHaveBeenCalled();
+  });
+
+  it('previews a real NU CSV fixture with account, period, totals and file hash', async () => {
+    useRealStatementParsers();
+    const fileName = realNuFixtureFile('.csv', '01JUN2026', '10JUN2026');
+
+    const preview = await service.preview('user-1', realNuUpload(fileName));
+
+    expect(preview).toMatchObject({
+      provider: 'NUBANK',
+      sourceType: 'CSV',
+      accountNumber: fixtureAccountNumber(fileName),
+      periodStart: '2026-06-01',
+      periodEnd: '2026-06-10',
+      warnings: [],
+    });
+    expect(preview.file.sha256).toHaveLength(64);
+    expect(preview.movements).toHaveLength(4);
+    expect(preview.summary).toEqual({
+      totalInCents: 276532,
+      totalOutCents: 27240,
+    });
+  });
+
+  it('previews an inferred account from previous imports with the same statement account', async () => {
+    const buffer = Buffer.from('date,amount,id\n01/06/2026,-39.90,mov-1');
+    ofxParser.canParse.mockReturnValue(false);
+    csvStatementParser.canParse.mockReturnValue(true);
+    csvStatementParser.parse.mockReturnValue({
+      provider: 'NUBANK',
+      sourceType: 'CSV',
+      accountNumber: MOCK_STATEMENT_ACCOUNT_NUMBER,
+      movements: [],
+      warnings: [],
+    });
+    prisma.statementImportFile.findMany.mockResolvedValueOnce([
+      {
+        provider: 'NUBANK',
+        accountNumber: MOCK_STATEMENT_ACCOUNT_NUMBER,
+        financialAccount: {
+          id: 'account-nubank',
+          name: 'Conta Nubank',
+          type: 'BANK_ACCOUNT',
+          institutionName: 'Nubank',
+          icon: 'Landmark',
+          color: '#820ad1',
+          isArchived: false,
+        },
+      },
+    ]);
+
+    await expect(
+      service.preview('user-1', {
+        originalname: 'nubank.csv',
+        mimetype: 'text/csv',
+        size: buffer.length,
+        buffer,
+      }),
+    ).resolves.toMatchObject({
+      targetAccount: {
+        id: 'account-nubank',
+        name: 'Conta Nubank',
+      },
+    });
+    expect(prisma.statementImportFile.findMany).toHaveBeenCalledWith({
+      where: {
+        userId: 'user-1',
+        financialAccountId: { not: null },
+        OR: [
+          {
+            provider: 'NUBANK',
+            accountNumber: MOCK_STATEMENT_ACCOUNT_NUMBER,
+          },
+        ],
+      },
+      select: {
+        provider: true,
+        accountNumber: true,
+        financialAccount: {
+          select: {
+            id: true,
+            name: true,
+            type: true,
+            institutionName: true,
+            icon: true,
+            color: true,
+            isArchived: true,
+          },
+        },
+      },
+      orderBy: { updatedAt: 'desc' },
+      take: 200,
+    });
+  });
+
+  it('persists duplicated real NU CSV fixtures as duplicate file and movements', async () => {
+    useRealStatementParsers();
+    const octoberCsvFiles = realNuFixtureFiles(
+      '.csv',
+      '01OUT2025',
+      '31OUT2025',
+    );
+    expect(octoberCsvFiles).toHaveLength(2);
+    const persistedBatch = {
+      id: 'batch-1',
+      files: [],
+    };
+    jest.spyOn(service, 'findBatch').mockResolvedValue(persistedBatch as never);
+    prisma.statementImportBatch.create.mockResolvedValue({ id: 'batch-1' });
+    prisma.statementImportFile.create
+      .mockResolvedValueOnce({ id: 'file-1' })
+      .mockResolvedValueOnce({ id: 'file-2' });
+
+    await expect(
+      service.createBatch('user-1', [
+        realNuUpload(octoberCsvFiles[0]),
+        realNuUpload(octoberCsvFiles[1]),
+      ]),
+    ).resolves.toBe(persistedBatch);
+
+    expect(prisma.statementImportFile.create).toHaveBeenCalledTimes(2);
+
+    const firstFileData = prisma.statementImportFile.create.mock.calls[0][0]
+      .data as CreatedStatementFileData;
+    const secondFileData = prisma.statementImportFile.create.mock.calls[1][0]
+      .data as CreatedStatementFileData;
+    const firstMovements = firstFileData.movements.create;
+    const secondMovements = secondFileData.movements.create;
+
+    expect(firstFileData).toMatchObject({
+      provider: 'NUBANK',
+      sourceType: 'CSV',
+      status: 'PARSED',
+      duplicateOfFileId: null,
+      accountNumber: fixtureAccountNumber(octoberCsvFiles[0]),
+      batchId: 'batch-1',
+      financialAccountId: null,
+      userId: 'user-1',
+    });
+    expect(secondFileData).toMatchObject({
+      provider: 'NUBANK',
+      sourceType: 'CSV',
+      status: 'DUPLICATE',
+      duplicateOfFileId: 'file-1',
+      accountNumber: fixtureAccountNumber(octoberCsvFiles[1]),
+      batchId: 'batch-1',
+      financialAccountId: null,
+      userId: 'user-1',
+    });
+    expect(firstFileData.periodStart).toEqual(new Date(2025, 9, 1, 12));
+    expect(firstFileData.periodEnd).toEqual(new Date(2025, 9, 31, 12));
+    expect(firstMovements.length).toBeGreaterThan(0);
+    expect(secondMovements).toHaveLength(firstMovements.length);
+    expect(firstMovements.every((movement) => movement.status === 'NEW')).toBe(
+      true,
+    );
+    expect(
+      secondMovements.every((movement) => movement.status === 'DUPLICATE'),
+    ).toBe(true);
+    expect(firstMovements.map((movement) => movement.fingerprint)).toEqual(
+      secondMovements.map((movement) => movement.fingerprint),
+    );
+    expect(
+      new Set(firstMovements.map((movement) => movement.fingerprint)).size,
+    ).toBe(firstMovements.length);
+  });
+
+  it('deduplicates a real NU monthly trio across CSV, OFX and PDF while inferring the account', async () => {
+    useRealStatementParsers();
+    const periodStart = '01JUN2026';
+    const periodEnd = '10JUN2026';
+    const csvFileName = realNuFixtureFile('.csv', periodStart, periodEnd);
+    const ofxFileName = realNuFixtureFile('.ofx', periodStart, periodEnd);
+    const pdfFileName = realNuFixtureFile('.pdf', periodStart, periodEnd);
+    const statementAccountNumber = fixtureAccountNumber(csvFileName);
+    const persistedBatch = {
+      id: 'batch-1',
+      files: [],
+    };
+
+    jest.spyOn(service, 'findBatch').mockResolvedValue(persistedBatch as never);
+    prisma.statementImportBatch.create.mockResolvedValue({ id: 'batch-1' });
+    prisma.statementImportFile.findMany
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          provider: 'NUBANK',
+          accountNumber: statementAccountNumber,
+          financialAccount: {
+            id: 'account-nubank',
+            name: 'Conta Nubank',
+            type: 'BANK_ACCOUNT',
+            institutionName: 'Nubank',
+            icon: 'Landmark',
+            color: '#820ad1',
+            isArchived: false,
+          },
+        },
+      ]);
+    prisma.statementImportFile.create
+      .mockResolvedValueOnce({ id: 'file-csv' })
+      .mockResolvedValueOnce({ id: 'file-ofx' })
+      .mockResolvedValueOnce({ id: 'file-pdf' });
+
+    await expect(
+      service.createBatch('user-1', [
+        realNuUpload(csvFileName),
+        realNuUpload(ofxFileName),
+        realNuUpload(pdfFileName),
+      ]),
+    ).resolves.toBe(persistedBatch);
+
+    expect(prisma.statementImportFile.create).toHaveBeenCalledTimes(3);
+
+    const [csvFileData, ofxFileData, pdfFileData] =
+      prisma.statementImportFile.create.mock.calls.map(
+        ([call]) => call.data as CreatedStatementFileData,
+      );
+    const csvMovements = csvFileData.movements.create;
+    const ofxMovements = ofxFileData.movements.create;
+    const pdfMovements = pdfFileData.movements.create;
+
+    expect([csvFileData, ofxFileData, pdfFileData]).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          sourceType: 'CSV',
+          status: 'PARSED',
+          duplicateOfFileId: null,
+          accountNumber: statementAccountNumber,
+          financialAccountId: 'account-nubank',
+        }),
+        expect.objectContaining({
+          sourceType: 'OFX',
+          status: 'PARSED',
+          duplicateOfFileId: null,
+          accountNumber: statementAccountNumber,
+          financialAccountId: 'account-nubank',
+        }),
+        expect.objectContaining({
+          sourceType: 'PDF',
+          status: 'PARSED',
+          duplicateOfFileId: null,
+          accountNumber: statementAccountNumber,
+          financialAccountId: 'account-nubank',
+        }),
+      ]),
+    );
+    expect(csvMovements).toHaveLength(4);
+    expect(ofxMovements).toHaveLength(csvMovements.length);
+    expect(pdfMovements).toHaveLength(csvMovements.length);
+    expect(csvMovements.every((movement) => movement.status === 'NEW')).toBe(
+      true,
+    );
+    expect(
+      ofxMovements.every(
+        (movement) => movement.status === ImportedMovementStatus.DUPLICATE,
+      ),
+    ).toBe(true);
+    expect(
+      pdfMovements.every(
+        (movement) => movement.status === ImportedMovementStatus.DUPLICATE,
+      ),
+    ).toBe(true);
+  });
+
+  it('deduplicates every real NU PDF movement against its matching CSV batch', async () => {
+    useRealStatementParsers();
+    const csvFileNames = realNuFixtureFilesByExtension('.csv');
+    const persistedBatch = {
+      id: 'batch-1',
+      files: [],
+    };
+    let nextFileId = 0;
+
+    expect(csvFileNames).toHaveLength(19);
+    jest.spyOn(service, 'findBatch').mockResolvedValue(persistedBatch as never);
+    prisma.statementImportBatch.create.mockResolvedValue({ id: 'batch-1' });
+    prisma.statementImportFile.create.mockImplementation(async () => ({
+      id: `file-${++nextFileId}`,
+    }));
+
+    for (const csvFileName of csvFileNames) {
+      const pdfFileName = csvFileName.replace(/\.csv$/i, '.pdf');
+      const previousCreateCallCount =
+        prisma.statementImportFile.create.mock.calls.length;
+
+      await expect(
+        service.createBatch('user-1', [
+          realNuUpload(csvFileName),
+          realNuUpload(pdfFileName),
+        ]),
+      ).resolves.toBe(persistedBatch);
+
+      const [csvCreateCall, pdfCreateCall] =
+        prisma.statementImportFile.create.mock.calls.slice(
+          previousCreateCallCount,
+          previousCreateCallCount + 2,
+        );
+      const csvFileData = csvCreateCall[0].data as CreatedStatementFileData;
+      const pdfFileData = pdfCreateCall[0].data as CreatedStatementFileData;
+      const csvMovements = csvFileData.movements.create;
+      const pdfMovements = pdfFileData.movements.create;
+
+      expect(csvFileData.sourceType).toBe('CSV');
+      expect(pdfFileData.sourceType).toBe('PDF');
+      expect(pdfFileData.accountNumber).toBe(csvFileData.accountNumber);
+      expect(pdfMovements).toHaveLength(csvMovements.length);
+      expect(
+        pdfMovements.every(
+          (movement) => movement.status === ImportedMovementStatus.DUPLICATE,
+        ),
+      ).toBe(true);
+    }
+  });
+
+  it('prefills category from reviewed import history when creating a batch', async () => {
+    const buffer = Buffer.from('date,amount,id\n01/06/2026,-39.90,mov-1');
+    const persistedBatch = {
+      id: 'batch-1',
+      files: [],
+    };
+    ofxParser.canParse.mockReturnValue(false);
+    csvStatementParser.canParse.mockReturnValue(true);
+    csvStatementParser.parse.mockReturnValue({
+      provider: 'NUBANK',
+      sourceType: 'CSV',
+      accountNumber: MOCK_STATEMENT_ACCOUNT_NUMBER,
+      movements: [
+        {
+          date: '2026-06-01',
+          amountCents: 3990,
+          direction: 'OUT',
+          rawType: 'DEBITO',
+          rawDescription: 'Netflix.com',
+          normalizedDescription: 'NETFLIX COM',
+          sourceLine: 2,
+          externalId: 'mov-1',
+          fingerprint: 'fingerprint-1',
+        },
+      ],
+      warnings: [],
+    });
+    jest.spyOn(service, 'findBatch').mockResolvedValue(persistedBatch as never);
+    prisma.statementImportBatch.create.mockResolvedValue({ id: 'batch-1' });
+    prisma.statementImportFile.create.mockResolvedValue({ id: 'file-1' });
+    prisma.importedMovement.findMany
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          direction: 'OUT',
+          rawDescription: 'Netflix.com',
+          normalizedDescription: 'NETFLIX COM',
+          reviewCategory: {
+            id: 'category-streaming',
+            name: 'Streaming',
+            icon: 'Tv',
+            kind: CategoryKind.EXPENSE,
+            isArchived: false,
+          },
+        },
+      ]);
+
+    await expect(
+      service.createBatch('user-1', [
+        {
+          originalname: 'nubank.csv',
+          mimetype: 'text/csv',
+          size: buffer.length,
+          buffer,
+        },
+      ]),
+    ).resolves.toBe(persistedBatch);
+
+    const fileData = prisma.statementImportFile.create.mock.calls[0][0]
+      .data as CreatedStatementFileData;
+    expect(fileData.movements.create[0]).toMatchObject({
+      status: ImportedMovementStatus.NEEDS_REVIEW,
+      reviewCategoryId: 'category-streaming',
+    });
+  });
+
+  it('infers file financial account from previous imports with the same statement account', async () => {
+    const buffer = Buffer.from('date,amount,id\n01/06/2026,-39.90,mov-1');
+    const persistedBatch = {
+      id: 'batch-1',
+      files: [],
+    };
+    ofxParser.canParse.mockReturnValue(false);
+    csvStatementParser.canParse.mockReturnValue(true);
+    csvStatementParser.parse.mockReturnValue({
+      provider: 'NUBANK',
+      sourceType: 'CSV',
+      accountNumber: MOCK_STATEMENT_ACCOUNT_NUMBER,
+      movements: [
+        {
+          date: '2026-06-01',
+          amountCents: 3990,
+          direction: 'OUT',
+          rawType: 'DEBITO',
+          rawDescription: 'Netflix.com',
+          normalizedDescription: 'NETFLIX COM',
+          sourceLine: 2,
+          externalId: 'mov-1',
+          fingerprint: 'fingerprint-1',
+        },
+      ],
+      warnings: [],
+    });
+    jest.spyOn(service, 'findBatch').mockResolvedValue(persistedBatch as never);
+    prisma.statementImportBatch.create.mockResolvedValue({ id: 'batch-1' });
+    prisma.statementImportFile.create.mockResolvedValue({ id: 'file-1' });
+    prisma.statementImportFile.findMany
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          provider: 'NUBANK',
+          accountNumber: MOCK_STATEMENT_ACCOUNT_NUMBER,
+          financialAccount: {
+            id: 'account-nubank',
+            name: 'Conta Nubank',
+            type: 'BANK_ACCOUNT',
+            institutionName: 'Nubank',
+            icon: 'Landmark',
+            color: '#820ad1',
+            isArchived: false,
+          },
+        },
+      ]);
+
+    await expect(
+      service.createBatch('user-1', [
+        {
+          originalname: 'nubank.csv',
+          mimetype: 'text/csv',
+          size: buffer.length,
+          buffer,
+        },
+      ]),
+    ).resolves.toBe(persistedBatch);
+
+    const fileData = prisma.statementImportFile.create.mock.calls[0][0]
+      .data as CreatedStatementFileData;
+    expect(fileData.financialAccountId).toBe('account-nubank');
   });
 
   it('updates an imported movement status scoped to the user', async () => {
@@ -1300,6 +1882,54 @@ describe('StatementImportsService', () => {
       orderBy: { updatedAt: 'desc' },
       take: 500,
     });
+  });
+
+  it('does not suggest archived categories from transaction history', async () => {
+    const movementDate = new Date(2026, 1, 22, 12);
+    prisma.statementImportBatch.findFirst.mockResolvedValue({
+      id: 'batch-1',
+      status: 'REVIEWING',
+      createdAt: new Date(2026, 1, 22, 13),
+      updatedAt: new Date(2026, 1, 22, 13),
+      files: [
+        {
+          id: 'file-1',
+          financialAccountId: 'account-1',
+          movements: [
+            {
+              id: 'movement-1',
+              date: movementDate,
+              direction: 'OUT',
+              amountCents: 1290,
+              rawDescription: 'Cafe Central',
+              normalizedDescription: 'CAFE CENTRAL',
+              reconciliationStatus:
+                ImportedMovementReconciliationStatus.PENDING,
+            },
+          ],
+        },
+      ],
+    });
+    prisma.transaction.findMany
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          description: 'Cafe Central',
+          type: TransactionType.DEBIT,
+          category: {
+            id: 'category-archived',
+            name: 'Arquivada',
+            icon: null,
+            kind: CategoryKind.EXPENSE,
+            isArchived: true,
+          },
+        },
+      ]);
+
+    const batch = await service.findBatch('user-1', 'batch-1');
+    const hints = (batch.files[0].movements[0] as any).reviewHints;
+
+    expect(hints.categorySuggestion).toBeUndefined();
   });
 
   it('does not suggest imported review categories with incompatible kind', async () => {

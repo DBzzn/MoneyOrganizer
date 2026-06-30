@@ -1,30 +1,53 @@
-import { readFileSync } from 'fs';
-import { join } from 'path';
+import { readFileSync, readdirSync } from 'fs';
+import { extname, join, resolve } from 'path';
 import { NubankPdfParser } from './nubank-pdf.parser';
+import { inferAccountNumberFromFileName } from './parser-utils';
+
+const FIXTURES_DIR = resolve(
+  __dirname,
+  '../../../../docs/EXEMPLOS DE EXTRATOS/NU',
+);
+
+function fixtureFile(periodStart: string, periodEnd: string) {
+  const periodToken = `_${periodStart}_${periodEnd}`;
+  const fileName = readdirSync(FIXTURES_DIR)
+    .filter(
+      (candidate) =>
+        extname(candidate).toLowerCase() === '.pdf' &&
+        candidate.includes(periodToken),
+    )
+    .sort()[0];
+
+  if (!fileName) {
+    throw new Error(`Missing Nubank PDF fixture for ${periodToken}`);
+  }
+
+  return fileName;
+}
+
+function fixtureAccountNumber(fileName: string) {
+  const accountNumber = inferAccountNumberFromFileName(fileName);
+
+  if (!accountNumber) {
+    throw new Error(`Invalid fixture account token: ${fileName}`);
+  }
+
+  return accountNumber;
+}
 
 describe('NubankPdfParser', () => {
   const parser = new NubankPdfParser();
 
   it('parses the Nubank PDF statement into an intermediate preview format', () => {
-    const sample = readFileSync(
-      join(
-        __dirname,
-        '..',
-        '..',
-        '..',
-        '..',
-        'docs',
-        'EXEMPLOS DE EXTRATOS',
-        'nu',
-        '2026-06-11_194724_Nubank_NU_470852067_01JUN2026_10JUN2026.pdf',
-      ),
-    );
+    const fileName = fixtureFile('01JUN2026', '10JUN2026');
+    const accountNumber = fixtureAccountNumber(fileName);
+    const sample = readFileSync(join(FIXTURES_DIR, fileName));
 
     const parsed = parser.parse(sample);
 
     expect(parsed.provider).toBe('NUBANK');
     expect(parsed.sourceType).toBe('PDF');
-    expect(parsed.accountNumber).toBe('47085206-7');
+    expect(parsed.accountNumber).toBe(accountNumber);
     expect(parsed.periodStart).toBe('2026-06-01');
     expect(parsed.periodEnd).toBe('2026-06-10');
     expect(parsed.summary).toMatchObject({
@@ -46,8 +69,10 @@ describe('NubankPdfParser', () => {
       direction: 'OUT',
       rawType: 'Transferência enviada pelo Pix',
     });
-    expect(parsed.movements[3].rawDescription).not.toContain('Diogo Bazzanella');
-    expect(parsed.movements[3].rawDescription).not.toContain('47085206-7');
+    expect(parsed.movements[3].rawDescription).not.toMatch(
+      /Extrato gerado|Ouvidoria|VALORES EM R\$/i,
+    );
+    expect(parsed.movements[3].rawDescription).not.toContain(accountNumber);
     expect(parsed.movements[0].fingerprint).toHaveLength(64);
   });
 });
