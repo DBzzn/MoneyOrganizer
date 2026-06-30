@@ -1170,7 +1170,7 @@ function getApplyReadyMovementDetails(
         .map((movement) => ({
           id: movement.id,
           date: movement.date,
-          sourceFileName: file.originalName,
+          sourceFileName: maskSensitiveFileName(file.originalName),
           sourceAccountName: file.financialAccount?.name ?? "Conta do extrato",
           description: movement.rawDescription || "-",
           reviewTarget: movement.reviewTarget,
@@ -1205,7 +1205,7 @@ function getUndoAppliedMovementDetails(
           batchId: batch.id,
           batchLabel: getBatchDisplayName(batch),
           fileId: file.id,
-          fileName: file.originalName,
+          fileName: maskSensitiveFileName(file.originalName),
           sourceAccountName: file.financialAccount?.name ?? "Conta do extrato",
           date: movement.date,
           description: movement.rawDescription || "-",
@@ -1292,6 +1292,48 @@ function formatFilePeriod(
   }
 
   return `${formatDate(file.periodStart)} a ${formatDate(file.periodEnd)}`;
+}
+
+function formatPartialFileHash(fileHash: string): string {
+  const normalizedHash = fileHash.trim();
+
+  if (!normalizedHash) {
+    return "indisponivel";
+  }
+
+  if (normalizedHash.length <= 12) {
+    return `${normalizedHash.slice(0, 6)}...`;
+  }
+
+  return `${normalizedHash.slice(0, 8)}...${normalizedHash.slice(-6)}`;
+}
+
+function formatMaskedStatementAccount(accountNumber?: string | null): string {
+  const digits = accountNumber?.replace(/\D/g, "") ?? "";
+
+  if (!digits) {
+    return "Nao identificada";
+  }
+
+  return `**** ${digits.slice(-4)}`;
+}
+
+function maskLongDigitSequence(value: string): string {
+  const digits = value.replace(/\D/g, "");
+
+  if (digits.length < 7) {
+    return value;
+  }
+
+  return `${"*".repeat(Math.max(digits.length - 4, 4))}${digits.slice(-4)}`;
+}
+
+function maskSensitiveFileName(fileName: string): string {
+  return fileName.replace(/\d[\d.-]{5,}\d/g, (sequence) =>
+    /^\d{4}-\d{2}-\d{2}$/.test(sequence)
+      ? sequence
+      : maskLongDigitSequence(sequence),
+  );
 }
 
 function formatBatchPeriod(batch: StatementImportBatch | null): string {
@@ -5253,6 +5295,8 @@ const StatementImportFilePanel = memo(function StatementImportFilePanel({
   const visibleEligibleChecked =
     visibleEligibleMovementIds.length > 0 &&
     selectedVisibleEligibleCount === visibleEligibleMovementIds.length;
+  const partialFileHash = formatPartialFileHash(file.fileHash);
+  const maskedStatementAccount = formatMaskedStatementAccount(file.accountNumber);
 
   return (
     <div
@@ -5269,7 +5313,7 @@ const StatementImportFilePanel = memo(function StatementImportFilePanel({
               className="break-all text-lg font-semibold"
               style={{ color: "var(--color-text)" }}
             >
-              {file.originalName}
+              {maskSensitiveFileName(file.originalName)}
             </h2>
             <span
               className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium ${statusClass(file.status)}`}
@@ -5283,6 +5327,7 @@ const StatementImportFilePanel = memo(function StatementImportFilePanel({
             style={{ color: "var(--color-text-muted)" }}
           >
             {file.provider} {file.sourceType} - {formatFilePeriod(file)}
+            {file.accountNumber ? ` - Conta ${maskedStatementAccount}` : ""}
           </p>
         </div>
 
@@ -5292,7 +5337,12 @@ const StatementImportFilePanel = memo(function StatementImportFilePanel({
             style={{ color: "var(--color-text-muted)" }}
           >
             <Fingerprint size={14} className="shrink-0" />
-            <span className="truncate">{file.fileHash}</span>
+            <span
+              className="truncate"
+              title={`Hash parcial do arquivo: ${partialFileHash}`}
+            >
+              Hash {partialFileHash}
+            </span>
           </div>
           <button
             type="button"
@@ -5314,6 +5364,7 @@ const StatementImportFilePanel = memo(function StatementImportFilePanel({
           label="Conta"
           value={file.financialAccount?.name ?? "Sem conta"}
         />
+        <InfoPill label="Conta extrato" value={maskedStatementAccount} />
         <InfoPill label="Movimentos" value={`${file.movements.length} total`} />
         <InfoPill
           label="No filtro"
