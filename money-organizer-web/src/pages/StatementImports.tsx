@@ -1143,7 +1143,9 @@ function getReadyMovementPreview(
         .map((movement) => ({
           id: movement.id,
           date: movement.date,
-          description: movement.rawDescription || "-",
+          description: maskSensitiveMovementDescription(
+            movement.rawDescription || "-",
+          ),
           label:
             movement.reviewTarget === "TRANSFER"
               ? `Transferência - ${file.financialAccount?.name ?? "Conta do extrato"}`
@@ -1172,7 +1174,9 @@ function getApplyReadyMovementDetails(
           date: movement.date,
           sourceFileName: maskSensitiveFileName(file.originalName),
           sourceAccountName: file.financialAccount?.name ?? "Conta do extrato",
-          description: movement.rawDescription || "-",
+          description: maskSensitiveMovementDescription(
+            movement.rawDescription || "-",
+          ),
           reviewTarget: movement.reviewTarget,
           typeLabel: movement.rawType || "-",
           destinationLabel:
@@ -1208,7 +1212,9 @@ function getUndoAppliedMovementDetails(
           fileName: maskSensitiveFileName(file.originalName),
           sourceAccountName: file.financialAccount?.name ?? "Conta do extrato",
           date: movement.date,
-          description: movement.rawDescription || "-",
+          description: maskSensitiveMovementDescription(
+            movement.rawDescription || "-",
+          ),
           reviewTarget: movement.reviewTarget,
           entityLabel: movement.appliedTransferId
             ? "Transferência"
@@ -1318,6 +1324,16 @@ function formatMaskedStatementAccount(accountNumber?: string | null): string {
   return `**** ${digits.slice(-4)}`;
 }
 
+function formatMaskedDigitSequence(value: string): string {
+  const digits = value.replace(/\D/g, "");
+
+  if (!digits) {
+    return "****";
+  }
+
+  return `**** ${digits.slice(-4)}`;
+}
+
 function maskLongDigitSequence(value: string): string {
   const digits = value.replace(/\D/g, "");
 
@@ -1334,6 +1350,41 @@ function maskSensitiveFileName(fileName: string): string {
       ? sequence
       : maskLongDigitSequence(sequence),
   );
+}
+
+function maskSensitiveMovementDescription(description: string): string {
+  const value = description.trim();
+
+  if (!value || value === "-") {
+    return value || "-";
+  }
+
+  return value
+    .replace(
+      /[\d*.•]{3}\.[\d*.•]{3}\.[\d*.•]{3}-[\d*.•]{2}/g,
+      "***.***.***-**",
+    )
+    .replace(
+      /[\d*.•]{2}\.[\d*.•]{3}\.[\d*.•]{3}\/[\d*.•]{4}-[\d*.•]{2}/g,
+      "**.***.***/****-**",
+    )
+    .replace(
+      /\b(CPF|CNPJ)\s*:?\s*[\d*.•./-]{6,}/gi,
+      (_match, label: string) => `${label}: ****`,
+    )
+    .replace(
+      /\b(Ag[eê]ncia|Agencia)\s*:?\s*[\dA-Za-z.-]{1,16}/gi,
+      (_match, label: string) => `${label}: ****`,
+    )
+    .replace(
+      /\b(Conta)\s*:?\s*([\d.-]{4,})/gi,
+      (_match, label: string, account: string) =>
+        `${label}: ${formatMaskedDigitSequence(account)}`,
+    )
+    .replace(
+      /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi,
+      "[email mascarado]",
+    );
 }
 
 function formatBatchPeriod(batch: StatementImportBatch | null): string {
@@ -5139,7 +5190,9 @@ function MovementReviewHints({
         <span
           key={`${match.sourceType}-${match.sourceId}`}
           className="app-chip app-chip-warning px-2 py-1 text-xs font-medium"
-          title={`${reviewSourceLabel(match.sourceType)}: ${match.label}`}
+          title={`${reviewSourceLabel(match.sourceType)}: ${maskSensitiveMovementDescription(
+            match.label,
+          )}`}
         >
           {reviewSourceLabel(match.sourceType)}
         </span>
@@ -5671,7 +5724,9 @@ const StatementImportFilePanel = memo(function StatementImportFilePanel({
                       style={{ color: "var(--color-text-muted)" }}
                     >
                       <span className="line-clamp-2">
-                        {movement.rawDescription || "-"}
+                        {maskSensitiveMovementDescription(
+                          movement.rawDescription || "-",
+                        )}
                       </span>
                     </td>
                     <td className="px-4 py-3">
@@ -7122,7 +7177,9 @@ const MovementCard = memo(function MovementCard({
         className="mt-3 break-words text-xs leading-5"
         style={{ color: "var(--color-text-muted)" }}
       >
-        {movement.rawDescription || "Sem descrição"}
+        {maskSensitiveMovementDescription(
+          movement.rawDescription || "Sem descrição",
+        )}
       </p>
       <div className="mt-3">
         <MovementReviewHints
