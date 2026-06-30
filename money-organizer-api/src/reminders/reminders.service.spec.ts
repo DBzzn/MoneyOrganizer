@@ -128,6 +128,48 @@ describe('RemindersService', () => {
     expect(prisma.reminder.create).not.toHaveBeenCalled();
   });
 
+  it('does not create a reminder linked to another user account or category', async () => {
+    prisma.financialAccount.findFirst.mockResolvedValueOnce(null);
+
+    await expect(
+      service.create('user-1', {
+        title: 'Pagar boleto',
+        dueDate: '2026-06-20',
+        financialAccountId: 'account-2',
+      }),
+    ).rejects.toThrow(BadRequestException);
+
+    prisma.financialAccount.findFirst.mockResolvedValueOnce({ id: 'account-1' });
+    prisma.category.findFirst.mockResolvedValueOnce(null);
+
+    await expect(
+      service.create('user-1', {
+        title: 'Pagar boleto',
+        dueDate: '2026-06-20',
+        financialAccountId: 'account-1',
+        categoryId: 'category-2',
+      }),
+    ).rejects.toThrow(BadRequestException);
+
+    expect(prisma.financialAccount.findFirst).toHaveBeenNthCalledWith(1, {
+      where: {
+        id: 'account-2',
+        userId: 'user-1',
+        isArchived: false,
+      },
+      select: { id: true },
+    });
+    expect(prisma.category.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: 'category-2',
+        userId: 'user-1',
+        isArchived: false,
+      },
+      select: { id: true },
+    });
+    expect(prisma.reminder.create).not.toHaveBeenCalled();
+  });
+
   it('validates ownership before filtering by optional account and category', async () => {
     prisma.financialAccount.findFirst.mockResolvedValue({ id: 'account-1' });
     prisma.category.findFirst.mockResolvedValue({ id: 'category-1' });
@@ -160,6 +202,23 @@ describe('RemindersService', () => {
           status: ReminderStatus.PENDING,
           financialAccountId: 'account-1',
           categoryId: 'category-1',
+        },
+      }),
+    );
+  });
+
+  it('does not return a reminder from another user', async () => {
+    prisma.reminder.findFirst.mockResolvedValue(null);
+
+    await expect(
+      service.findOne('user-1', 'reminder-2'),
+    ).rejects.toThrow(NotFoundException);
+
+    expect(prisma.reminder.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          id: 'reminder-2',
+          userId: 'user-1',
         },
       }),
     );

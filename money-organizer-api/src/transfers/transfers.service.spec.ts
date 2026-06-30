@@ -162,6 +162,23 @@ describe('TransfersService', () => {
     });
   });
 
+  it('does not return a transfer from another user', async () => {
+    prisma.transfer.findFirst.mockResolvedValue(null);
+
+    await expect(
+      service.findOne('user-1', 'transfer-2'),
+    ).rejects.toThrow(NotFoundException);
+
+    expect(prisma.transfer.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          id: 'transfer-2',
+          userId: 'user-1',
+        },
+      }),
+    );
+  });
+
   it('does not update a transfer from another user', async () => {
     prisma.transfer.findFirst.mockResolvedValue(null);
 
@@ -170,6 +187,17 @@ describe('TransfersService', () => {
     ).rejects.toThrow(NotFoundException);
 
     expect(prisma.transfer.update).not.toHaveBeenCalled();
+  });
+
+  it('does not remove a transfer from another user', async () => {
+    prisma.transfer.findFirst.mockResolvedValue(null);
+
+    await expect(
+      service.remove('user-1', 'transfer-2'),
+    ).rejects.toThrow(NotFoundException);
+
+    expect(prisma.importedMovement.count).not.toHaveBeenCalled();
+    expect(prisma.transfer.delete).not.toHaveBeenCalled();
   });
 
   it('blocks deleting transfers created by statement import apply', async () => {

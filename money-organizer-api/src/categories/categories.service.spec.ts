@@ -96,6 +96,21 @@ describe('CategoriesService', () => {
     });
   });
 
+  it('does not update a category from another user', async () => {
+    prisma.category.update.mockRejectedValue({ code: 'P2025' });
+
+    await expect(
+      service.update('user-1', 'category-2', { name: 'Saude' }),
+    ).rejects.toThrow(NotFoundException);
+
+    expect(prisma.category.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'category-2', userId: 'user-1' },
+        data: { name: 'Saude' },
+      }),
+    );
+  });
+
   it('does not archive a category from another user', async () => {
     prisma.category.findFirst.mockResolvedValue(null);
 
