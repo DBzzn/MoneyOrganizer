@@ -490,7 +490,7 @@ export function Settings() {
       setDangerAction(null)
       setDangerPassword('')
       toast.success(response.data.message)
-      signOut()
+      await signOut()
       navigate('/login')
     } catch (error) {
       toast.error(apiErrorMessage(error, 'Erro ao confirmar a ação.'))

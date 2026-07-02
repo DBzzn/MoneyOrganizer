@@ -1,8 +1,13 @@
-import { BadRequestException, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import * as bcrypt from 'bcrypt';
 import { UsersService } from './users.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { Prisma } from '../../generated/prisma/client';
 
 jest.mock('bcrypt', () => ({
   compare: jest.fn(),
@@ -107,6 +112,68 @@ describe('UsersService', () => {
 
   it('should be defined', () => {
     expect(service).toBeDefined();
+  });
+
+  it('creates users with normalized email and never returns the password hash', async () => {
+    const createdUser = {
+      id: 'user-1',
+      name: 'New User',
+      email: 'new@example.com',
+      reserveTargetMonths: 6,
+      createdAt: new Date('2026-06-23T00:00:00.000Z'),
+    };
+    prisma.user.create.mockResolvedValue(createdUser);
+
+    await expect(
+      service.create({
+        name: 'New User',
+        email: ' New@Example.COM ',
+        password: 'strong-password',
+      }),
+    ).resolves.toEqual(createdUser);
+
+    expect(prisma.user.create).toHaveBeenCalledWith({
+      data: {
+        name: 'New User',
+        email: 'new@example.com',
+        password: 'new-hashed-password',
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        reserveTargetMonths: true,
+        createdAt: true,
+      },
+    });
+    expect(createdUser).not.toHaveProperty('password');
+  });
+
+  it('uses a generic conflict message for duplicate user emails', async () => {
+    prisma.user.create.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+        code: 'P2002',
+        clientVersion: 'test',
+      }),
+    );
+
+    await expect(
+      service.create({
+        name: 'Existing User',
+        email: 'existing@example.com',
+        password: 'strong-password',
+      }),
+    ).rejects.toThrow(ConflictException);
+
+    await service
+      .create({
+        name: 'Existing User',
+        email: 'existing@example.com',
+        password: 'strong-password',
+      })
+      .catch((error: ConflictException) => {
+        expect(error.message).toBe('Não foi possível concluir a solicitação.');
+      });
   });
 
   it('updates profile name and email after validating the current password', async () => {

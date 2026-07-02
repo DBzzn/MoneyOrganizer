@@ -25,3 +25,6 @@ export const register = (data: RegisterPayload) =>
 export const getMe = () =>
     api.get<User>('/auth/me')
 
+export const logout = () =>
+    api.post<{ message: string }>('/auth/logout')
+

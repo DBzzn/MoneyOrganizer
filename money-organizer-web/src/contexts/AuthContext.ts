@@ -6,7 +6,7 @@ interface AuthContextData {
     token: string | null
     isLoading: boolean
     signIn: (token: string) => Promise<void>
-    signOut: () => void
+    signOut: () => Promise<void>
     refreshUser: () => Promise<User | null>
 }
 

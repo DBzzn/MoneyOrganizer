@@ -39,7 +39,7 @@ export class UsersController {
   @ApiOperation({ summary: 'Criar novo usuário' })
   @ApiResponse({ status: 201, description: 'Usuário criado com sucesso' })
   @ApiResponse({ status: 400, description: 'Dados inválidos' })
-  @ApiResponse({ status: 409, description: 'Email já cadastrado' })
+  @ApiResponse({ status: 409, description: 'Não foi possível concluir a solicitação' })
   @Post()
   create(@Body() dto: CreateUserDto) {
     return this.usersService.create(dto);
@@ -50,7 +50,7 @@ export class UsersController {
   @ApiResponse({ status: 200, description: 'Perfil atualizado com sucesso' })
   @ApiResponse({ status: 400, description: 'Dados inválidos' })
   @ApiResponse({ status: 401, description: 'Senha atual inválida ou token inválido' })
-  @ApiResponse({ status: 409, description: 'Email já cadastrado' })
+  @ApiResponse({ status: 409, description: 'Não foi possível concluir a solicitação' })
   @UseGuards(AuthGuard('jwt'))
   @Patch('me')
   updateProfile(

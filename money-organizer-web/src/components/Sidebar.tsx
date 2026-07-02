@@ -243,8 +243,8 @@ export function Sidebar({ isOpen, isMobile, onNavigate, onToggle }: SidebarProps
         activeItem?.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' })
     }, [isMobile, isOpen, location.pathname])
 
-    const handleSignOut = () => {
-        signOut()
+    const handleSignOut = async () => {
+        await signOut()
         navigate('/login')
     }
 

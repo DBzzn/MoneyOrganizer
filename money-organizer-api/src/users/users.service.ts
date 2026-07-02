@@ -34,6 +34,7 @@ const USER_SELECT = {
   reserveTargetMonths: true,
   createdAt: true,
 };
+const USER_CONFLICT_MESSAGE = 'Não foi possível concluir a solicitação.';
 
 type UserDefaultsClient = Pick<Prisma.TransactionClient, 'category' | 'financialAccount'>;
 
@@ -116,7 +117,7 @@ export class UsersService {
       const user = await this.prisma.user.create({
         data: {
           name: dto.name,
-          email: dto.email,
+          email: dto.email.trim().toLowerCase(),
           password: hashedPassword,
         },
         select: USER_SELECT,
@@ -130,7 +131,7 @@ export class UsersService {
         error instanceof Prisma.PrismaClientKnownRequestError &&
         error.code === 'P2002'
       ) {
-        throw new ConflictException('O Email já Existe!');
+        throw new ConflictException(USER_CONFLICT_MESSAGE);
       }
       throw error;
     }
@@ -193,7 +194,7 @@ export class UsersService {
         error instanceof Prisma.PrismaClientKnownRequestError &&
         error.code === 'P2002'
       ) {
-        throw new ConflictException('O Email já Existe!');
+        throw new ConflictException(USER_CONFLICT_MESSAGE);
       }
       throw error;
     }

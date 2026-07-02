@@ -35,6 +35,13 @@ describe('rate limit decorators', () => {
     expectDefaultThrottle(AuthController.prototype.login, RATE_LIMITS.login);
   });
 
+  it('limits logout token revocation attempts', () => {
+    expectDefaultThrottle(
+      AuthController.prototype.logout,
+      RATE_LIMITS.destructive,
+    );
+  });
+
   it('limits statement import uploads', () => {
     expectDefaultThrottle(
       StatementImportsController.prototype.preview,

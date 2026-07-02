@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { User } from '../types'
-import { getMe } from '../api/auth'
+import { getMe, logout } from '../api/auth'
 import { AUTH_EXPIRED_EVENT } from '../api/axios'
 import { AuthContext } from './AuthContext'
 
@@ -69,11 +69,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return response.data as User
     }
 
-    const signOut = () => {
-        localStorage.removeItem('token')
-        setToken(null)
-        setUser(null)
-        setIsLoading(false)
+    const signOut = async () => {
+        try {
+            if (localStorage.getItem('token')) {
+                await logout()
+            }
+        } catch {
+            // Local session cleanup must still happen if the token is already invalid.
+        } finally {
+            localStorage.removeItem('token')
+            setToken(null)
+            setUser(null)
+            setIsLoading(false)
+        }
     }
 
     useEffect(() => {
