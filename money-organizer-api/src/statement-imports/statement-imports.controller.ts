@@ -12,7 +12,6 @@ import {
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
-import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { AuthGuard } from '@nestjs/passport';
 import { Throttle } from '@nestjs/throttler';
 import {
@@ -32,6 +31,10 @@ import { BulkReviewCategoryDto } from './dto/bulk-review-category.dto';
 import { StatementImportsService } from './statement-imports.service';
 import { UploadedStatementFile } from './types';
 import { RATE_LIMITS } from '../rate-limit.constants';
+import {
+  StatementImportFileInterceptor,
+  StatementImportFilesInterceptor,
+} from './statement-import-upload.interceptors';
 
 interface AuthenticatedRequest extends ExpressRequest {
   user: {
@@ -39,6 +42,26 @@ interface AuthenticatedRequest extends ExpressRequest {
     email: string;
   };
 }
+
+const STATEMENT_IMPORT_FILE_SIZE_LIMIT = 5 * 1024 * 1024;
+const STATEMENT_IMPORT_PREVIEW_UPLOAD_OPTIONS = {
+  limits: {
+    fileSize: STATEMENT_IMPORT_FILE_SIZE_LIMIT,
+    files: 1,
+    fields: 1,
+    parts: 3,
+    fieldNestingDepth: 0,
+  },
+};
+const STATEMENT_IMPORT_BATCH_UPLOAD_OPTIONS = {
+  limits: {
+    fileSize: STATEMENT_IMPORT_FILE_SIZE_LIMIT,
+    files: 10,
+    fields: 1,
+    parts: 12,
+    fieldNestingDepth: 0,
+  },
+};
 
 @ApiTags('statement-imports')
 @ApiBearerAuth('JWT-auth')
@@ -70,7 +93,10 @@ export class StatementImportsController {
   @ApiResponse({ status: 400, description: 'Arquivo inválido' })
   @ApiResponse({ status: 401, description: 'Não autenticado' })
   @UseInterceptors(
-    FileInterceptor('file', { limits: { fileSize: 5 * 1024 * 1024 } }),
+    StatementImportFileInterceptor(
+      'file',
+      STATEMENT_IMPORT_PREVIEW_UPLOAD_OPTIONS,
+    ),
   )
   @Throttle({ default: RATE_LIMITS.upload })
   @Post('preview')
@@ -110,7 +136,11 @@ export class StatementImportsController {
   @ApiResponse({ status: 400, description: 'Arquivo inválido' })
   @ApiResponse({ status: 401, description: 'Não autenticado' })
   @UseInterceptors(
-    FilesInterceptor('files', 10, { limits: { fileSize: 5 * 1024 * 1024 } }),
+    StatementImportFilesInterceptor(
+      'files',
+      10,
+      STATEMENT_IMPORT_BATCH_UPLOAD_OPTIONS,
+    ),
   )
   @Throttle({ default: RATE_LIMITS.upload })
   @Post('batches')
@@ -162,7 +192,10 @@ export class StatementImportsController {
 
   @ApiOperation({ summary: 'Excluir lote de importação ainda não aplicado' })
   @ApiResponse({ status: 200, description: 'Lote excluído com sucesso' })
-  @ApiResponse({ status: 400, description: 'Lote aplicado não pode ser excluído' })
+  @ApiResponse({
+    status: 400,
+    description: 'Lote aplicado não pode ser excluído',
+  })
   @ApiResponse({ status: 401, description: 'Não autenticado' })
   @ApiResponse({ status: 404, description: 'Lote não encontrado' })
   @Throttle({ default: RATE_LIMITS.destructive })
@@ -175,7 +208,10 @@ export class StatementImportsController {
     summary: 'Aplicar movimentos prontos de um lote revisado',
   })
   @ApiResponse({ status: 201, description: 'Movimentos prontos aplicados' })
-  @ApiResponse({ status: 400, description: 'Lote sem movimentos prontos válidos' })
+  @ApiResponse({
+    status: 400,
+    description: 'Lote sem movimentos prontos válidos',
+  })
   @ApiResponse({ status: 401, description: 'Não autenticado' })
   @ApiResponse({ status: 404, description: 'Lote não encontrado' })
   @Throttle({ default: RATE_LIMITS.destructive })
@@ -211,8 +247,14 @@ export class StatementImportsController {
   @ApiOperation({
     summary: 'Aplicar categoria revisada a movimentos selecionados do lote',
   })
-  @ApiResponse({ status: 200, description: 'Movimentos atualizados com sucesso' })
-  @ApiResponse({ status: 400, description: 'Seleção inválida para categoria em massa' })
+  @ApiResponse({
+    status: 200,
+    description: 'Movimentos atualizados com sucesso',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Seleção inválida para categoria em massa',
+  })
   @ApiResponse({ status: 401, description: 'Não autenticado' })
   @ApiResponse({ status: 404, description: 'Lote ou movimento não encontrado' })
   @Patch('batches/:id/movements/review-category')
